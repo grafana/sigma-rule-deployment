@@ -3,25 +3,28 @@ defaults:
     format: default
     skip-unsupported: true
 conversions:
-    - input: "rules-development/cloud/aws/cloudtrail/*"
+    - name: aws_cloudtrail
+      input: "rules-development/cloud/aws/cloudtrail/*"
       backend-options:
           case_sensitive: true
       pipelines:
           - pipelines/cloud/aws/cloudtrail/filter_permitted_aws_accounts.yml
           - pipelines/datasources/aws_cloudtrail.yml
-    - input: "rules-development/cloud/kubernetes/audit/*"
+    - name: gcp_k8s
+      input: "rules-development/cloud/kubernetes/audit/*"
       pipeline-check: false
       encoding: utf-16
       pipelines:
           - pipelines/cloud/gcp/audit/gcp_kubernetes_audit_logs.yml
-    - input: "rules-development/cloud/okta/*"
-      format: ruler
+    - name: okta_audit
+      input: "rules-development/cloud/okta/*"
       backend-options:
           case_sensitive: false
           add_line_filters: true
       pipelines:
           - loki_okta_system_log
-    - input:
+    - name: gcom_logins
+      input:
           - "rules-private/grafana/grafana-com/grafana-com_failed_login_attempts_ip.yml"
           - "rules-private/grafana/grafana-com/grafana-com_failed_login_attempts_user.yml"
           - "rules-correlation/grafana/grafana-com/grafana-com_multiple_failed_login_attempts_by_ip.yml"
