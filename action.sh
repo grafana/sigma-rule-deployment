@@ -14,4 +14,4 @@ pip install --disable-pip-version-check sigma-cli==${SIGMA_CLI_VERSION} 2>&1 >/d
 sigma plugin install "${SIGMA_PLUGIN}" 2>&1 >/dev/null || true
 
 # Run sigma-cli with the provided arguments and remove the parsing line from the output
-sigma "$@" 2>&1 | sed '/Parsing Sigma rules/d'
+sigma "$@" 2>/dev/null
