@@ -1,0 +1,14 @@
+title: AWS Root Credentials
+description: Detects AWS root account usage
+logsource:
+  product: aws
+  service: cloudtrail
+detection:
+  selection:
+    userIdentity.type: Root
+  filter:
+    eventType: AwsServiceEvent
+  condition: selection and not filter
+falsepositives:
+  - AWS Tasks That Require Root User Credentials
+level: medium
