@@ -9,7 +9,7 @@ from settings import load_config
 from sigma.cli.convert import convert
 
 
-def convert_files(
+def convert_rules(
     path_prefix: str | Path = Path(os.environ.get("GITHUB_WORKSPACE", "")),
     output_file: str = "-",
     render_tb: bool = False,
@@ -167,5 +167,5 @@ def convert_files(
 
 
 if __name__ == "__main__":
-    convert_files(output_file="output.txt")
+    convert_rules(output_file="output.txt")
     # exit(1)
