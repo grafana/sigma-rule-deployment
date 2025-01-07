@@ -1,0 +1,9 @@
+[project]
+name = "convert"
+version = "0.1.0"
+description = "Sigma CLI Conversion"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "dynaconf>=3.2.6",
+]
