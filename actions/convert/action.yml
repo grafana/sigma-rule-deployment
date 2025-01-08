@@ -1,27 +1,69 @@
-name: "Sigma CLI Conversion"
+name: "Sigma Rule Converter"
 description: "Convert Sigma rules to target query languages using sigma-cli."
-author: "Your Name"
+author: "Mostafa Moradian"
 
 inputs:
-  rule_file:
-    description: "Path to the Sigma rule file inside the repository"
+  config_path:
+    description: "Path to the Sigma conversion config file."
     required: true
-  target:
-    description: "Target query language (e.g., loki, splunk, etc.)"
-    required: true
+    default: "./config.yaml"
+  output_dir:
+    description: "Path to the output directory."
+    required: false
+    default: "./conversions"
+  plugin_packages:
+    description: "Comma-separated list of Sigma CLI plugin packages to install."
+    required: false
+    default: ""
+  render_traceback:
+    description: "Whether to render the traceback in the output."
+    required: false
+    default: "false"
 
 outputs:
-  result:
-    description: "The converted query result"
+  output_path:
+    description: "The path of the generated output file."
 
 runs:
   using: "composite"
   steps:
-    - name: "Run Sigma CLI Conversion"
-      run: |
-        chmod +x action.sh
-        ./action.sh convert -t ${{ inputs.target }} ${{ inputs.rule_file }} > result.txt
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.10"
 
-    - name: "Set result output"
+    - name: Install uv and base dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install --disable-pip-version-check uv
+
+    - name: Install Sigma CLI plugins (if any)
+      if: ${{ inputs.plugins != '' }}
+      run: |
+        # pySigma-backend-loki is a default plugin.
+        plugin_packages="${{ inputs.plugin_packages }}"
+        valid_plugins=()  # Array to store valid plugins
+
+        shopt -s nocasematch  # Enable case-insensitive matching
+        for plugin in $(echo $plugin_packages | tr ',' ' '); do
+          if [[ "$plugin" == pysigma-backend-* ]]; then
+            valid_plugins+=("$plugin")  # Add valid plugin to the array
+          else
+            echo "Error: Invalid plugin name: $plugin"
+            exit 1
+          fi
+        done
+        shopt -u nocasematch  # Disable case-insensitive matching
+
+        # Install all valid plugins at once
+        if [ ${#valid_plugins[@]} -gt 0 ]; then
+          uv add --directory ${{ GITHUB_ACTION_PATH }}/actions/convert "${valid_plugins[@]}"
+        fi
+
+    - name: Run Sigma rule conversion
+      run: |
+        uv run --directory ${{ GITHUB_ACTION_PATH }} actions/convert/main.py --config ${{ inputs.config_path }} --conversions-output-dir ${{ inputs.output_dir }} --render-traceback ${{ inputs.render_traceback }}
+
+    - name: Set output path
       id: set_output
-      run: echo "result=$(cat result.txt)" >> $GITHUB_ENV
+      run: echo "output_path=${{ inputs.output_dir }}" >> $GITHUB_ENV
