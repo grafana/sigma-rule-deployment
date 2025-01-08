@@ -1,3 +1,5 @@
+"""Convert Sigma rules to the target format per each conversion object in the config."""
+
 import fnmatch
 import glob
 import os
@@ -25,6 +27,9 @@ def convert_rules(
         render_tb (bool, optional): Whether to render traceback on error. Defaults to False.
 
     Raises:
+        ValueError: Conversion output directory is outside the project root.
+        ValueError: Conversion name is required and must be a unique identifier
+            across all conversion objects in the config.
         ValueError: Input file pattern must be relative to the project root.
         ValueError: Invalid input file type.
         ValueError: No files matched the patterns after applying --file-pattern: {file_pattern}.
