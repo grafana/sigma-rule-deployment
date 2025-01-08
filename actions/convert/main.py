@@ -16,7 +16,7 @@ def convert_rules(
     conversions_output_dir: str | Path = Path(
         os.environ.get("CONVERSIONS_OUTPUT_DIR", "conversions")
     ),
-    render_tb: bool = False,
+    render_tb: bool = os.environ.get("RENDER_TRACEBACK", "false").lower() == "true",
 ):
     """Convert Sigma rules to the target format per each conversion object in the config.
 
