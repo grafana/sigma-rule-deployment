@@ -27,6 +27,7 @@ def convert_rules(
         render_tb (bool, optional): Whether to render traceback on error. Defaults to False.
 
     Raises:
+        ValueError: Path prefix must be set using GITHUB_WORKSPACE environment variable.
         ValueError: Conversion output directory is outside the project root.
         ValueError: Conversion name is required and must be a unique identifier
             across all conversion objects in the config.
@@ -35,6 +36,12 @@ def convert_rules(
         ValueError: No files matched the patterns after applying --file-pattern: {file_pattern}.
         ValueError: Pipeline file path must be relative to the project root.
     """
+    # Check if the path_prefix is set
+    if not path_prefix or path_prefix == Path("."):
+        raise ValueError(
+            "Path prefix must be set using GITHUB_WORKSPACE environment variable."
+        )
+
     # Convert path_prefix to a Path object if it's a string.
     # If it's already a Path object, it will remain unchanged.
     path_prefix = Path(path_prefix)
