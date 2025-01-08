@@ -17,6 +17,26 @@ def parse_args():
         default="./config.yaml",
         const="./config.yaml",
     )
+    parser.add_argument(
+        "--conversions-output-dir",
+        dest="conversions_output_dir",
+        metavar="conversions",
+        type=str,
+        nargs="?",
+        help="Path to output directory for converted files",
+        default="conversions",
+        const="conversions",
+    )
+    parser.add_argument(
+        "--render-traceback",
+        dest="render_traceback",
+        metavar="true",
+        type=str,
+        nargs="?",
+        help="Render traceback on error",
+        default="false",
+        const="true",
+    )
     return parser.parse_args()
 
 
