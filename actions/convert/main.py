@@ -11,7 +11,9 @@ from sigma.cli.convert import convert
 
 def convert_rules(
     path_prefix: str | Path = Path(os.environ.get("GITHUB_WORKSPACE", "")),
-    output_file: str = "-",
+    conversions_output_dir: str | Path = Path(
+        os.environ.get("CONVERSIONS_OUTPUT_DIR", "conversions")
+    ),
     render_tb: bool = False,
 ):
     """Convert Sigma rules to the target format per each conversion object in the config.
@@ -28,21 +30,42 @@ def convert_rules(
         ValueError: No files matched the patterns after applying --file-pattern: {file_pattern}.
         ValueError: Pipeline file path must be relative to the project root.
     """
-    # Load config from the repository root
+    # Convert path_prefix to a Path object if it's a string.
+    # If it's already a Path object, it will remain unchanged.
+    path_prefix = Path(path_prefix)
+
+    # Resolve the path_prefix to an absolute path
+    if not path_prefix.is_absolute():
+        path_prefix = path_prefix.resolve()
+
+    # Check if the conversions_output_dir stays within the project root to prevent path slip.
+    conversions_output_dir = path_prefix / Path(conversions_output_dir)
+    if not is_safe_path(path_prefix, conversions_output_dir):
+        raise ValueError("Conversion output directory is outside the project root")
+
+    # Create the output directory if it doesn't exist
+    conversions_output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Load config from the repository root (GITHUB_WORKSPACE, **not** GITHUB_ACTION_PATH)
     config = load_config()
 
-    # Get default values
+    # Get top-level default values
     default_target = config.get("defaults.target", "loki")
     default_format = config.get("defaults.format", "default")
     default_skip_unsupported = config.get("defaults.skip-unsupported", "true")
-    default_output = config.get("defaults.output", "-")
     default_file_pattern = config.get("defaults.file-pattern", "*.yml")
 
     # Convert Sigma rules to the target format per each conversion object in the config
     for conversion in config.get("conversions", []):
-        print(f"Conversion name: {conversion.get("name", "unnamed conversion")}")
-        # Expand input glob patterns
-        input_files = []
+        # If the conversion name is not unique, we'll overwrite the output file,
+        # which might not be the desired behavior for the user.
+        name = conversion.get("name", None)
+        if not name:
+            raise ValueError(
+                "Conversion name is required and must be a unique identifier"
+                " across all conversion objects in the config"
+            )
+        print(f"Conversion name: {name}")
 
         # Verify that all input files are relative to the repository root (GITHUB_WORKSPACE)
         input_patterns = conversion.get("input", [])
@@ -55,16 +78,17 @@ def convert_rules(
                     "Input file pattern must be relative to the project root"
                 )
 
-        # Expand glob patterns to include all matching files
-        match conversion.get("input"):
+        # Expand glob patterns to include all matching files only
+        input_files = []
+        match conversion.get("input", None):
             case list():
-                for pattern in conversion["input"]:
+                for pattern in conversion.input:
                     input_files.extend(
                         glob.glob(str(path_prefix / pattern), recursive=True)
                     )
             case str():
                 input_files.extend(
-                    glob.glob(str(path_prefix / conversion["input"]), recursive=True)
+                    glob.glob(str(path_prefix / conversion.input), recursive=True)
                 )
             case _:
                 raise ValueError("Invalid input file type")
@@ -76,7 +100,7 @@ def convert_rules(
         # Skip conversion if no files match the pattern
         if not filtered_files:
             raise ValueError(
-                f"No files matched the patterns after applying --file-pattern: {file_pattern}"
+                f"No files matched the patterns after applying file-pattern: {file_pattern}"
             )
 
         print(f"Total files: {len(filtered_files)}")
@@ -88,6 +112,11 @@ def convert_rules(
                 raise ValueError(
                     "Pipeline file path must be relative to the project root"
                 )
+
+        # Output file path
+        output_file = path_prefix / conversions_output_dir / Path(f"{name}.txt")
+
+        encoding = conversion.get("encoding", "utf-8")
 
         args = [
             "--target",
@@ -105,9 +134,9 @@ def convert_rules(
             "--file-pattern",
             file_pattern,
             "--output",
-            conversion.get("output", default_output),
+            "-",  # Output to stdout, so we can write to a file later
             "--encoding",
-            conversion.get("encoding", "utf-8"),
+            encoding,
             "--json-indent",
             str(conversion.get("json-indent", "0")),
             *[
@@ -151,21 +180,35 @@ def convert_rules(
                 for line in result.stdout.splitlines()
                 if "Parsing Sigma rules" not in line
             )
-            if output_file != "-":
-                encoding = conversion.get("encoding", "utf-8")
-                with open(output_file, "w", encoding=encoding) as f:
-                    f.write(filtered_output.strip())
-            else:
-                print(filtered_output)
 
-            print(
-                f"Converting {conversion.get("name", "unnamed conversion")} completed with exit code"
-                f" {result.exit_code}"
-            )
-            print(f"Output written to {Path(path_prefix / Path(output_file))}")
+            if not filtered_output:
+                print("No output generated, skipping writing to file")
+                continue
+
+            with open(output_file, "w", encoding=encoding) as f:
+                f.write(filtered_output.strip())
+
+            print(f"Converting {name} completed with exit code" f" {result.exit_code}")
+            print(f"Output written to {path_prefix / Path(output_file)}")
         print("-" * 80)
 
 
+def is_safe_path(base_dir: str | Path, target_path: str | Path) -> bool:
+    """
+    Check if the target_path is within the base_dir (to prevent path slip).
+
+    Args:
+        base_dir (str | Path): The base directory.
+        target_path (str | Path): The target path to check.
+
+    Returns:
+        bool: True if target_path is within base_dir, False otherwise.
+    """
+    base_dir = Path(base_dir).resolve()
+    target_path = Path(target_path).resolve()
+
+    return base_dir in target_path.parents or base_dir == target_path
+
+
 if __name__ == "__main__":
-    convert_rules(output_file="output.txt")
-    # exit(1)
+    convert_rules()
