@@ -1,10 +1,12 @@
+"""Settings for the conversion action."""
+
 import argparse
 import os
 
 from dynaconf import Dynaconf
 
 
-def parse_args():
+def parse_args() -> argparse.Namespace:
     """
     Parse command line arguments to get config file.
     """
@@ -52,14 +54,19 @@ def parse_args():
     return parser.parse_args()
 
 
-def load_config():
+def load_config(config_file: str) -> Dynaconf:
     """
     Load config file.
+
+    Args:
+        config_file (str): Path to config YAML file.
+
+    Returns:
+        Dynaconf: Config object.
     """
-    args = parse_args()
     return Dynaconf(
         envvar_prefix="CONVERT",
-        settings_file=[args.config],
+        settings_file=[config_file],
         apply_default_on_none=True,
         core_loaders=["YAML"],
     )
