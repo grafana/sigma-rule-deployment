@@ -1,4 +1,6 @@
 import argparse
+import os
+
 from dynaconf import Dynaconf
 
 
@@ -14,7 +16,7 @@ def parse_args():
         type=str,
         nargs="?",
         help="Path to config YAML file",
-        default="./config.yaml",
+        default=os.environ.get("CONFIG", "./config.yaml"),
         const="./config.yaml",
     )
     parser.add_argument(
@@ -24,8 +26,18 @@ def parse_args():
         type=str,
         nargs="?",
         help="Path to output directory for converted files",
-        default="conversions",
+        default=os.environ.get("CONVERSIONS_OUTPUT_DIR", "conversions"),
         const="conversions",
+    )
+    parser.add_argument(
+        "--path-prefix",
+        dest="path_prefix",
+        metavar=".",
+        type=str,
+        nargs="?",
+        help="The path prefix to use for input files",
+        default=os.environ.get("GITHUB_WORKSPACE", ""),
+        const=".",
     )
     parser.add_argument(
         "--render-traceback",
@@ -34,7 +46,7 @@ def parse_args():
         type=str,
         nargs="?",
         help="Render traceback on error",
-        default="false",
+        default=os.environ.get("RENDER_TRACEBACK", "false") == "true",
         const="true",
     )
     return parser.parse_args()

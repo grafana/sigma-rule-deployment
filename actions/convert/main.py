@@ -6,17 +6,20 @@ import os
 from pathlib import Path
 import traceback
 
+from settings import load_config, parse_args
+from dynaconf import Dynaconf
 from click.testing import CliRunner
-from settings import load_config
 from sigma.cli.convert import convert
 
 
 def convert_rules(
+    config: Dynaconf,
     path_prefix: str | Path = Path(os.environ.get("GITHUB_WORKSPACE", "")),
     conversions_output_dir: str | Path = Path(
         os.environ.get("CONVERSIONS_OUTPUT_DIR", "conversions")
     ),
-    render_tb: bool = os.environ.get("RENDER_TRACEBACK", "false").lower() == "true",
+    render_traceback: bool = os.environ.get("RENDER_TRACEBACK", "false").lower()
+    == "true",
 ):
     """Convert Sigma rules to the target format per each conversion object in the config.
 
@@ -57,9 +60,6 @@ def convert_rules(
 
     # Create the output directory if it doesn't exist
     conversions_output_dir.mkdir(parents=True, exist_ok=True)
-
-    # Load config from the repository root (GITHUB_WORKSPACE, **not** GITHUB_ACTION_PATH)
-    config = load_config()
 
     # Get top-level default values
     default_target = config.get("defaults.target", "loki")
@@ -180,7 +180,7 @@ def convert_rules(
             # If an exception occurred, print the exception and the traceback
             # and the output of the command. We'll continue to run the next conversion.
             print(f"Error during conversion:\n{result.exception}")
-            if render_tb:
+            if render_traceback:
                 trace = "".join(traceback.format_tb(result.exc_info[2]))
                 print(f"Traceback:\n{trace}")
             # If an error occurred, print the output of the command. Sometimes the output
@@ -223,4 +223,10 @@ def is_safe_path(base_dir: str | Path, target_path: str | Path) -> bool:
 
 
 if __name__ == "__main__":
-    convert_rules()
+    args = parse_args()
+    convert_rules(
+        config=load_config(),
+        path_prefix=args.path_prefix,
+        conversions_output_dir=args.conversions_output_dir,
+        render_traceback=args.render_traceback,
+    )
