@@ -2,6 +2,7 @@ defaults:
     target: loki
     format: default
     skip-unsupported: true
+    file-pattern: "*.yml"
 conversions:
     - name: aws_cloudtrail
       input: "rules-development/cloud/aws/cloudtrail/*"
