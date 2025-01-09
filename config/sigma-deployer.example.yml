@@ -1,0 +1,2 @@
+endpoint: https://myinstance.grafana.com
+alert_path: deployments
