@@ -59,13 +59,14 @@ func main() {
 
 	// Write action outputs
 	githubOutput := os.Getenv("GITHUB_OUTPUT")
-	if githubOutput == "" {
+	if githubOutput != "" {
 		f, err := os.OpenFile(githubOutput, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 		if err != nil {
 			log.Printf("Can't write output: %v", err)
 		}
 		defer f.Close()
-		output := fmt.Sprintf("alerts_created=%s\nalerts_updated=%s\nalerts_deleted=%s\n", alertsCreatedStr, alertsUpdatedStr, alertsDeletedStr)
+		output := fmt.Sprintf("alerts_created=%s\nalerts_updated=%s\nalerts_deleted=%s\n",
+			alertsCreatedStr, alertsUpdatedStr, alertsDeletedStr)
 		if _, err := f.WriteString(output); err != nil {
 			log.Printf("Can't write output: %v", err)
 		}
@@ -86,6 +87,9 @@ func (d *Deployer) Deploy() ([]string, []string, []string, error) {
 	alertsCreated := []string{}
 	alertsUpdated := []string{}
 	alertsDeleted := []string{}
+
+	log.Printf("Preparing to deploy %d alerts, update %d alerts and delete %d alerts",
+		len(d.config.alertsToAdd), len(d.config.alertsToUpdate), len(d.config.alertsToRemove))
 
 	// Process alert CREATIONS
 	for _, alertFile := range d.config.alertsToAdd {
@@ -152,9 +156,9 @@ func (d *Deployer) LoadConfig() error {
 		alertPath: filepath.Clean(configYAML.AlertPath),
 	}
 
-	// Makes sure the alertPath ends with a slash
-	if !strings.HasSuffix(d.config.alertPath, "/") {
-		d.config.alertPath += "/"
+	// Makes sure the endpoint ends with a slash
+	if !strings.HasSuffix(d.config.endpoint, "/") {
+		d.config.endpoint += "/"
 	}
 
 	// Get the rest of the config from the environment variables
@@ -179,17 +183,17 @@ func (d *Deployer) LoadConfig() error {
 
 	// Add the modified files to the alert lists if they are in the right filder (alertPath)
 	for _, filePath := range addedFilesList {
-		addToAlertList(alertsToAdd, filePath, d.config.alertPath)
+		alertsToAdd = addToAlertList(alertsToAdd, filePath, d.config.alertPath)
 	}
 	// Copied files are treated as added files
 	for _, filePath := range copiedFilesList {
-		addToAlertList(alertsToAdd, filePath, d.config.alertPath)
+		alertsToAdd = addToAlertList(alertsToAdd, filePath, d.config.alertPath)
 	}
 	for _, filePath := range deletedFilesList {
-		addToAlertList(alertsToDelete, filePath, d.config.alertPath)
+		alertsToDelete = addToAlertList(alertsToDelete, filePath, d.config.alertPath)
 	}
 	for _, filePath := range modifiedFilesList {
-		addToAlertList(alertsToUpdate, filePath, d.config.alertPath)
+		alertsToUpdate = addToAlertList(alertsToUpdate, filePath, d.config.alertPath)
 	}
 	// Note: we don't take the renamed files into account as they don't modify the alerts per se
 
@@ -204,7 +208,9 @@ func addToAlertList(alertList []string, file string, prefix string) []string {
 	// We first check that the modified files are in the expected folder
 	// That is, the folder which contains the alert files
 	// Otherwise, we ignore this file as they are unrelated to the deployment
-	if strings.HasPrefix(file, prefix+"/") {
+	pattern := prefix + string(filepath.Separator) + "*"
+	matched, err := filepath.Match(pattern, file)
+	if matched && err == nil {
 		alertList = append(alertList, file)
 	}
 	return alertList
@@ -247,7 +253,7 @@ func (d *Deployer) createAlert(content string) (string, error) {
 		return "", err
 	}
 
-	if res.StatusCode != 200 {
+	if res.StatusCode != 201 {
 		log.Printf("Cannot create alert. Status: %d, Message: %s", res.StatusCode, resp.Message)
 		return "", fmt.Errorf("error creating alert: returned status %s", res.Status)
 	}
@@ -321,7 +327,7 @@ func (d *Deployer) deleteAlert(content string) (string, error) {
 	defer res.Body.Close()
 
 	// Check the response
-	if res.StatusCode != 200 {
+	if res.StatusCode != 204 {
 		log.Printf("Cannot delete alert. Status: %d", res.StatusCode)
 		return "", fmt.Errorf("error delete alert: returned status %s", res.Status)
 	}
