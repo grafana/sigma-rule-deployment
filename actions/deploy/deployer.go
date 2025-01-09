@@ -134,7 +134,7 @@ func (d *Deployer) LoadConfig() error {
 	// Load the deployment config file
 	configFile := os.Getenv("DEPLOYER_CONFIG_FILE")
 	if configFile == "" {
-		return fmt.Errorf("env variable DEPLOYER_CONFIG_FILE is not set")
+		return fmt.Errorf("Deployer config file is not set or empty")
 	}
 
 	// Read the YAML config file
@@ -160,7 +160,7 @@ func (d *Deployer) LoadConfig() error {
 	// Get the rest of the config from the environment variables
 	d.config.saToken = os.Getenv("DEPLOYER_GRAFANA_SA_TOKEN")
 	if d.config.saToken == "" {
-		return fmt.Errorf("env variable DEPLOYER_GRAFANA_SA_TOKEN is not set")
+		return fmt.Errorf("Grafana SA token is not set or empty")
 	}
 
 	alertsToAdd := []string{}
@@ -199,6 +199,9 @@ func (d *Deployer) LoadConfig() error {
 }
 
 func addToAlertList(alertList []string, file string, prefix string) []string {
+	// We first check that the modifies files are in the excpected folder
+	// That is, the folder which contains the alert files
+	// Otherwise, we ignore this file
 	if strings.HasPrefix(file, prefix+"/") {
 		alertList = append(alertList, file)
 	}

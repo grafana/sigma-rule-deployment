@@ -5,7 +5,7 @@ inputs:
   config_file:
     description: "Path to the configuration file for the Sigma Rule Deployer"
     required: true
-    default: "./config_deployer.yaml"
+    default: ""
   grafana_sa_token:
     description: "Service account token for Grafana"
     required: true
@@ -26,12 +26,12 @@ runs:
       id: checkout
       uses: actions/checkout@v4
       with:
-        fetch-depth: 0  # OR "2" -> To retrieve the preceding commit.
+        fetch-depth: 0  # Important to ensure we'll have all the commits when a merge includes multiple
     - name: "Detect changed files"
       id: changed-files
       uses: tj-actions/changed-files@v45
 
-    # TODO: Dockerize the deployer and use it here.
+    # TODO: Dockerize the deployer and use it here instead of running the script locally.
     - name: "Setup go"
       id: setup-go
       uses: actions/setup-go@v5
