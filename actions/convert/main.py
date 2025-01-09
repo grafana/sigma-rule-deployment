@@ -130,10 +130,17 @@ def convert_rules(
 
         encoding = conversion.get("encoding", "utf-8")
 
+        pipelines = []
+        for pipeline in conversion.get("pipelines", []):
+            if is_path(pipeline, file_pattern):
+                pipelines.append(f"--pipeline={path_prefix / Path(pipeline)}")
+            else:
+                pipelines.append(f"--pipeline={pipeline}")
+
         args = [
             "--target",
             conversion.get("target", default_target),
-            *[f"--pipeline={path_prefix / p}" for p in conversion.get("pipelines", [])],
+            *pipelines,
             "--format",
             conversion.get("format", default_format),
             *(
@@ -220,6 +227,28 @@ def is_safe_path(base_dir: str | Path, target_path: str | Path) -> bool:
     target_path = Path(target_path).resolve()
 
     return base_dir in target_path.parents or base_dir == target_path
+
+
+def is_path(path_string, file_pattern) -> bool:
+    """Check if the string is a valid path.
+
+    Args:
+        path_string (str): The string to check.
+        file_pattern (str): The file pattern to match, like "*.yml".
+
+    Returns:
+        bool: True if the string is a valid path, False otherwise.
+    """
+    if os.path.exists(path_string):
+        return True
+
+    if Path(path_string).is_absolute() or "/" in path_string:
+        return True
+
+    if os.path.splitext(path_string)[1] and fnmatch.fnmatch(path_string, file_pattern):
+        return True
+
+    return False
 
 
 if __name__ == "__main__":
