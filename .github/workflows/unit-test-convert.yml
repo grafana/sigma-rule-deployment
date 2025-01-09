@@ -1,4 +1,4 @@
-name: Unit-test Sigma rule conversion"
+name: Unit-test Sigma rule conversion
 
 on:
   push:
