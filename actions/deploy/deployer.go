@@ -181,6 +181,7 @@ func (d *Deployer) LoadConfig() error {
 	for _, filePath := range addedFilesList {
 		addToAlertList(alertsToAdd, filePath, d.config.alertPath)
 	}
+	// Copied files are treated as added files
 	for _, filePath := range copiedFilesList {
 		addToAlertList(alertsToAdd, filePath, d.config.alertPath)
 	}
@@ -190,6 +191,7 @@ func (d *Deployer) LoadConfig() error {
 	for _, filePath := range modifiedFilesList {
 		addToAlertList(alertsToUpdate, filePath, d.config.alertPath)
 	}
+	// Note: we don't take the renamed files into account as they don't modify the alerts per se
 
 	d.config.alertsToAdd = alertsToAdd
 	d.config.alertsToRemove = alertsToDelete
@@ -199,9 +201,9 @@ func (d *Deployer) LoadConfig() error {
 }
 
 func addToAlertList(alertList []string, file string, prefix string) []string {
-	// We first check that the modifies files are in the excpected folder
+	// We first check that the modified files are in the expected folder
 	// That is, the folder which contains the alert files
-	// Otherwise, we ignore this file
+	// Otherwise, we ignore this file as they are unrelated to the deployment
 	if strings.HasPrefix(file, prefix+"/") {
 		alertList = append(alertList, file)
 	}
