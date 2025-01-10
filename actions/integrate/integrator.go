@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,7 +18,6 @@ type Integrator struct {
 	config Configuration
 
 	addedFiles   []string
-	updatedFiles []string
 	removedFiles []string
 }
 
@@ -62,22 +62,21 @@ func (i *Integrator) LoadConfig() error {
 	modifiedFiles := strings.Split(os.Getenv("MODIFIED_FILES"), " ")
 	// copiedFiles := strings.Split(os.Getenv("COPIED_FILES"), " ") // TODO
 
-	newFiles := make([]string, 0, len(addedFiles))
+	newUpdatedFiles := make([]string, 0, len(addedFiles)+len(modifiedFiles))
 	removedFiles := make([]string, 0, len(deletedFiles))
-	updatedFiles := make([]string, 0, len(modifiedFiles))
 
 	for _, path := range addedFiles {
-		newFiles = append(newFiles, i.config.Folders.ConversionPath+string(filepath.Separator)+path)
+		if path != "" {
+			newUpdatedFiles = append(newUpdatedFiles, i.config.Folders.ConversionPath+string(filepath.Separator)+path)
+		}
 	}
 	for _, path := range deletedFiles {
-		removedFiles = append(removedFiles, i.config.Folders.ConversionPath+string(filepath.Separator)+path)
-	}
-	for _, path := range modifiedFiles {
-		updatedFiles = append(updatedFiles, i.config.Folders.ConversionPath+string(filepath.Separator)+path)
+		if path != "" {
+			removedFiles = append(removedFiles, i.config.Folders.ConversionPath+string(filepath.Separator)+path)
+		}
 	}
 
-	i.addedFiles = newFiles
-	i.updatedFiles = updatedFiles
+	i.addedFiles = newUpdatedFiles
 	i.removedFiles = removedFiles
 
 	return nil
@@ -115,13 +114,27 @@ func (i *Integrator) Run() error {
 		}
 	}
 
+	for _, deletedFile := range i.removedFiles {
+		deploymentGlob := fmt.Sprintf("alert_rule_%s_*.json", strings.TrimSuffix(filepath.Base(deletedFile), ".txt"))
+		deploymentFiles, err := fs.Glob(os.DirFS(i.config.Folders.DeploymentPath), deploymentGlob)
+		if err != nil {
+			return fmt.Errorf("error when searching for deployment files for %s: %v", deletedFile, err)
+		}
+		for _, file := range deploymentFiles {
+			err = os.Remove(i.config.Folders.DeploymentPath + string(filepath.Separator) + file)
+			if err != nil {
+				return fmt.Errorf("error when deleting deployment file %s: %v", file, err)
+			}
+		}
+	}
+
 	return nil
 }
 
 func (i *Integrator) ConvertToAlert(query string, config ConversionConfig) error {
 	hash := int64(murmur3.Sum32([]byte(query)))
 	uid := fmt.Sprintf("%x", hash)
-	outputFile := fmt.Sprintf("%s%salert_rule_%s.yml", i.config.Folders.DeploymentPath, string(filepath.Separator), uid)
+	outputFile := fmt.Sprintf("%s%salert_rule_%s_%s.json", i.config.Folders.DeploymentPath, string(filepath.Separator), config.Name, uid)
 
 	rule := &definitions.ProvisionedAlertRule{}
 	if _, err := os.Stat(outputFile); err == nil {
@@ -148,7 +161,7 @@ func (i *Integrator) ConvertToAlert(query string, config ConversionConfig) error
 	rule.UID = uid
 	rule.OrgID = i.config.IntegratorConfig.OrgID
 	rule.FolderUID = i.config.IntegratorConfig.FolderID
-	rule.RuleGroup = config.RuleGroup
+	rule.RuleGroup = getC(config.RuleGroup, i.config.ConversionDefaults.RuleGroup, "Default")
 	rule.NoDataState = definitions.OK
 	rule.ExecErrState = definitions.OkErrState
 	rule.Updated = time.Now()
