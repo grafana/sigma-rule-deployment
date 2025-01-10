@@ -4,6 +4,7 @@ import fnmatch
 import glob
 import os
 from pathlib import Path
+import shutil
 import traceback
 
 from dynaconf import Dynaconf
@@ -57,14 +58,20 @@ def convert_rules(
     if not is_safe_path(path_prefix, conversions_output_dir):
         raise ValueError("Conversion output directory is outside the project root")
 
+    # Remove the output directory if it exists
+    if conversions_output_dir.is_dir():
+        shutil.rmtree(conversions_output_dir)
+
     # Create the output directory if it doesn't exist
     conversions_output_dir.mkdir(parents=True, exist_ok=True)
 
     # Get top-level default values
-    default_target = config.get("defaults.target", "loki")
-    default_format = config.get("defaults.format", "default")
-    default_skip_unsupported = config.get("defaults.skip-unsupported", "true")
-    default_file_pattern = config.get("defaults.file-pattern", "*.yml")
+    default_target = config.get("conversion_defaults.target", "loki")
+    default_format = config.get("conversion_defaults.format", "default")
+    default_skip_unsupported = config.get(
+        "conversion_defaults.skip-unsupported", "true"
+    )
+    default_file_pattern = config.get("conversion_defaults.file-pattern", "*.yml")
 
     # Convert Sigma rules to the target format per each conversion object in the config
     for conversion in config.get("conversions", []):
