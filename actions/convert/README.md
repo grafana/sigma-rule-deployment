@@ -41,7 +41,7 @@ jobs:
 1. **Setup**: Installs Python and `uv`, the dependency manager.
 2. **Plugin Installation**: Dynamically installs Sigma CLI plugins specified in `plugin_packages`. Only packages starting with `pysigma-backend-` are allowed.
 3. **Conversion**: Runs the conversion script using `uv` and the provided configuration file.
-4. **Output**: Stores the converted files in the specified `output_dir` and provides it as an output for further steps.
+4. **Output**: Stores the converted files in the specified `folders.conversions_path` parameter in the configuration file.
 
 ## Example Plugins
 
