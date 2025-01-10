@@ -1,0 +1,22 @@
+name: "Grafana Query Integration"
+description: "Take converted rules and convert them into deployable outputs (alert rules, dashboards, etc.) and test them."
+author: "security-operations"
+
+inputs:
+  query_files:
+    description: "A colon-separated list of query files to process"
+    required: true
+  cfg_file:
+    description: "Path to the configuration file inside the repository"
+    required: true
+  repo-token:
+    description: "The GITHUB_TOKEN needed to store the outputs"
+    default: ${{ github.token }}
+
+outputs:
+  result:
+    description: "The repository file names changed by this Action"
+
+runs:
+  using: "docker"
+  image: "docker://ghcr.io/grafana/sigma-rule-deployment-integration:v0.0.1"

@@ -1,0 +1,10 @@
+FROM golang:1.23-alpine AS build
+
+WORKDIR /src
+COPY . /src
+RUN CGO_ENABLED=0 go build -o /query-integration /src/cmd/query-integration
+
+FROM scratch
+COPY --from=build /query-integration /query-integration
+
+ENTRYPOINT ["/query-integration"]
