@@ -98,38 +98,49 @@ func (i *Integrator) Run() error {
 		}
 
 		for _, query := range queries {
-			hash := int64(murmur3.Sum32([]byte(query)))
-			uid := base64.StdEncoding.EncodeToString(big.NewInt(hash).Bytes())
-			outputFile := fmt.Sprintf("%s%salert_rule_%s.yml", i.config.Folders.DeploymentPath, string(filepath.Separator), uid)
-
-			rule := &definitions.ProvisionedAlertRule{}
-			if _, err := os.Stat(outputFile); err == nil {
-				ruleYAML, err := ReadLocalFile(outputFile)
-				if err != nil {
-					return fmt.Errorf("error reading rule file %s: %v", outputFile, err)
-				}
-				err = yaml.Unmarshal([]byte(ruleYAML), rule)
-				if err != nil {
-					return fmt.Errorf("error unmarshalling rule file %s: %v", outputFile, err)
-				}
-			}
-
-			datasource := getC(config.DataSource, i.config.ConversionDefaults.DataSource, "nil")
-			timewindow := getC(config.TimeWindow, i.config.ConversionDefaults.TimeWindow, "1m")
-			timerange, err := time.ParseDuration(timewindow)
+			err = i.ConvertToAlert(query, config)
 			if err != nil {
-				return fmt.Errorf("error parsing time window: %v", err)
+				return err
 			}
 
-			rule.ID = hash
-			rule.UID = uid
-			rule.Data = []definitions.AlertQuery{
-				{
-					RefID:             "A",
-					DatasourceUID:     datasource,
-					RelativeTimeRange: definitions.RelativeTimeRange{From: definitions.Duration(timerange)}},
-			}
 		}
+	}
+
+	return nil
+}
+
+func (i *Integrator) ConvertToAlert(query string, config ConversionConfig) error {
+	hash := int64(murmur3.Sum32([]byte(query)))
+	uid := base64.StdEncoding.EncodeToString(big.NewInt(hash).Bytes())
+	outputFile := fmt.Sprintf("%s%salert_rule_%s.yml", i.config.Folders.DeploymentPath, string(filepath.Separator), uid)
+
+	rule := &definitions.ProvisionedAlertRule{}
+	if _, err := os.Stat(outputFile); err == nil {
+		ruleYAML, err := ReadLocalFile(outputFile)
+		if err != nil {
+			return fmt.Errorf("error reading rule file %s: %v", outputFile, err)
+		}
+		err = yaml.Unmarshal([]byte(ruleYAML), rule)
+		if err != nil {
+			return fmt.Errorf("error unmarshalling rule file %s: %v", outputFile, err)
+		}
+	}
+
+	datasource := getC(config.DataSource, i.config.ConversionDefaults.DataSource, "nil")
+	timewindow := getC(config.TimeWindow, i.config.ConversionDefaults.TimeWindow, "1m")
+	timerange, err := time.ParseDuration(timewindow)
+	if err != nil {
+		return fmt.Errorf("error parsing time window: %v", err)
+	}
+
+	rule.ID = hash
+	rule.UID = uid
+	rule.Data = []definitions.AlertQuery{
+		{
+			RefID:             "A",
+			DatasourceUID:     datasource,
+			RelativeTimeRange: definitions.RelativeTimeRange{From: definitions.Duration(timerange), To: definitions.Duration(time.Duration(0))},
+		},
 	}
 
 	return nil
