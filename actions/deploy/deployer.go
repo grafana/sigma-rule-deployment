@@ -25,10 +25,16 @@ type deploymentConfig struct {
 	alertsToUpdate []string
 }
 
-// Structure of the deployment YAML config file
-type DeploymentYAML struct {
-	Endpoint  string `yaml:"endpoint"`
-	AlertPath string `yaml:"alert_path"`
+// Structures to unmarshal the YAML config file
+type FoldersConfig struct {
+	DeploymentPath string `yaml:"deployment_path"`
+}
+type DeploymentConfig struct {
+	GrafanaInstance string `yaml:"grafana_instance"`
+}
+type Configuration struct {
+	Folders        FoldersConfig    `yaml:"folders"`
+	DeployerConfig DeploymentConfig `yaml:"deployment"`
 }
 
 type Deployer struct {
@@ -52,26 +58,14 @@ func main() {
 	// Deploy alerts
 	alertsCreated, alertsUpdated, alertsDeleted, errDeploy := deployer.Deploy()
 
-	// No matter if we had an error, we return the alerts that were still created, updated and deleted before the error
-	alertsCreatedStr := strings.Join(alertsCreated, " ")
-	alertsUpdatedStr := strings.Join(alertsUpdated, " ")
-	alertsDeletedStr := strings.Join(alertsDeleted, " ")
-
 	// Write action outputs
-	githubOutput := os.Getenv("GITHUB_OUTPUT")
-	if githubOutput != "" {
-		f, err := os.OpenFile(githubOutput, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-		if err != nil {
-			log.Printf("Can't write output: %v", err)
-		}
-		defer f.Close()
-		output := fmt.Sprintf("alerts_created=%s\nalerts_updated=%s\nalerts_deleted=%s\n",
-			alertsCreatedStr, alertsUpdatedStr, alertsDeletedStr)
-		if _, err := f.WriteString(output); err != nil {
-			log.Printf("Can't write output: %v", err)
-		}
+	if err := deployer.writeOutput(alertsCreated, alertsUpdated, alertsDeleted); err != nil {
+		fmt.Printf("Error writing output: %v\n", err)
+		os.Exit(1)
 	}
 
+	// We only check the deployment error AFTER writing the output so that
+	// we still report the alerts that were created, updated and deleted before the error
 	if errDeploy != nil {
 		fmt.Printf("Error deploying: %v\n", errDeploy)
 		os.Exit(1)
@@ -91,11 +85,27 @@ func (d *Deployer) Deploy() ([]string, []string, []string, error) {
 	log.Printf("Preparing to deploy %d alerts, update %d alerts and delete %d alerts",
 		len(d.config.alertsToAdd), len(d.config.alertsToUpdate), len(d.config.alertsToRemove))
 
+	// Process alert DELETIONS
+	// It is important to do this first for the case where an alert
+	// is recreated in a different file (with a different UID), to avoid conflicts on the alert title
+	// By deleting the old one first, we can then create the one one without issues
+	for _, alertFile := range d.config.alertsToRemove {
+		content, err := readFile(alertFile)
+		if err != nil {
+			log.Printf("Can't read file %s: %v", alertFile, err)
+			return alertsCreated, alertsUpdated, alertsDeleted, err
+		}
+		uid, err := d.deleteAlert(content)
+		if err != nil {
+			return alertsCreated, alertsUpdated, alertsDeleted, err
+		}
+		alertsDeleted = append(alertsDeleted, uid)
+	}
 	// Process alert CREATIONS
 	for _, alertFile := range d.config.alertsToAdd {
 		content, err := readFile(alertFile)
 		if err != nil {
-			log.Printf("Cannot read file %s: %v", alertFile, err)
+			log.Printf("Can't read file %s: %v", alertFile, err)
 			return alertsCreated, alertsUpdated, alertsDeleted, err
 		}
 		uid, err := d.createAlert(content)
@@ -108,7 +118,7 @@ func (d *Deployer) Deploy() ([]string, []string, []string, error) {
 	for _, alertFile := range d.config.alertsToUpdate {
 		content, err := readFile(alertFile)
 		if err != nil {
-			log.Printf("Cannot read file %s: %v", alertFile, err)
+			log.Printf("Can't read file %s: %v", alertFile, err)
 			return alertsCreated, alertsUpdated, alertsDeleted, err
 		}
 		uid, err := d.updateAlert(content)
@@ -117,46 +127,56 @@ func (d *Deployer) Deploy() ([]string, []string, []string, error) {
 		}
 		alertsUpdated = append(alertsUpdated, uid)
 	}
-	// Process alert DELETIONS
-	for _, alertFile := range d.config.alertsToRemove {
-		content, err := readFile(alertFile)
-		if err != nil {
-			log.Printf("Cannot read file %s: %v", alertFile, err)
-			return alertsCreated, alertsUpdated, alertsDeleted, err
-		}
-		uid, err := d.deleteAlert(content)
-		if err != nil {
-			return alertsCreated, alertsUpdated, alertsDeleted, err
-		}
-		alertsDeleted = append(alertsDeleted, uid)
-	}
 
 	return alertsCreated, alertsUpdated, alertsDeleted, nil
 }
 
+func (d *Deployer) writeOutput(alertsCreated []string, alertsUpdated []string, alertsDeleted []string) error {
+	alertsCreatedStr := strings.Join(alertsCreated, " ")
+	alertsUpdatedStr := strings.Join(alertsUpdated, " ")
+	alertsDeletedStr := strings.Join(alertsDeleted, " ")
+
+	githubOutput := os.Getenv("GITHUB_OUTPUT")
+	if githubOutput != "" {
+		f, err := os.OpenFile(githubOutput, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		output := fmt.Sprintf("alerts_created=%s\nalerts_updated=%s\nalerts_deleted=%s\n",
+			alertsCreatedStr, alertsUpdatedStr, alertsDeletedStr)
+		if _, err := f.WriteString(output); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (d *Deployer) LoadConfig() error {
 	// Load the deployment config file
-	configFile := os.Getenv("DEPLOYER_CONFIG_FILE")
+	configFile := os.Getenv("CONFIG_FILE")
 	if configFile == "" {
 		return fmt.Errorf("Deployer config file is not set or empty")
 	}
+	configFile = filepath.Clean(configFile)
 
 	// Read the YAML config file
 	configFileContent, err := readFile(configFile)
 	if err != nil {
 		return fmt.Errorf("error reading config file: %v", err)
 	}
-	configYAML := DeploymentYAML{}
+	configYAML := Configuration{}
 	err = yaml.Unmarshal([]byte(configFileContent), &configYAML)
 	if err != nil {
 		return fmt.Errorf("error unmarshalling config file: %v", err)
 	}
 	d.config = deploymentConfig{
-		endpoint:  configYAML.Endpoint,
-		alertPath: filepath.Clean(configYAML.AlertPath),
+		endpoint:  configYAML.DeployerConfig.GrafanaInstance,
+		alertPath: filepath.Clean(configYAML.Folders.DeploymentPath),
 	}
 
-	// Makes sure the endpoint ends with a slash
+	// Makes sure the endpoint URL ends with a slash
 	if !strings.HasSuffix(d.config.endpoint, "/") {
 		d.config.endpoint += "/"
 	}
@@ -254,7 +274,7 @@ func (d *Deployer) createAlert(content string) (string, error) {
 	}
 
 	if res.StatusCode != 201 {
-		log.Printf("Cannot create alert. Status: %d, Message: %s", res.StatusCode, resp.Message)
+		log.Printf("Can't create alert. Status: %d, Message: %s", res.StatusCode, resp.Message)
 		return "", fmt.Errorf("error creating alert: returned status %s", res.Status)
 	}
 
@@ -291,7 +311,7 @@ func (d *Deployer) updateAlert(content string) (string, error) {
 
 	// Check the response
 	if res.StatusCode != 200 {
-		log.Printf("Cannot update alert. Status: %d", res.StatusCode)
+		log.Printf("Can't update alert. Status: %d", res.StatusCode)
 		return "", fmt.Errorf("error updating alert: returned status %s", res.Status)
 	}
 
@@ -328,7 +348,7 @@ func (d *Deployer) deleteAlert(content string) (string, error) {
 
 	// Check the response
 	if res.StatusCode != 204 {
-		log.Printf("Cannot delete alert. Status: %d", res.StatusCode)
+		log.Printf("Can't delete alert. Status: %d", res.StatusCode)
 		return "", fmt.Errorf("error delete alert: returned status %s", res.Status)
 	}
 
@@ -342,6 +362,11 @@ func parseAlert(content string) (Alert, error) {
 	if err := json.Unmarshal([]byte(content), &alert); err != nil {
 		return Alert{}, err
 	}
+	// Sanity check to ensure we've read an alert file
+	if alert.Uid == "" || alert.Title == "" {
+		return Alert{}, fmt.Errorf("invalid alert file")
+	}
+
 	return alert, nil
 }
 
@@ -352,7 +377,7 @@ func readFile(filePath string) (string, error) {
 		return "", fmt.Errorf("invalid file path: %s", filePath)
 	}
 
-	configFileContent, err := os.ReadFile(filePath)
+	fileContent, err := os.ReadFile(filePath)
 
-	return string(configFileContent), err
+	return string(fileContent), err
 }

@@ -43,7 +43,7 @@ runs:
       run: |
         go run ${{ github.action_path }}/deployer.go
       env:
-        DEPLOYER_CONFIG_FILE: ${{ inputs.config_file }}
+        CONFIG_FILE: ${{ inputs.config_file }}
         DEPLOYER_GRAFANA_SA_TOKEN: ${{ inputs.grafana_sa_token }}
         ADDED_FILES: ${{ steps.changed-files.outputs.added_files }}
         MODIFIED_FILES: ${{ steps.changed-files.outputs.modified_files }}
