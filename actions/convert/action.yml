@@ -7,10 +7,6 @@ inputs:
     description: "Path to the Sigma conversion config file."
     required: true
     default: "./config.yaml"
-  output_dir:
-    description: "Path to the output directory."
-    required: false
-    default: "./conversions"
   plugin_packages:
     description: "Comma-separated list of Sigma CLI plugin packages to install."
     required: false
@@ -62,8 +58,4 @@ runs:
 
     - name: Run Sigma rule conversion
       run: |
-        uv run --directory ${{ GITHUB_ACTION_PATH }} actions/convert/main.py --config ${{ inputs.config_path }} --conversions-output-dir ${{ inputs.output_dir }} --render-traceback ${{ inputs.render_traceback }}
-
-    - name: Set output path
-      id: set_output
-      run: echo "output_path=${{ inputs.output_dir }}" >> $GITHUB_ENV
+        uv run --directory ${{ GITHUB_ACTION_PATH }} actions/convert/main.py --config ${{ inputs.config_path }} --render-traceback ${{ inputs.render_traceback }}
