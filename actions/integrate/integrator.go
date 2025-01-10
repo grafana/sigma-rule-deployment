@@ -152,6 +152,7 @@ func (i *Integrator) ConvertToAlert(query string, config ConversionConfig) error
 	rule.NoDataState = definitions.OK
 	rule.ExecErrState = definitions.OkErrState
 	rule.Updated = time.Now()
+	rule.Title = fmt.Sprintf("Alert Rule %s", uid) // FIXME: read from Sigma rule
 
 	// alerting rule query
 	// disabled for time being due to dependency conflict between loki and alerting :confused:
