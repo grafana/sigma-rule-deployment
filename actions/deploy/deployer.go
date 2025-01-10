@@ -137,17 +137,18 @@ func (d *Deployer) writeOutput(alertsCreated []string, alertsUpdated []string, a
 	alertsDeletedStr := strings.Join(alertsDeleted, " ")
 
 	githubOutput := os.Getenv("GITHUB_OUTPUT")
-	if githubOutput != "" {
-		f, err := os.OpenFile(githubOutput, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
-		output := fmt.Sprintf("alerts_created=%s\nalerts_updated=%s\nalerts_deleted=%s\n",
-			alertsCreatedStr, alertsUpdatedStr, alertsDeletedStr)
-		if _, err := f.WriteString(output); err != nil {
-			return err
-		}
+	if githubOutput == "" {
+		return fmt.Errorf("GITHUB_OUTPUT is not set or empty")
+	}
+	f, err := os.OpenFile(githubOutput, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	output := fmt.Sprintf("alerts_created=%s\nalerts_updated=%s\nalerts_deleted=%s\n",
+		alertsCreatedStr, alertsUpdatedStr, alertsDeletedStr)
+	if _, err := f.WriteString(output); err != nil {
+		return err
 	}
 
 	return nil
