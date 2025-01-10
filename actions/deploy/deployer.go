@@ -17,7 +17,10 @@ import (
 )
 
 // Regex to parse the alert UID from the filename
-var regexAlertFilename = regexp.MustCompile(`alert_rule_([^\.]+)\.json`)
+var regexAlertFilename = regexp.MustCompile(`alert_rule_(?:.*)_([^\.]+)\.json`)
+
+// Timeout for the HTTP requests
+var requestTimeOut = 5 * time.Second
 
 // Structure to store the deployment config
 type deploymentConfig struct {
@@ -92,7 +95,7 @@ func (d *Deployer) Deploy() ([]string, []string, []string, error) {
 	// Process alert DELETIONS
 	// It is important to do this first for the case where an alert
 	// is recreated in a different file (with a different UID), to avoid conflicts on the alert title
-	// By deleting the old one first, we can then create the one one without issues
+	// By deleting the old one first, we can then create the new one without issues
 	for _, alertFile := range d.config.alertsToRemove {
 		alertUid := getAlertUidFromFilename(filepath.Base(alertFile))
 		if alertUid == "" {
@@ -149,6 +152,7 @@ func (d *Deployer) writeOutput(alertsCreated []string, alertsUpdated []string, a
 		return err
 	}
 	defer f.Close()
+
 	output := fmt.Sprintf("alerts_created=%s\nalerts_updated=%s\nalerts_deleted=%s\n",
 		alertsCreatedStr, alertsUpdatedStr, alertsDeletedStr)
 	if _, err := f.WriteString(output); err != nil {
@@ -159,7 +163,7 @@ func (d *Deployer) writeOutput(alertsCreated []string, alertsUpdated []string, a
 }
 
 func (d *Deployer) LoadConfig() error {
-	// Load the deployment config file
+	// Load the sigma rule deployer config file
 	configFile := os.Getenv("CONFIG_FILE")
 	if configFile == "" {
 		return fmt.Errorf("Deployer config file is not set or empty")
@@ -220,7 +224,9 @@ func (d *Deployer) LoadConfig() error {
 	for _, filePath := range modifiedFilesList {
 		alertsToUpdate = addToAlertList(alertsToUpdate, filePath, d.config.alertPath)
 	}
-	// Note: we don't take the renamed files into account as they don't modify the alerts per se
+	// Renamed files will be considered a deletion and a creation via the changed-files action configuration.
+	// This helps to avoid issues where we have both an alert being deleted and another one created in a single PR,
+	// as Git would typically consider this as a rename (which poses isues for our deployment logic)
 
 	d.config.alertsToAdd = alertsToAdd
 	d.config.alertsToRemove = alertsToDelete
@@ -233,6 +239,8 @@ func addToAlertList(alertList []string, file string, prefix string) []string {
 	// We first check that the modified files are in the expected folder
 	// That is, the folder which contains the alert files
 	// Otherwise, we ignore this file as they are unrelated to the deployment
+
+	// File pattern to match every file in the alert folder
 	pattern := prefix + string(filepath.Separator) + "*"
 	matched, err := filepath.Match(pattern, file)
 	if matched && err == nil {
@@ -242,6 +250,7 @@ func addToAlertList(alertList []string, file string, prefix string) []string {
 }
 
 func (d *Deployer) createAlert(content string) (string, error) {
+	// For now, we are only interested in the response message, which provides context in case of errors
 	type Response struct {
 		Message string `json:"message"`
 	}
@@ -264,7 +273,7 @@ func (d *Deployer) createAlert(content string) (string, error) {
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", d.config.saToken))
 
 	client := &http.Client{
-		Timeout: 5 * time.Second,
+		Timeout: requestTimeOut,
 	}
 	res, err := client.Do(req)
 	if err != nil {
@@ -306,7 +315,7 @@ func (d *Deployer) updateAlert(content string) (string, error) {
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", d.config.saToken))
 
 	client := &http.Client{
-		Timeout: 5 * time.Second,
+		Timeout: requestTimeOut,
 	}
 	res, err := client.Do(req)
 	if err != nil {
@@ -337,7 +346,7 @@ func (d *Deployer) deleteAlert(uid string) (string, error) {
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", d.config.saToken))
 
 	client := &http.Client{
-		Timeout: 5 * time.Second,
+		Timeout: requestTimeOut,
 	}
 	res, err := client.Do(req)
 	if err != nil {
