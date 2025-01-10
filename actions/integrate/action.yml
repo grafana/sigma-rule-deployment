@@ -1,0 +1,44 @@
+name: "Grafana Query Integration"
+description: "Take converted rules and convert them into deployable outputs (alert rules, dashboards, etc.) and test them."
+author: "security-operations"
+
+inputs:
+  config_file:
+    description: "Path to the configuration file for the Sigma Rule Deployer"
+    required: true
+    default: ""
+
+outputs:
+  result:
+    description: "The repository file names changed by this Action"
+
+runs:
+  using: "composite"
+  steps:
+    - name: "Checkout repository (fetch-depth: 0)"
+      id: checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0 # Important to ensure we'll have all the commits when a merge includes multiple
+
+    - name: "Detect changed files"
+      id: changed-files
+      uses: tj-actions/changed-files@v45
+
+    # TODO: Dockerize the deployer and use it here instead of running the script locally.
+    - name: "Setup go"
+      id: setup-go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ">=1.23.4"
+
+    - name: "Run Sigma Rule Integrator"
+      id: integrate
+      run: |
+        go run ${{ github.action_path }}/integrator.go
+      env:
+        INTEGRATOR_CONFIG_FILE: ${{ inputs.config_file }}
+        ADDED_FILES: ${{ steps.changed-files.outputs.added_files }}
+        MODIFIED_FILES: ${{ steps.changed-files.outputs.modified_files }}
+        DELETED_FILES: ${{ steps.changed-files.outputs.deleted_files }}
+        COPIED_FILES: ${{ steps.changed-files.outputs.copied_files }}
