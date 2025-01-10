@@ -51,10 +51,10 @@ runs:
 
         # Install all valid plugins at once
         if [ ${#valid_plugins[@]} -gt 0 ]; then
-          uv add --directory ${{ github.action_path }}/actions/convert "${valid_plugins[@]}"
+          uv add --directory ${{ github.action_path }} "${valid_plugins[@]}"
         fi
 
     - name: Run Sigma rule conversion
       shell: bash
       run: |
-        uv run --directory ${{ github.action_path }} actions/convert/main.py --config ${{ inputs.config_path }} --render-traceback ${{ inputs.render_traceback }}
+        uv run --directory ${{ github.action_path }} main.py --config ${{ inputs.config_path }} --render-traceback ${{ inputs.render_traceback }}
