@@ -7,10 +7,15 @@ inputs:
     description: "Path to the configuration file for the Sigma Rule Deployer"
     required: true
     default: ""
+  grafana_sa_token:
+    description: "Service account token for Grafana for query testing"
+    required: false
+    default: ""
 
 outputs:
   result:
     description: "The repository file names changed by this Action"
+    value: ${{ steps.deploy.outputs.rules_integrated}}
 
 runs:
   using: "composite"
@@ -24,6 +29,8 @@ runs:
     - name: "Detect changed files"
       id: changed-files
       uses: tj-actions/changed-files@v45
+      with:
+        output_renamed_files_as_deleted_and_added: "true"
 
     # TODO: Dockerize the deployer and use it here instead of running the script locally.
     - name: "Setup go"
@@ -32,12 +39,22 @@ runs:
       with:
         go-version: ">=1.23.4"
 
+    - name: "Build Integrator"
+      id: build
+      working-directory: ${{ github.action_path }}
+      shell: bash
+      run: |
+        go build -o integrator
+        chmod +x integrator
+
     - name: "Run Sigma Rule Integrator"
       id: integrate
+      shell: bash
       run: |
-        go run ${{ github.action_path }}/integrator.go
+        ${{ github.action_path }}/integrator
       env:
         INTEGRATOR_CONFIG_FILE: ${{ inputs.config_file }}
+        INTEGRATOR_GRAFANA_SA_TOKEN: ${{ inputs.grafana_sa_token }}
         ADDED_FILES: ${{ steps.changed-files.outputs.added_files }}
         MODIFIED_FILES: ${{ steps.changed-files.outputs.modified_files }}
         DELETED_FILES: ${{ steps.changed-files.outputs.deleted_files }}

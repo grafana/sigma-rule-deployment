@@ -5,12 +5,17 @@ go 1.23.4
 require (
 	github.com/go-openapi/strfmt v0.23.0
 	github.com/grafana/alerting v0.0.0-20241211182001-0f317eb6b2f7
+	github.com/grafana/grafana v6.1.6+incompatible
 	github.com/grafana/grafana-plugin-sdk-go v0.261.0
-	github.com/grafana/grafana/pkg/apimachinery v0.0.0-20250110090659-bdb4725768b4
+	github.com/grafana/grafana/pkg/apimachinery v0.0.0-20250110150906-f3d2313f098c
 	github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826
 	github.com/prometheus/alertmanager v0.27.0
+	github.com/prometheus/client_golang v1.20.5
+	github.com/prometheus/common v0.61.0
 	github.com/prometheus/prometheus v0.301.0
+	github.com/spaolacci/murmur3 v1.1.0
 	github.com/stretchr/testify v1.10.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -115,8 +120,8 @@ require (
 	go.uber.org/atomic v1.11.0 // indirect
 	golang.org/x/exp v0.0.0-20240909161429-701f63a606c0 // indirect
 	golang.org/x/mod v0.22.0 // indirect
-	golang.org/x/net v0.33.0 // indirect
-	golang.org/x/oauth2 v0.25.0 // indirect
+	golang.org/x/net v0.34.0 // indirect
+	golang.org/x/oauth2 v0.24.0 // indirect
 	golang.org/x/sync v0.10.0 // indirect
 	golang.org/x/sys v0.29.0 // indirect
 	golang.org/x/text v0.21.0 // indirect
@@ -135,12 +140,4 @@ require (
 	sigs.k8s.io/json v0.0.0-20241010143419-9aa6b5e7a4b3 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.5.0 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
-)
-
-require (
-	github.com/grafana/grafana v6.1.6+incompatible
-	github.com/prometheus/client_golang v1.20.5
-	github.com/prometheus/common v0.61.0
-	github.com/spaolacci/murmur3 v1.1.0
-	gopkg.in/yaml.v3 v3.0.1
 )

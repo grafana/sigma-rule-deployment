@@ -2,6 +2,7 @@ package integrate
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"math/big"
 	"os"
@@ -83,7 +84,7 @@ func (i *Integrator) Run() error {
 
 		config := ConversionConfig{}
 		for _, conf := range i.config.Conversions {
-			if conf.Name+".yml" == filepath.Base(inputFile) {
+			if conf.Name+".txt" == filepath.Base(inputFile) {
 				config = conf
 				break
 			}
@@ -116,11 +117,11 @@ func (i *Integrator) ConvertToAlert(query string, config ConversionConfig) error
 
 	rule := &definitions.ProvisionedAlertRule{}
 	if _, err := os.Stat(outputFile); err == nil {
-		ruleYAML, err := ReadLocalFile(outputFile)
+		ruleJSON, err := ReadLocalFile(outputFile)
 		if err != nil {
 			return fmt.Errorf("error reading rule file %s: %v", outputFile, err)
 		}
-		err = yaml.Unmarshal([]byte(ruleYAML), rule)
+		err = json.Unmarshal([]byte(ruleJSON), rule)
 		if err != nil {
 			return fmt.Errorf("error unmarshalling rule file %s: %v", outputFile, err)
 		}
@@ -128,19 +129,71 @@ func (i *Integrator) ConvertToAlert(query string, config ConversionConfig) error
 
 	datasource := getC(config.DataSource, i.config.ConversionDefaults.DataSource, "nil")
 	timewindow := getC(config.TimeWindow, i.config.ConversionDefaults.TimeWindow, "1m")
-	timerange, err := time.ParseDuration(timewindow)
+	duration, err := time.ParseDuration(timewindow)
 	if err != nil {
 		return fmt.Errorf("error parsing time window: %v", err)
 	}
+	timerange := definitions.RelativeTimeRange{From: definitions.Duration(duration), To: definitions.Duration(time.Duration(0))}
 
+	// alerting rule metadata
 	rule.ID = hash
 	rule.UID = uid
+	rule.FolderUID = i.config.IntegratorConfig.FolderID
+	rule.NoDataState = definitions.OK
+	rule.ExecErrState = definitions.OkErrState
+
+	// alerting rule query
+	// disabled for time being due to dependency conflict between loki and alerting :confused:
+	// if getC(config.Format, i.config.ConversionDefaults.Format, "loki") == "loki" {
+	// 	queryType, err := logql.QueryType(query)
+	// 	if err != nil {
+	// 		return fmt.Errorf("error parsing loki query: %v", err)
+	// 	}
+	// 	if queryType != logql.QueryTypeMetric {
+	// 		query = fmt.Sprintf("sum(count_over_time(%s[$__auto]))", query)
+	// 	}
+	// }
+	reducer := json.RawMessage(`{"refId":"B","hide":false,"type":"reduce","datasource":{"uid":"__expr__","type":"__expr__"},"conditions":[{"type":"query","evaluator":{"params":[],"type":"gt"},"operator":{"type":"and"},"query":{"params":["B"]},"reducer":{"params":[],"type":"last"}}],"reducer":"last","expression":"A"}`)
+	threshold := json.RawMessage(`{"refId":"C","hide":false,"type":"threshold","datasource":{"uid":"__expr__","type":"__expr__"},"conditions":[{"type":"query","evaluator":{"params":[1],"type":"gt"},"operator":{"type":"and"},"query":{"params":["C"]},"reducer":{"params":[],"type":"last"}}],"expression":"B"}`)
 	rule.Data = []definitions.AlertQuery{
 		{
 			RefID:             "A",
+			QueryType:         "instant",
 			DatasourceUID:     datasource,
-			RelativeTimeRange: definitions.RelativeTimeRange{From: definitions.Duration(timerange), To: definitions.Duration(time.Duration(0))},
+			RelativeTimeRange: timerange,
+			Model:             json.RawMessage(fmt.Sprintf(`{"refId":"A","hide":false,"expr":"%s","queryType":"instant","editorMode":"code"}`, query)),
 		},
+		{
+			RefID:             "B",
+			DatasourceUID:     "__expr__",
+			RelativeTimeRange: timerange,
+			QueryType:         "",
+			Model:             reducer,
+		},
+		{
+			RefID:             "C",
+			DatasourceUID:     "__expr__",
+			RelativeTimeRange: timerange,
+			QueryType:         "",
+			Model:             threshold,
+		},
+	}
+	rule.Condition = "C"
+
+	ruleBytes, err := json.Marshal(rule)
+	if err != nil {
+		return fmt.Errorf("error marshalling alert rule: %v", err)
+	}
+
+	// write to output file
+	out, err := os.Create(outputFile) // will truncate existing file content
+	if err != nil {
+		return fmt.Errorf("error opening alert rule file %s to write to: %v", outputFile, err)
+	}
+	defer out.Close()
+	_, err = out.Write(ruleBytes)
+	if err != nil {
+		return fmt.Errorf("error writing alert rule file to %s: %v", outputFile, err)
 	}
 
 	return nil
