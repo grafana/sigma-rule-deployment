@@ -1,4 +1,4 @@
-package integrate
+package main
 
 import (
 	"encoding/base64"
@@ -24,11 +24,20 @@ type Integrator struct {
 }
 
 func main() {
-
+	integrator := NewIntegrator()
+	if err := integrator.LoadConfig(); err != nil {
+		fmt.Printf("Error loading configuration: %v\n", err)
+		os.Exit(1)
+	}
+	err := integrator.Run()
+	if err != nil {
+		fmt.Printf("Error running integrator: %v\n", err)
+		os.Exit(1)
+	}
 }
 
-func NewIntegrator(cfg Configuration) *Integrator {
-	return &Integrator{config: cfg}
+func NewIntegrator() *Integrator {
+	return &Integrator{}
 }
 
 func (i *Integrator) LoadConfig() error {

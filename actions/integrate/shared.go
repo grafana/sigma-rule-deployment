@@ -1,4 +1,4 @@
-package integrate
+package main
 
 import (
 	"errors"
@@ -15,7 +15,6 @@ type FoldersConfig struct {
 
 type ConversionConfig struct {
 	Name            string   `yaml:"name"`
-	Input           []string `yaml:"input"`
 	Target          string   `yaml:"target"`
 	Format          string   `yaml:"format"`
 	SkipUnsupported string   `yaml:"skip_unsupported"`
