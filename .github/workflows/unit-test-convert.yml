@@ -1,0 +1,35 @@
+name: Unit-test Sigma rule conversion
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - v*
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python environment
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install uv package manager
+        run: |
+          pip install --disable-pip-version-check uv
+
+      - name: Install dependencies with uv
+        run: |
+          uv sync -q --directory actions/convert
+
+      - name: Run unit tests
+        run: |
+          uv run --directory actions/convert pytest -v .
