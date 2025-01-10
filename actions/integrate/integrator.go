@@ -125,6 +125,13 @@ func (i *Integrator) Run() error {
 			if err != nil {
 				return err
 			}
+
+			resp, err := TestQuery(
+				query, config.DataSource, i.config.DeployerConfig.GrafanaInstance)
+			if err != nil {
+				return err
+			}
+			fmt.Println(string(resp))
 		}
 	}
 
