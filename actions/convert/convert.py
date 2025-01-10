@@ -4,6 +4,7 @@ import fnmatch
 import glob
 import os
 from pathlib import Path
+import shutil
 import traceback
 
 from dynaconf import Dynaconf
@@ -56,6 +57,10 @@ def convert_rules(
     conversions_output_dir = path_prefix / Path(conversions_output_dir)
     if not is_safe_path(path_prefix, conversions_output_dir):
         raise ValueError("Conversion output directory is outside the project root")
+
+    # Remove the output directory if it exists
+    if conversions_output_dir.is_dir():
+        shutil.rmtree(conversions_output_dir)
 
     # Create the output directory if it doesn't exist
     conversions_output_dir.mkdir(parents=True, exist_ok=True)
