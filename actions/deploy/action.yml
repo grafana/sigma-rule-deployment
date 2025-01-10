@@ -51,6 +51,8 @@ runs:
       shell: bash
       run: |
         ${{ github.action_path }}/deployer
+        echo "Output:"
+        cat $GITHUB_OUTPUT
       env:
         CONFIG_FILE: ${{ inputs.config_file }}
         DEPLOYER_GRAFANA_SA_TOKEN: ${{ inputs.grafana_sa_token }}
