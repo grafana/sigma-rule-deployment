@@ -1,36 +1,47 @@
-defaults:
-    target: loki
-    format: default
-    skip-unsupported: true
-    file-pattern: "*.yml"
+folders:
+  conversion_path: "./conversions"
+  deployment_path: "./deployments"
+conversion_defaults:
+  target: loki
+  format: default
+  skip_unsupported: true
+  file_pattern: "*.yml"
 conversions:
-    - name: aws_cloudtrail
-      input: "rules-development/cloud/aws/cloudtrail/*"
-      backend-options:
-          case_sensitive: true
-      pipelines:
-          - pipelines/cloud/aws/cloudtrail/filter_permitted_aws_accounts.yml
-          - pipelines/datasources/aws_cloudtrail.yml
-    - name: gcp_k8s
-      input: "rules-development/cloud/kubernetes/audit/*"
-      pipeline-check: false
-      encoding: utf-16
-      pipelines:
-          - pipelines/cloud/gcp/audit/gcp_kubernetes_audit_logs.yml
-    - name: okta_audit
-      input: "rules-development/cloud/okta/*"
-      backend-options:
-          case_sensitive: false
-          add_line_filters: true
-      pipelines:
-          - loki_okta_system_log
-    - name: gcom_logins
-      input:
-          - "rules-private/grafana/grafana-com/grafana-com_failed_login_attempts_ip.yml"
-          - "rules-private/grafana/grafana-com/grafana-com_failed_login_attempts_user.yml"
-          - "rules-correlation/grafana/grafana-com/grafana-com_multiple_failed_login_attempts_by_ip.yml"
-          - "rules-correlation/grafana/grafana-com/grafana-com_multiple_failed_login_attempts_by_username.yml"
-      correlation-method: default
-      backend-options:
-          case_sensitive: true
-          add_line_filters: true
+  - name: aws_cloudtrail
+    input: "rules-development/cloud/aws/cloudtrail/*"
+    backend_options:
+      case_sensitive: true
+    pipelines:
+      - pipelines/cloud/aws/cloudtrail/filter_permitted_aws_accounts.yml
+      - pipelines/datasources/aws_cloudtrail.yml
+    time_window: 5m
+  - name: gcp_k8s
+    input: "rules-development/cloud/kubernetes/audit/*"
+    pipeline_check: false
+    encoding: utf-16
+    pipelines:
+      - pipelines/cloud/gcp/audit/gcp_kubernetes_audit_logs.yml
+    time_window: 5m
+  - name: okta_audit
+    input: "rules-development/cloud/okta/*"
+    backend_options:
+      case_sensitive: false
+      add_line_filters: true
+    pipelines:
+      - loki_okta_system_log
+    time_window: 1h
+  - name: gcom_logins
+    input:
+      - "rules-private/grafana/grafana-com/grafana-com_failed_login_attempts_ip.yml"
+      - "rules-private/grafana/grafana-com/grafana-com_failed_login_attempts_user.yml"
+      - "rules-correlation/grafana/grafana-com/grafana-com_multiple_failed_login_attempts_by_ip.yml"
+      - "rules-correlation/grafana/grafana-com/grafana-com_multiple_failed_login_attempts_by_username.yml"
+    correlation_method: default
+    backend_options:
+      case_sensitive: true
+      add_line_filters: true
+    time_window: 6h
+integration:
+  folder_id: XXXX
+deployment:
+  grafana_instance: https://myinstance.grafana.com
