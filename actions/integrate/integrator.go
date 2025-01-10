@@ -1,10 +1,8 @@
 package main
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"math/big"
 	"os"
 	"path/filepath"
 	"strings"
@@ -57,6 +55,7 @@ func (i *Integrator) LoadConfig() error {
 	if err != nil {
 		return fmt.Errorf("error unmarshalling config file: %v", err)
 	}
+	i.config = config
 
 	addedFiles := strings.Split(os.Getenv("ADDED_FILES"), " ")
 	deletedFiles := strings.Split(os.Getenv("DELETED_FILES"), " ")
@@ -121,7 +120,7 @@ func (i *Integrator) Run() error {
 
 func (i *Integrator) ConvertToAlert(query string, config ConversionConfig) error {
 	hash := int64(murmur3.Sum32([]byte(query)))
-	uid := base64.StdEncoding.EncodeToString(big.NewInt(hash).Bytes())
+	uid := fmt.Sprintf("%x", hash)
 	outputFile := fmt.Sprintf("%s%salert_rule_%s.yml", i.config.Folders.DeploymentPath, string(filepath.Separator), uid)
 
 	rule := &definitions.ProvisionedAlertRule{}
@@ -164,13 +163,19 @@ func (i *Integrator) ConvertToAlert(query string, config ConversionConfig) error
 	// }
 	reducer := json.RawMessage(`{"refId":"B","hide":false,"type":"reduce","datasource":{"uid":"__expr__","type":"__expr__"},"conditions":[{"type":"query","evaluator":{"params":[],"type":"gt"},"operator":{"type":"and"},"query":{"params":["B"]},"reducer":{"params":[],"type":"last"}}],"reducer":"last","expression":"A"}`)
 	threshold := json.RawMessage(`{"refId":"C","hide":false,"type":"threshold","datasource":{"uid":"__expr__","type":"__expr__"},"conditions":[{"type":"query","evaluator":{"params":[1],"type":"gt"},"operator":{"type":"and"},"query":{"params":["C"]},"reducer":{"params":[],"type":"last"}}],"expression":"B"}`)
+	// Must manually escape the query as JSON to include it in a raw message
+	escapedQuotedQuery, err := json.Marshal(query)
+	if err != nil {
+		return fmt.Errorf("could not escape provided query: %s", query)
+	}
+	escapedQuery := escapedQuotedQuery[1 : len(escapedQuotedQuery)-1] // strip the leading and trailing quotation marks
 	rule.Data = []definitions.AlertQuery{
 		{
 			RefID:             "A",
 			QueryType:         "instant",
 			DatasourceUID:     datasource,
 			RelativeTimeRange: timerange,
-			Model:             json.RawMessage(fmt.Sprintf(`{"refId":"A","hide":false,"expr":"%s","queryType":"instant","editorMode":"code"}`, query)),
+			Model:             json.RawMessage(fmt.Sprintf(`{"refId":"A","hide":false,"expr":"%s","queryType":"instant","editorMode":"code"}`, escapedQuery)),
 		},
 		{
 			RefID:             "B",
