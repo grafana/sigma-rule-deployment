@@ -20,12 +20,14 @@ type ConversionConfig struct {
 	SkipUnsupported string   `yaml:"skip_unsupported"`
 	FilePattern     string   `yaml:"file_pattern"`
 	DataSource      string   `yaml:"data_source"`
-	TimeWindow      string   `yaml:"time_window"`
 	Pipeline        []string `yaml:"pipelines"`
+	RuleGroup       string   `yaml:"rule_group"`
+	TimeWindow      string   `yaml:"time_window"`
 }
 
 type IntegrationConfig struct {
 	FolderID string `yaml:"folder_id"`
+	OrgID    int64  `yaml:"org_id"`
 }
 
 type DeploymentConfig struct {

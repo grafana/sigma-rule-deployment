@@ -15,6 +15,7 @@ conversions:
     pipelines:
       - pipelines/cloud/aws/cloudtrail/filter_permitted_aws_accounts.yml
       - pipelines/datasources/aws_cloudtrail.yml
+    rule_group: Every 5 Minutes
     time_window: 5m
   - name: gcp_k8s
     input: "rules-development/cloud/kubernetes/audit/*"
@@ -22,6 +23,7 @@ conversions:
     encoding: utf-16
     pipelines:
       - pipelines/cloud/gcp/audit/gcp_kubernetes_audit_logs.yml
+    rule_group: Every 5 Minutes
     time_window: 5m
   - name: okta_audit
     input: "rules-development/cloud/okta/*"
@@ -30,6 +32,7 @@ conversions:
       add_line_filters: true
     pipelines:
       - loki_okta_system_log
+    rule_group: Every 1 Hour
     time_window: 1h
   - name: gcom_logins
     input:
@@ -41,8 +44,10 @@ conversions:
     backend_options:
       case_sensitive: true
       add_line_filters: true
+    rule_group: Every 6 Hours
     time_window: 6h
 integration:
   folder_id: XXXX
+  org_id: 1
 deployment:
   grafana_instance: https://myinstance.grafana.com

@@ -146,9 +146,12 @@ func (i *Integrator) ConvertToAlert(query string, config ConversionConfig) error
 	// alerting rule metadata
 	rule.ID = hash
 	rule.UID = uid
+	rule.OrgID = i.config.IntegratorConfig.OrgID
 	rule.FolderUID = i.config.IntegratorConfig.FolderID
+	rule.RuleGroup = config.RuleGroup
 	rule.NoDataState = definitions.OK
 	rule.ExecErrState = definitions.OkErrState
+	rule.Updated = time.Now()
 
 	// alerting rule query
 	// disabled for time being due to dependency conflict between loki and alerting :confused:
@@ -163,7 +166,7 @@ func (i *Integrator) ConvertToAlert(query string, config ConversionConfig) error
 	// }
 	reducer := json.RawMessage(`{"refId":"B","hide":false,"type":"reduce","datasource":{"uid":"__expr__","type":"__expr__"},"conditions":[{"type":"query","evaluator":{"params":[],"type":"gt"},"operator":{"type":"and"},"query":{"params":["B"]},"reducer":{"params":[],"type":"last"}}],"reducer":"last","expression":"A"}`)
 	threshold := json.RawMessage(`{"refId":"C","hide":false,"type":"threshold","datasource":{"uid":"__expr__","type":"__expr__"},"conditions":[{"type":"query","evaluator":{"params":[1],"type":"gt"},"operator":{"type":"and"},"query":{"params":["C"]},"reducer":{"params":[],"type":"last"}}],"expression":"B"}`)
-	// Must manually escape the query as JSON to include it in a raw message
+	// Must manually escape the query as JSON to include it in a json.RawMessage
 	escapedQuotedQuery, err := json.Marshal(query)
 	if err != nil {
 		return fmt.Errorf("could not escape provided query: %s", query)
