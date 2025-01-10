@@ -66,10 +66,12 @@ def convert_rules(
     conversions_output_dir.mkdir(parents=True, exist_ok=True)
 
     # Get top-level default values
-    default_target = config.get("defaults.target", "loki")
-    default_format = config.get("defaults.format", "default")
-    default_skip_unsupported = config.get("defaults.skip-unsupported", "true")
-    default_file_pattern = config.get("defaults.file-pattern", "*.yml")
+    default_target = config.get("conversion_defaults.target", "loki")
+    default_format = config.get("conversion_defaults.format", "default")
+    default_skip_unsupported = config.get(
+        "conversion_defaults.skip-unsupported", "true"
+    )
+    default_file_pattern = config.get("conversion_defaults.file-pattern", "*.yml")
 
     # Convert Sigma rules to the target format per each conversion object in the config
     for conversion in config.get("conversions", []):
