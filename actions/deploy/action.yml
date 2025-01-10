@@ -40,6 +40,7 @@ runs:
 
     - name: "Run Sigma Rule Deployer"
       id: deploy
+      shell: bash
       run: |
         go run ${{ github.action_path }}/deployer.go
       env:
