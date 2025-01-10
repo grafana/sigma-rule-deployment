@@ -209,7 +209,12 @@ func (i *Integrator) Run() error {
 			}
 
 			resp, err := TestQuery(
-				query, config.DataSource, i.config.DeployerConfig.GrafanaInstance)
+				query,
+				config.DataSource,
+				i.config.DeployerConfig.GrafanaInstance,
+				// FIXME: where should I get the API key from?
+				i.config.DeployerConfig.GrafanaInstance,
+			)
 			if err != nil {
 				return err
 			}

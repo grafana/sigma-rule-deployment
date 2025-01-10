@@ -32,7 +32,7 @@ type Body struct {
 }
 
 // TODO: make it configurable
-func TestQuery(query_str, dsUID, url string) ([]byte, error) {
+func TestQuery(query_str, dsUID, url, apiKey string) ([]byte, error) {
 	body := Body{
 		Queries: []Query{
 			{
@@ -65,7 +65,7 @@ func TestQuery(query_str, dsUID, url string) ([]byte, error) {
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", e.apiKey))
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
