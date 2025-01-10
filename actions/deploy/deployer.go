@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -14,6 +15,9 @@ import (
 
 	"gopkg.in/yaml.v3"
 )
+
+// Regex to parse the alert UID from the filename
+var regexAlertFilename = regexp.MustCompile(`alert_rule_([^\.]+)\.json`)
 
 // Structure to store the deployment config
 type deploymentConfig struct {
@@ -90,12 +94,12 @@ func (d *Deployer) Deploy() ([]string, []string, []string, error) {
 	// is recreated in a different file (with a different UID), to avoid conflicts on the alert title
 	// By deleting the old one first, we can then create the one one without issues
 	for _, alertFile := range d.config.alertsToRemove {
-		content, err := readFile(alertFile)
-		if err != nil {
-			log.Printf("Can't read file %s: %v", alertFile, err)
+		alertUid := getAlertUidFromFilename(filepath.Base(alertFile))
+		if alertUid == "" {
+			err := fmt.Errorf("invalid alert filename: %s", alertFile)
 			return alertsCreated, alertsUpdated, alertsDeleted, err
 		}
-		uid, err := d.deleteAlert(content)
+		uid, err := d.deleteAlert(alertUid)
 		if err != nil {
 			return alertsCreated, alertsUpdated, alertsDeleted, err
 		}
@@ -321,15 +325,9 @@ func (d *Deployer) updateAlert(content string) (string, error) {
 	return alert.Uid, nil
 }
 
-func (d *Deployer) deleteAlert(content string) (string, error) {
-	// Retrieve some alert information
-	alert, err := parseAlert(content)
-	if err != nil {
-		return "", err
-	}
-
+func (d *Deployer) deleteAlert(uid string) (string, error) {
 	// Prepare the request
-	url := fmt.Sprintf("%sapi/v1/provisioning/alert-rules/%s", d.config.endpoint, alert.Uid)
+	url := fmt.Sprintf("%sapi/v1/provisioning/alert-rules/%s", d.config.endpoint, uid)
 
 	req, err := http.NewRequest("DELETE", url, bytes.NewBuffer([]byte{}))
 	if err != nil {
@@ -353,9 +351,9 @@ func (d *Deployer) deleteAlert(content string) (string, error) {
 		return "", fmt.Errorf("error delete alert: returned status %s", res.Status)
 	}
 
-	log.Printf("Alert %s (%s) deleted", alert.Uid, alert.Title)
+	log.Printf("Alert %s deleted", uid)
 
-	return alert.Uid, nil
+	return uid, nil
 }
 
 func parseAlert(content string) (Alert, error) {
@@ -381,4 +379,12 @@ func readFile(filePath string) (string, error) {
 	fileContent, err := os.ReadFile(filePath)
 
 	return string(fileContent), err
+}
+
+func getAlertUidFromFilename(filename string) string {
+	matches := regexAlertFilename.FindStringSubmatch(filename)
+	if len(matches) != 2 {
+		return ""
+	}
+	return matches[1]
 }
