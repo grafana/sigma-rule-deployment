@@ -14,10 +14,13 @@ inputs:
 outputs:
   alerts_created:
     description: "List of alerts UIDs created in Grafana"
+    value: ${{ steps.deploy.outputs.alerts_created }}
   alerts_updated:
     description: "List of alerts UIDs updated in Grafana"
+    value: ${{ steps.deploy.outputs.alerts_updated }}
   alerts_deleted:
     description: "List of alerts UIDs deleted in Grafana"
+    value: ${{ steps.deploy.outputs.alerts_deleted }}
 
 runs:
   using: "composite"
@@ -51,8 +54,6 @@ runs:
       shell: bash
       run: |
         ${{ github.action_path }}/deployer
-        echo "Output:"
-        cat $GITHUB_OUTPUT
       env:
         CONFIG_FILE: ${{ inputs.config_file }}
         DEPLOYER_GRAFANA_SA_TOKEN: ${{ inputs.grafana_sa_token }}
