@@ -20,7 +20,7 @@ conversions:
   - name: gcp_k8s
     input: "rules-development/cloud/kubernetes/audit/*"
     pipeline_check: false
-    encoding: utf-16
+    encoding: utf-8
     pipelines:
       - pipelines/cloud/gcp/audit/gcp_kubernetes_audit_logs.yml
     rule_group: Every 5 Minutes

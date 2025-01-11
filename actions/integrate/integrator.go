@@ -110,7 +110,6 @@ func (i *Integrator) Run() error {
 			if err != nil {
 				return err
 			}
-
 		}
 	}
 
@@ -127,6 +126,13 @@ func (i *Integrator) Run() error {
 			}
 		}
 	}
+
+	rulesIntegrated := strings.Join(i.addedFiles, " ")
+	if len(i.addedFiles) > 0 {
+		rulesIntegrated += " "
+	}
+	rulesIntegrated += strings.Join(i.removedFiles, " ")
+	SetOutput("rules_integrated", rulesIntegrated)
 
 	return nil
 }
