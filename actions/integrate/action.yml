@@ -59,3 +59,6 @@ runs:
         MODIFIED_FILES: ${{ steps.changed-files.outputs.modified_files }}
         DELETED_FILES: ${{ steps.changed-files.outputs.deleted_files }}
         COPIED_FILES: ${{ steps.changed-files.outputs.copied_files }}
+
+    - name: Commit integrated queries
+        uses: stefanzweifel/git-auto-commit-action@v4
