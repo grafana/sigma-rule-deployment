@@ -3,7 +3,7 @@ description: "Take converted rules and convert them into deployable outputs (ale
 author: "security-operations"
 
 inputs:
-  config_file:
+  config_path:
     description: "Path to the configuration file for the Sigma Rule Deployer"
     required: true
     default: ""
