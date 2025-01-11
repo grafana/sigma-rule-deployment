@@ -40,7 +40,7 @@ func NewIntegrator() *Integrator {
 
 func (i *Integrator) LoadConfig() error {
 	// Load the deployment config file
-	configFile := os.Getenv("INTEGRATOR_CONFIG_FILE")
+	configFile := os.Getenv("INTEGRATOR_CONFIG_PATH")
 	if configFile == "" {
 		return fmt.Errorf("Integrator config file is not set or empty")
 	}
@@ -66,13 +66,22 @@ func (i *Integrator) LoadConfig() error {
 	removedFiles := make([]string, 0, len(deletedFiles))
 
 	for _, path := range addedFiles {
-		if path != "" {
-			newUpdatedFiles = append(newUpdatedFiles, i.config.Folders.ConversionPath+string(filepath.Separator)+path)
+		// Ensure paths appear within specified conversion path
+		relpath, err := filepath.Rel(i.config.Folders.ConversionPath, path)
+		if err != nil {
+			return fmt.Errorf("error checking file path %s: %v", path, err)
+		}
+		if relpath == filepath.Base((path)) {
+			newUpdatedFiles = append(newUpdatedFiles, path)
 		}
 	}
 	for _, path := range deletedFiles {
-		if path != "" {
-			removedFiles = append(removedFiles, i.config.Folders.ConversionPath+string(filepath.Separator)+path)
+		relpath, err := filepath.Rel(i.config.Folders.ConversionPath, path)
+		if err != nil {
+			return fmt.Errorf("error checking file path %s: %v", path, err)
+		}
+		if relpath == filepath.Base((path)) {
+			removedFiles = append(removedFiles, path)
 		}
 	}
 
