@@ -56,6 +56,12 @@ func (i *Integrator) LoadConfig() error {
 		return fmt.Errorf("error unmarshalling config file: %v", err)
 	}
 	i.config = config
+	if _, err = os.Stat(i.config.Folders.DeploymentPath); err != nil {
+		err = os.MkdirAll(i.config.Folders.DeploymentPath, 0700)
+		if err != nil {
+			return fmt.Errorf("error creating deployment directory: %v", err)
+		}
+	}
 
 	addedFiles := strings.Split(os.Getenv("ADDED_FILES"), " ")
 	deletedFiles := strings.Split(os.Getenv("DELETED_FILES"), " ")
@@ -71,7 +77,7 @@ func (i *Integrator) LoadConfig() error {
 		if err != nil {
 			return fmt.Errorf("error checking file path %s: %v", path, err)
 		}
-		if relpath == filepath.Base((path)) {
+		if relpath == filepath.Base(path) {
 			newUpdatedFiles = append(newUpdatedFiles, path)
 		}
 	}
@@ -80,7 +86,7 @@ func (i *Integrator) LoadConfig() error {
 		if err != nil {
 			return fmt.Errorf("error checking file path %s: %v", path, err)
 		}
-		if relpath == filepath.Base((path)) {
+		if relpath == filepath.Base(path) {
 			removedFiles = append(removedFiles, path)
 		}
 	}
