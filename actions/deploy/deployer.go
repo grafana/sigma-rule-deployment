@@ -85,9 +85,9 @@ func NewDeployer() *Deployer {
 
 func (d *Deployer) Deploy() ([]string, []string, []string, error) {
 	// Lists to store the alerts that were created, updated and deleted at any point during the deployment
-	alertsCreated := []string{}
-	alertsUpdated := []string{}
-	alertsDeleted := []string{}
+	alertsCreated := make([]string, len(d.config.alertsToAdd))
+	alertsUpdated := make([]string, len(d.config.alertsToUpdate))
+	alertsDeleted := make([]string, len(d.config.alertsToRemove))
 
 	log.Printf("Preparing to deploy %d alerts, update %d alerts and delete %d alerts",
 		len(d.config.alertsToAdd), len(d.config.alertsToUpdate), len(d.config.alertsToRemove))
@@ -164,7 +164,7 @@ func (d *Deployer) writeOutput(alertsCreated []string, alertsUpdated []string, a
 
 func (d *Deployer) LoadConfig() error {
 	// Load the sigma rule deployer config file
-	configFile := os.Getenv("CONFIG_FILE")
+	configFile := os.Getenv("CONFIG_PATH")
 	if configFile == "" {
 		return fmt.Errorf("Deployer config file is not set or empty")
 	}

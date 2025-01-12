@@ -2,7 +2,7 @@ name: "Sigma Rule Deployer"
 description: "Deploy alerts based on Sigma rules in Grafana"
 
 inputs:
-  config_file:
+  config_path:
     description: "Path to the configuration file for the Sigma Rule Deployer"
     required: true
     default: ""
@@ -57,7 +57,7 @@ runs:
       run: |
         ${{ github.action_path }}/deployer
       env:
-        CONFIG_FILE: ${{ inputs.config_file }}
+        CONFIG_PATH: ${{ inputs.config_path }}
         DEPLOYER_GRAFANA_SA_TOKEN: ${{ inputs.grafana_sa_token }}
         ADDED_FILES: ${{ steps.changed-files.outputs.added_files }}
         MODIFIED_FILES: ${{ steps.changed-files.outputs.modified_files }}
