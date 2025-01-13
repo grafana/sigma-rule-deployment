@@ -252,21 +252,18 @@ func (d *Deployer) LoadConfig() error {
 	} else {
 		log.Println("Running in fresh deployment mode.")
 		// For a fresh deployment, we'll deploy every alert in the deploment folder, regardless of the changes
-		alerts, err := os.ReadDir(d.config.alertPath)
+		alertsToAdd, err := d.listAlertsInDeploymentFolder()
 		if err != nil {
-			return fmt.Errorf("error reading deployment folder: %v", err)
-		}
-		alertsToAdd := make([]string, len(alerts))
-		for _, alert := range alerts {
-			if alert.IsDir() {
-				continue
-			}
-			alertsToAdd = addToAlertList(alertsToAdd, filepath.Join(d.config.alertPath, alert.Name()), d.config.alertPath)
+			return fmt.Errorf("error listing alerts in deployment folder: %v", err)
 		}
 		// List the current alerts in the Grafana folder so that they can be deleted first
 		alertsToRemove, err := d.listAlerts()
 		if err != nil {
 			return fmt.Errorf("error listing alerts: %v", err)
+		}
+		for i, alert := range alertsToRemove {
+			// We give a fake alert filename so that we can delete it later
+			alertsToRemove[i] = d.fakeAlertFilename(alert)
 		}
 		d.config.alertsToAdd = alertsToAdd
 		d.config.alertsToRemove = alertsToRemove
@@ -478,6 +475,29 @@ func readFile(filePath string) (string, error) {
 	fileContent, err := os.ReadFile(filePath)
 
 	return string(fileContent), err
+}
+
+func (d *Deployer) listAlertsInDeploymentFolder() ([]string, error) {
+	folderContent, err := os.ReadDir(d.config.alertPath)
+	if err != nil {
+		return []string{}, fmt.Errorf("error reading deployment folder: %v", err)
+	}
+	alertsToAdd := []string{}
+	for _, entry := range folderContent {
+		if entry.IsDir() {
+			continue
+		}
+		filePath := filepath.Join(d.config.alertPath, entry.Name())
+		log.Printf("Found alert file: %s", filePath)
+		alertsToAdd = addToAlertList(alertsToAdd, filePath, d.config.alertPath)
+	}
+
+	return alertsToAdd, nil
+}
+
+func (d *Deployer) fakeAlertFilename(uid string) string {
+	filename := fmt.Sprintf("alert_rule_conversion_%s.json", uid)
+	return filepath.Join(d.config.alertPath, filename)
 }
 
 func getAlertUidFromFilename(filename string) string {

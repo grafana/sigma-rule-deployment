@@ -366,3 +366,25 @@ func TestLoadConfig(t *testing.T) {
 		"deployments/alert_rule_conversion_123456789.json",
 	}, d.config.alertsToUpdate)
 }
+
+func TestFakeAlertFilename(t *testing.T) {
+	d := Deployer{
+		config: deploymentConfig{
+			alertPath: "deployments",
+		},
+	}
+	assert.Equal(t, "abcd123", getAlertUidFromFilename(d.fakeAlertFilename("abcd123")))
+}
+
+func TestListAlertsInDeploymentFolder(t *testing.T) {
+	d := Deployer{
+		config: deploymentConfig{
+			alertPath: "testdata",
+			folderUid: "abcdef123",
+			orgId:     1,
+		},
+	}
+	alerts, err := d.listAlertsInDeploymentFolder()
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"testdata/alert_rule_conversion_u123abc.json", "testdata/alert_rule_conversion_u456def.json", "testdata/alert_rule_conversion_u789ghi.json"}, alerts)
+}
