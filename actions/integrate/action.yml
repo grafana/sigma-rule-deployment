@@ -13,8 +13,8 @@ inputs:
     default: ""
 
 outputs:
-  result:
-    description: "The repository file names changed by this Action"
+  rules_integrated:
+    description: "The repository file names changed (added/updated or removed) by this Action"
     value: ${{ steps.integrate.outputs.rules_integrated }}
 
 runs:
