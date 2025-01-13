@@ -199,6 +199,9 @@ func (i *Integrator) ConvertToAlert(query string, config ConversionConfig) error
 	// 		query = fmt.Sprintf("sum(count_over_time(%s[$__auto]))", query)
 	// 	}
 	// }
+	if getC(config.Format, i.config.ConversionDefaults.Format, "loki") == "loki" {
+		query = fmt.Sprintf("sum(count_over_time(%s[$__auto]))", query)
+	}
 	reducer := json.RawMessage(`{"refId":"B","hide":false,"type":"reduce","datasource":{"uid":"__expr__","type":"__expr__"},"conditions":[{"type":"query","evaluator":{"params":[],"type":"gt"},"operator":{"type":"and"},"query":{"params":["B"]},"reducer":{"params":[],"type":"last"}}],"reducer":"last","expression":"A"}`)
 	threshold := json.RawMessage(`{"refId":"C","hide":false,"type":"threshold","datasource":{"uid":"__expr__","type":"__expr__"},"conditions":[{"type":"query","evaluator":{"params":[1],"type":"gt"},"operator":{"type":"and"},"query":{"params":["C"]},"reducer":{"params":[],"type":"last"}}],"expression":"B"}`)
 	// Must manually escape the query as JSON to include it in a json.RawMessage
