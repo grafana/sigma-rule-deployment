@@ -121,7 +121,19 @@ func (i *Integrator) Run() error {
 		}
 
 		for _, query := range queries {
-			err = i.ConvertToAlert(query, config)
+			id := int64(murmur3.Sum32([]byte(query)))
+			hash := fmt.Sprintf("%x", id) // FIXME: extract from Sigma rule file
+			file := fmt.Sprintf("%s%salert_rule_%s_%s.json", i.config.Folders.DeploymentPath, string(filepath.Separator), config.Name, hash)
+			rule := &definitions.ProvisionedAlertRule{ID: id, UID: hash}
+			err := readRuleFromFile(rule, file)
+			if err != nil {
+				return err
+			}
+			err = i.ConvertToAlert(rule, query, config)
+			if err != nil {
+				return err
+			}
+			err = writeRuleToFile(rule, file)
 			if err != nil {
 				return err
 			}
@@ -152,23 +164,7 @@ func (i *Integrator) Run() error {
 	return nil
 }
 
-func (i *Integrator) ConvertToAlert(query string, config ConversionConfig) error {
-	hash := int64(murmur3.Sum32([]byte(query)))
-	uid := fmt.Sprintf("%x", hash)
-	outputFile := fmt.Sprintf("%s%salert_rule_%s_%s.json", i.config.Folders.DeploymentPath, string(filepath.Separator), config.Name, uid)
-
-	rule := &definitions.ProvisionedAlertRule{}
-	if _, err := os.Stat(outputFile); err == nil {
-		ruleJSON, err := ReadLocalFile(outputFile)
-		if err != nil {
-			return fmt.Errorf("error reading rule file %s: %v", outputFile, err)
-		}
-		err = json.Unmarshal([]byte(ruleJSON), rule)
-		if err != nil {
-			return fmt.Errorf("error unmarshalling rule file %s: %v", outputFile, err)
-		}
-	}
-
+func (i *Integrator) ConvertToAlert(rule *definitions.ProvisionedAlertRule, query string, config ConversionConfig) error {
 	datasource := getC(config.DataSource, i.config.ConversionDefaults.DataSource, "nil")
 	timewindow := getC(config.TimeWindow, i.config.ConversionDefaults.TimeWindow, "1m")
 	duration, err := time.ParseDuration(timewindow)
@@ -178,19 +174,17 @@ func (i *Integrator) ConvertToAlert(query string, config ConversionConfig) error
 	timerange := definitions.RelativeTimeRange{From: definitions.Duration(duration), To: definitions.Duration(time.Duration(0))}
 
 	// alerting rule metadata
-	rule.ID = hash
-	rule.UID = uid
 	rule.OrgID = i.config.IntegratorConfig.OrgID
 	rule.FolderUID = i.config.IntegratorConfig.FolderID
 	rule.RuleGroup = getC(config.RuleGroup, i.config.ConversionDefaults.RuleGroup, "Default")
 	rule.NoDataState = definitions.OK
 	rule.ExecErrState = definitions.OkErrState
 	rule.Updated = time.Now()
-	rule.Title = fmt.Sprintf("Alert Rule %s", uid) // FIXME: read from Sigma rule
+	rule.Title = fmt.Sprintf("Alert Rule %s", rule.UID)
 
 	// alerting rule query
 	// disabled for time being due to dependency conflict between loki and alerting :confused:
-	// if getC(config.Format, i.config.ConversionDefaults.Format, "loki") == "loki" {
+	// if getC(config.Target, i.config.ConversionDefaults.Target, "loki") == "loki" {
 	// 	queryType, err := logql.QueryType(query)
 	// 	if err != nil {
 	// 		return fmt.Errorf("error parsing loki query: %v", err)
@@ -199,17 +193,16 @@ func (i *Integrator) ConvertToAlert(query string, config ConversionConfig) error
 	// 		query = fmt.Sprintf("sum(count_over_time(%s[$__auto]))", query)
 	// 	}
 	// }
-	if getC(config.Format, i.config.ConversionDefaults.Format, "loki") == "loki" {
+	if getC(config.Target, i.config.ConversionDefaults.Target, "loki") == "loki" {
 		query = fmt.Sprintf("sum(count_over_time(%s[$__auto]))", query)
 	}
 	reducer := json.RawMessage(`{"refId":"B","hide":false,"type":"reduce","datasource":{"uid":"__expr__","type":"__expr__"},"conditions":[{"type":"query","evaluator":{"params":[],"type":"gt"},"operator":{"type":"and"},"query":{"params":["B"]},"reducer":{"params":[],"type":"last"}}],"reducer":"last","expression":"A"}`)
 	threshold := json.RawMessage(`{"refId":"C","hide":false,"type":"threshold","datasource":{"uid":"__expr__","type":"__expr__"},"conditions":[{"type":"query","evaluator":{"params":[1],"type":"gt"},"operator":{"type":"and"},"query":{"params":["C"]},"reducer":{"params":[],"type":"last"}}],"expression":"B"}`)
 	// Must manually escape the query as JSON to include it in a json.RawMessage
-	escapedQuotedQuery, err := json.Marshal(query)
+	escapedQuery, err := escapeQueryJSON(query)
 	if err != nil {
 		return fmt.Errorf("could not escape provided query: %s", query)
 	}
-	escapedQuery := escapedQuotedQuery[1 : len(escapedQuotedQuery)-1] // strip the leading and trailing quotation marks
 	rule.Data = []definitions.AlertQuery{
 		{
 			RefID:             "A",
@@ -235,6 +228,24 @@ func (i *Integrator) ConvertToAlert(query string, config ConversionConfig) error
 	}
 	rule.Condition = "C"
 
+	return nil
+}
+
+func readRuleFromFile(rule *definitions.ProvisionedAlertRule, inputPath string) error {
+	if _, err := os.Stat(inputPath); err == nil {
+		ruleJSON, err := ReadLocalFile(inputPath)
+		if err != nil {
+			return fmt.Errorf("error reading rule file %s: %v", inputPath, err)
+		}
+		err = json.Unmarshal([]byte(ruleJSON), rule)
+		if err != nil {
+			return fmt.Errorf("error unmarshalling rule file %s: %v", inputPath, err)
+		}
+	}
+	return nil
+}
+
+func writeRuleToFile(rule *definitions.ProvisionedAlertRule, outputFile string) error {
 	ruleBytes, err := json.Marshal(rule)
 	if err != nil {
 		return fmt.Errorf("error marshalling alert rule: %v", err)
@@ -252,6 +263,14 @@ func (i *Integrator) ConvertToAlert(query string, config ConversionConfig) error
 	}
 
 	return nil
+}
+
+func escapeQueryJSON(query string) (string, error) {
+	escapedQuotedQuery, err := json.Marshal(query)
+	if err != nil {
+		return "", fmt.Errorf("could not escape provided query: %s", query)
+	}
+	return string(escapedQuotedQuery[1 : len(escapedQuotedQuery)-1]), nil // strip the leading and trailing quotation marks
 }
 
 func getC(config, defaultConf, def string) string {
