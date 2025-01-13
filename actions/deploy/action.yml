@@ -10,6 +10,10 @@ inputs:
     description: "Service account token for Grafana"
     required: true
     default: ""
+  fresh_deploy:
+    description: "If true, all alerts in the deployment folder will be created from scratch. Warning: It will first empty the Grafana alert folder!"
+    required: false
+    default: "false"
 
 outputs:
   alerts_created:
@@ -59,6 +63,7 @@ runs:
       env:
         CONFIG_PATH: ${{ inputs.config_path }}
         DEPLOYER_GRAFANA_SA_TOKEN: ${{ inputs.grafana_sa_token }}
+        DEPLOYER_FRESH_DEPLOY: ${{ inputs.fresh_deploy }}
         ADDED_FILES: ${{ steps.changed-files.outputs.added_files }}
         MODIFIED_FILES: ${{ steps.changed-files.outputs.modified_files }}
         DELETED_FILES: ${{ steps.changed-files.outputs.deleted_files }}

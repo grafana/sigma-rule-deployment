@@ -3,16 +3,19 @@
 **Sigma Rule Deployer** is an experimental GitHub Action that automates the deployment of Grafana alerts based on Sigma rules. This action is part of the Sigma Rule Deployment GitHub Actions Suite and is meant to be used in conjunction with the Sigma Rule Integrator.
 
 ## Inputs
-| Name               | Description                                                                | Required | Default |
-| ------------------ | -------------------------------------------------------------------------- | -------- | ------- |
-| `config_path`      | Path to the Sigma Deployer config file.                                    | Yes      | `""`    |
-| `grafana_sa_token` | Grafana Service Account token to use for the deployment of the alert rules | Yes      | `""`    |
+| Name               | Description                                                                            | Required | Default |
+| ------------------ | -------------------------------------------------------------------------------------- | -------- | ------- |
+| `config_path`      | Path to the Sigma Deployer config file.                                                | Yes      | `""`    |
+| `grafana_sa_token` | Grafana Service Account token to use for the deployment of the alert rules             | Yes      | `""`    |
+| `fresh_deploy`     | Whether to perform a fresh deployment or not (see below). Warning: destructive action! | No       | `false` |
 
 Note: The token provided in `grafana_sa_token` must have the following permissions:
 - Alerting: Rule Reader
 - Alerting: Rule Writer
 - Alerting: Access to alert rules provisioning API
 - Alerting: Set provisioning status
+
+A fresh deployment will delete all existing alerts in the Grafana folder specified in the config file and then create all the alerts existing in the deployment folder. This is therefore a destructive action and should be used with caution. It is meant to be used when the alerts are to be re-deployed from scratch after a deployment drift. The advised way of using this mode is via a manually triggered workflow.
 
 ## Outputs
 | Name             | Description                                                                |

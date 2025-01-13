@@ -42,6 +42,6 @@ conversions:
       add_line_filters: true
     time_window: 6h
 integration:
-  folder_id: XXXX
+  folder_id: XXXX # Use a dedicated folder that will only contain the alerts created by these actions
 deployment:
   grafana_instance: https://myinstance.grafana.com

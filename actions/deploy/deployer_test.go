@@ -22,13 +22,17 @@ func TestParseAlert(t *testing.T) {
 		name           string
 		content        string
 		wantAlertUid   string
+		wantFolderUid  string
+		wantOrdId      int64
 		wantAlertTitle string
 		wantError      bool
 	}{
 		{
 			name:           "valid alert",
-			content:        `{"uid":"abcd123","title":"Test alert"}`,
+			content:        `{"uid":"abcd123","title":"Test alert", "folderUID": "efgh456", "orgID": 23}`,
 			wantAlertUid:   "abcd123",
+			wantFolderUid:  "efgh456",
+			wantOrdId:      23,
 			wantAlertTitle: "Test alert",
 			wantError:      false,
 		},
@@ -36,6 +40,8 @@ func TestParseAlert(t *testing.T) {
 			name:           "invalid alert title",
 			content:        `{"uid":"abcd123""`,
 			wantAlertUid:   "",
+			wantFolderUid:  "",
+			wantOrdId:      0,
 			wantAlertTitle: "",
 			wantError:      true,
 		},
@@ -43,6 +49,17 @@ func TestParseAlert(t *testing.T) {
 			name:           "invalid alert uid",
 			content:        `{"title":"Test alert"}`,
 			wantAlertUid:   "",
+			wantFolderUid:  "",
+			wantOrdId:      0,
+			wantAlertTitle: "",
+			wantError:      true,
+		},
+		{
+			name:           "invalid folder uid",
+			content:        `{"uid":"abcd123", "title":"Test alert"}`,
+			wantAlertUid:   "",
+			wantFolderUid:  "",
+			wantOrdId:      0,
 			wantAlertTitle: "",
 			wantError:      true,
 		},
@@ -50,13 +67,17 @@ func TestParseAlert(t *testing.T) {
 			name:           "empty alert",
 			content:        `{}`,
 			wantAlertUid:   "",
+			wantFolderUid:  "",
+			wantOrdId:      0,
 			wantAlertTitle: "",
 			wantError:      true,
 		},
 		{
 			name:           "extra fields",
-			content:        `{"uid":"abcd123","title":"Test alert","extra":"field"}`,
+			content:        `{"uid":"abcd123","title":"Test alert", "folderUID": "efgh456", "orgID": 23, "extra":"field"}`,
 			wantAlertUid:   "abcd123",
+			wantFolderUid:  "efgh456",
+			wantOrdId:      23,
 			wantAlertTitle: "Test alert",
 			wantError:      false,
 		},
@@ -71,6 +92,8 @@ func TestParseAlert(t *testing.T) {
 				assert.NoError(t, err)
 				assert.Equal(t, tt.wantAlertUid, alert.Uid)
 				assert.Equal(t, tt.wantAlertTitle, alert.Title)
+				assert.Equal(t, tt.wantFolderUid, alert.FolderUid)
+				assert.Equal(t, tt.wantOrdId, alert.OrgID)
 			}
 		})
 	}
@@ -164,7 +187,7 @@ func TestUpdateAlert(t *testing.T) {
 		},
 	}
 
-	uid, err := d.updateAlert(`{"uid":"abcd123","title":"Test alert"}`)
+	uid, err := d.updateAlert(`{"uid":"abcd123","title":"Test alert", "folderUID": "efgh456", "orgID": 23}`)
 	assert.NoError(t, err)
 	assert.Equal(t, "abcd123", uid)
 }
@@ -199,7 +222,7 @@ func TestCreateAlert(t *testing.T) {
 		},
 	}
 
-	uid, err := d.createAlert(`{"uid":"abcd123","title":"Test alert"}`)
+	uid, err := d.createAlert(`{"uid":"abcd123","title":"Test alert", "folderUID": "efgh456", "orgID": 23}`)
 	assert.NoError(t, err)
 	assert.Equal(t, "abcd123", uid)
 }
@@ -236,6 +259,76 @@ func TestDeleteAlert(t *testing.T) {
 	assert.Equal(t, "abcd123", uid)
 }
 
+func TestListAlerts(t *testing.T) {
+	alertList := `[
+		{
+			"uid": "abcd123",
+			"title": "Test alert",
+			"folderUid": "efgh456",
+			"orgID": 23
+		},
+		{
+			"uid": "ijkl456",
+			"title": "Test alert 2",
+			"folderUid": "mnop789",
+			"orgID": 23
+		},
+		{
+			"uid": "qwerty123",
+			"title": "Test alert 3",
+			"folderUid": "efgh456",
+			"orgID": 23
+		},
+		{
+			"uid": "test123123",
+			"title": "Test alert 4",
+			"folderUid": "efgh456",
+			"orgID": 1
+		},
+		{
+			"uid": "newalert1",
+			"title": "Test alert 5",
+			"folderUid": "efgh456",
+			"orgID": 23
+		}
+	]`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/provisioning/alert-rules" {
+			t.Errorf("Expected to request '/api/v1/provisioning/alert-rules', got: %s", r.URL.Path)
+		}
+		if r.Header.Get("Content-Type") != "application/json" {
+			t.Errorf("Expected Content-Typet: application/json header, got: %s", r.Header.Get("Content-Type"))
+		}
+		if r.Method != http.MethodGet {
+			t.Errorf("Expected GET method, got: %s", r.Method)
+		}
+		if r.Header.Get("Authorization") != "Bearer my-test-token" {
+			t.Errorf("Invalid Authorization header")
+		}
+		defer r.Body.Close()
+		// Read the request body
+		_, err := io.ReadAll(r.Body)
+		assert.NoError(t, err)
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(alertList))
+	}))
+	defer server.Close()
+
+	d := Deployer{
+		config: deploymentConfig{
+			endpoint:  server.URL + "/",
+			saToken:   "my-test-token",
+			folderUid: "efgh456",
+			orgId:     23,
+		},
+	}
+
+	retrievedAlerts, err := d.listAlerts()
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"abcd123", "qwerty123", "newalert1"}, retrievedAlerts)
+}
+
 func TestLoadConfig(t *testing.T) {
 	os.Setenv("CONFIG_PATH", "test_config.yml")
 	defer os.Unsetenv("CONFIG_PATH")
@@ -255,6 +348,9 @@ func TestLoadConfig(t *testing.T) {
 	assert.Equal(t, "my-test-token", d.config.saToken)
 	assert.Equal(t, "https://myinstance.grafana.com/", d.config.endpoint)
 	assert.Equal(t, "deployments", d.config.alertPath)
+	assert.Equal(t, "abcdef123", d.config.folderUid)
+	assert.Equal(t, int64(23), d.config.orgId)
+	assert.Equal(t, false, d.config.freshDeploy)
 	assert.Equal(t, []string{
 		"deployments/alert_rule_conversion_abcd123.json",
 		"deployments/alert_rule_conversion_def3456789.json",

@@ -27,6 +27,9 @@ type deploymentConfig struct {
 	endpoint       string
 	alertPath      string
 	saToken        string
+	freshDeploy    bool
+	folderUid      string
+	orgId          int64
 	alertsToAdd    []string
 	alertsToRemove []string
 	alertsToUpdate []string
@@ -40,8 +43,13 @@ type DeploymentConfig struct {
 	GrafanaInstance string `yaml:"grafana_instance"`
 }
 type Configuration struct {
-	Folders        FoldersConfig    `yaml:"folders"`
-	DeployerConfig DeploymentConfig `yaml:"deployment"`
+	Folders          FoldersConfig     `yaml:"folders"`
+	DeployerConfig   DeploymentConfig  `yaml:"deployment"`
+	IntegratorConfig IntegrationConfig `yaml:"integration"`
+}
+type IntegrationConfig struct {
+	FolderID string `yaml:"folder_id"`
+	OrgID    int64  `yaml:"org_id"`
 }
 
 type Deployer struct {
@@ -50,8 +58,10 @@ type Deployer struct {
 
 // Non exhaustive list of alert fields
 type Alert struct {
-	Uid   string `json:"uid"`
-	Title string `json:"title"`
+	Uid       string `json:"uid"`
+	Title     string `json:"title"`
+	FolderUid string `json:"folderUID"`
+	OrgID     int64  `json:"orgID"`
 }
 
 func main() {
@@ -183,6 +193,8 @@ func (d *Deployer) LoadConfig() error {
 	d.config = deploymentConfig{
 		endpoint:  configYAML.DeployerConfig.GrafanaInstance,
 		alertPath: filepath.Clean(configYAML.Folders.DeploymentPath),
+		orgId:     configYAML.IntegratorConfig.OrgID,
+		folderUid: configYAML.IntegratorConfig.FolderID,
 	}
 
 	// Makes sure the endpoint URL ends with a slash
@@ -196,41 +208,70 @@ func (d *Deployer) LoadConfig() error {
 		return fmt.Errorf("Grafana SA token is not set or empty")
 	}
 
-	alertsToAdd := []string{}
-	alertsToDelete := []string{}
-	alertsToUpdate := []string{}
+	// Retrieve the fresh deploy flag
+	freshDeploy := strings.ToLower(os.Getenv("DEPLOYER_FRESH_DEPLOY")) == "true"
+	d.config.freshDeploy = freshDeploy
 
-	addedFiles := os.Getenv("ADDED_FILES")
-	deletedFiles := os.Getenv("DELETED_FILES")
-	modifiedFiles := os.Getenv("MODIFIED_FILES")
-	copiedFiles := os.Getenv("COPIED_FILES")
+	// For a normal deployment, we look at the changes in the alert folder
+	if !d.config.freshDeploy {
+		alertsToAdd := []string{}
+		alertsToDelete := []string{}
+		alertsToUpdate := []string{}
 
-	addedFilesList := strings.Split(addedFiles, " ")
-	deletedFilesList := strings.Split(deletedFiles, " ")
-	modifiedFilesList := strings.Split(modifiedFiles, " ")
-	copiedFilesList := strings.Split(copiedFiles, " ")
+		addedFiles := os.Getenv("ADDED_FILES")
+		deletedFiles := os.Getenv("DELETED_FILES")
+		modifiedFiles := os.Getenv("MODIFIED_FILES")
+		copiedFiles := os.Getenv("COPIED_FILES")
 
-	// Add the modified files to the alert lists if they are in the right filder (alertPath)
-	for _, filePath := range addedFilesList {
-		alertsToAdd = addToAlertList(alertsToAdd, filePath, d.config.alertPath)
-	}
-	// Copied files are treated as added files
-	for _, filePath := range copiedFilesList {
-		alertsToAdd = addToAlertList(alertsToAdd, filePath, d.config.alertPath)
-	}
-	for _, filePath := range deletedFilesList {
-		alertsToDelete = addToAlertList(alertsToDelete, filePath, d.config.alertPath)
-	}
-	for _, filePath := range modifiedFilesList {
-		alertsToUpdate = addToAlertList(alertsToUpdate, filePath, d.config.alertPath)
-	}
-	// Renamed files will be considered a deletion and a creation via the changed-files action configuration.
-	// This helps to avoid issues where we have both an alert being deleted and another one created in a single PR,
-	// as Git would typically consider this as a rename (which poses isues for our deployment logic)
+		addedFilesList := strings.Split(addedFiles, " ")
+		deletedFilesList := strings.Split(deletedFiles, " ")
+		modifiedFilesList := strings.Split(modifiedFiles, " ")
+		copiedFilesList := strings.Split(copiedFiles, " ")
 
-	d.config.alertsToAdd = alertsToAdd
-	d.config.alertsToRemove = alertsToDelete
-	d.config.alertsToUpdate = alertsToUpdate
+		// Add the modified files to the alert lists if they are in the right filder (alertPath)
+		for _, filePath := range addedFilesList {
+			alertsToAdd = addToAlertList(alertsToAdd, filePath, d.config.alertPath)
+		}
+		// Copied files are treated as added files
+		for _, filePath := range copiedFilesList {
+			alertsToAdd = addToAlertList(alertsToAdd, filePath, d.config.alertPath)
+		}
+		for _, filePath := range deletedFilesList {
+			alertsToDelete = addToAlertList(alertsToDelete, filePath, d.config.alertPath)
+		}
+		for _, filePath := range modifiedFilesList {
+			alertsToUpdate = addToAlertList(alertsToUpdate, filePath, d.config.alertPath)
+		}
+		// Renamed files will be considered a deletion and a creation via the changed-files action configuration.
+		// This helps to avoid issues where we have both an alert being deleted and another one created in a single PR,
+		// as Git would typically consider this as a rename (which poses isues for our deployment logic)
+
+		d.config.alertsToAdd = alertsToAdd
+		d.config.alertsToRemove = alertsToDelete
+		d.config.alertsToUpdate = alertsToUpdate
+	} else {
+		log.Println("Running in fresh deployment mode.")
+		// For a fresh deployment, we'll deploy every alert in the deploment folder, regardless of the changes
+		alerts, err := os.ReadDir(d.config.alertPath)
+		if err != nil {
+			return fmt.Errorf("error reading deployment folder: %v", err)
+		}
+		alertsToAdd := make([]string, len(alerts))
+		for _, alert := range alerts {
+			if alert.IsDir() {
+				continue
+			}
+			alertsToAdd = addToAlertList(alertsToAdd, filepath.Join(d.config.alertPath, alert.Name()), d.config.alertPath)
+		}
+		// List the current alerts in the Grafana folder so that they can be deleted first
+		alertsToRemove, err := d.listAlerts()
+		if err != nil {
+			return fmt.Errorf("error listing alerts: %v", err)
+		}
+		d.config.alertsToAdd = alertsToAdd
+		d.config.alertsToRemove = alertsToRemove
+		d.config.alertsToUpdate = []string{}
+	}
 
 	return nil
 }
@@ -357,12 +398,61 @@ func (d *Deployer) deleteAlert(uid string) (string, error) {
 	// Check the response
 	if res.StatusCode != 204 {
 		log.Printf("Can't delete alert. Status: %d", res.StatusCode)
-		return "", fmt.Errorf("error delete alert: returned status %s", res.Status)
+		return "", fmt.Errorf("error deleting alert: returned status %s", res.Status)
 	}
 
 	log.Printf("Alert %s deleted", uid)
 
 	return uid, nil
+}
+
+func (d *Deployer) listAlerts() ([]string, error) {
+	if d.config.folderUid == "" {
+		return nil, fmt.Errorf("folder UID is not set")
+	}
+
+	alertList := []string{}
+	// Prepare the request
+	url := fmt.Sprintf("%sapi/v1/provisioning/alert-rules", d.config.endpoint)
+
+	req, err := http.NewRequest("GET", url, bytes.NewBuffer([]byte{}))
+	if err != nil {
+		return []string{}, err
+	}
+	req.Header.Add("Content-Type", "application/json")
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", d.config.saToken))
+
+	client := &http.Client{
+		Timeout: requestTimeOut,
+	}
+	res, err := client.Do(req)
+	if err != nil {
+		return []string{}, err
+	}
+	defer res.Body.Close()
+
+	// Check the response code
+	if res.StatusCode != 200 {
+		log.Printf("Can't list alerts. Status: %d", res.StatusCode)
+		return []string{}, fmt.Errorf("error listing alert: returned status %s", res.Status)
+	}
+
+	// Check the response body
+	alertsReturned := []Alert{}
+	if err := json.NewDecoder(res.Body).Decode(&alertsReturned); err != nil {
+		return []string{}, err
+	}
+
+	// Get the list of alerts in the folder we're deploying to
+	for _, alert := range alertsReturned {
+		if alert.FolderUid == d.config.folderUid && alert.OrgID == d.config.orgId {
+			alertList = append(alertList, alert.Uid)
+		}
+	}
+
+	log.Printf("%d alert(s) found in the folder", len(alertList))
+
+	return alertList, nil
 }
 
 func parseAlert(content string) (Alert, error) {
@@ -371,7 +461,7 @@ func parseAlert(content string) (Alert, error) {
 		return Alert{}, err
 	}
 	// Sanity check to ensure we've read an alert file
-	if alert.Uid == "" || alert.Title == "" {
+	if alert.Uid == "" || alert.Title == "" || alert.FolderUid == "" {
 		return Alert{}, fmt.Errorf("invalid alert file")
 	}
 
