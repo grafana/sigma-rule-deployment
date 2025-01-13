@@ -1,4 +1,4 @@
-package integrate
+package main
 
 import (
 	"bytes"
