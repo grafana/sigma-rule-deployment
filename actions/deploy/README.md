@@ -15,7 +15,7 @@ Note: The token provided in `grafana_sa_token` must have the following permissio
 - Alerting: Access to alert rules provisioning API
 - Alerting: Set provisioning status
 
-A fresh deployment will delete all existing alerts in the Grafana folder specified in the config file and then create all the alerts existing in the deployment folder. This is therefore a destructive action and should be used with caution. It is meant to be used when the alerts are to be re-deployed from scratch after a deployment drift. The advised way of using this mode is via a manually triggered workflow.
+A fresh deployment (`fresh_deploy`) will delete all existing alert rules in the Grafana Alert folder specified in the config file and then create all the alerts existing in the deployment folder. This is therefore a destructive action and should be used with caution. It is meant to be used when the alerts are to be re-deployed from scratch after a deployment drift. The advised way of using this mode is via a manually triggered workflow. Ensure a dedicated Grafana Alert folder is used for this purpose.
 
 ## Outputs
 | Name             | Description                                                                |
