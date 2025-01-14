@@ -1,6 +1,6 @@
 folders:
-  conversion_path: "./conversions"
-  deployment_path: "./deployments"
+  conversion_path: "./testdata"
+  deployment_path: "./testdata"
 conversion_defaults:
   target: loki
   format: default

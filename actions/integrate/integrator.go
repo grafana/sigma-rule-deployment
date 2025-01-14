@@ -81,6 +81,15 @@ func (i *Integrator) LoadConfig() error {
 			newUpdatedFiles = append(newUpdatedFiles, path)
 		}
 	}
+	for _, path := range modifiedFiles {
+		relpath, err := filepath.Rel(i.config.Folders.ConversionPath, path)
+		if err != nil {
+			return fmt.Errorf("error checking file path %s: %v", path, err)
+		}
+		if relpath == filepath.Base(path) {
+			newUpdatedFiles = append(newUpdatedFiles, path)
+		}
+	}
 	for _, path := range deletedFiles {
 		relpath, err := filepath.Rel(i.config.Folders.ConversionPath, path)
 		if err != nil {

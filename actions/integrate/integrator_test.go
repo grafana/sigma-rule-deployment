@@ -82,26 +82,28 @@ func TestConvertToAlert(t *testing.T) {
 
 func TestLoadConfig(t *testing.T) {
 	tests := []struct {
-		name           string
-		configPath     string
-		token          string
-		added          string
-		deleted        string
-		modified       string
-		expectedConfig Configuration
-		wantError      bool
+		name       string
+		configPath string
+		token      string
+		added      string
+		deleted    string
+		modified   string
+		expConfig  Configuration
+		expAdd     []string
+		expDel     []string
+		wantError  bool
 	}{
 		{
-			name:       "valid loki config",
+			name:       "valid loki config, single added file",
 			configPath: "testdata/config.yml",
 			token:      "my-test-token",
 			added:      "testdata/conv.txt",
 			deleted:    "",
 			modified:   "",
-			expectedConfig: Configuration{
+			expConfig: Configuration{
 				Folders: FoldersConfig{
-					ConversionPath: "./conversions",
-					DeploymentPath: "./deployments",
+					ConversionPath: "./testdata",
+					DeploymentPath: "./testdata",
 				},
 				ConversionDefaults: ConversionConfig{
 					Target:          "loki",
@@ -122,6 +124,58 @@ func TestLoadConfig(t *testing.T) {
 					OrgID:    1,
 				},
 			},
+			expAdd:    []string{"testdata/conv.txt"},
+			expDel:    []string{},
+			wantError: false,
+		},
+		{
+			name:       "valid es config, multiple files added, changed and removed",
+			configPath: "testdata/es-config.yml",
+			token:      "my-test-token",
+			added:      "testdata/conv1.txt",
+			deleted:    "testdata/conv2.txt testdata/conv4.txt",
+			modified:   "testdata/conv3.txt",
+			expConfig: Configuration{
+				Folders: FoldersConfig{
+					ConversionPath: "./testdata",
+					DeploymentPath: "./testdata",
+				},
+				ConversionDefaults: ConversionConfig{
+					Target:          "esql",
+					Format:          "default",
+					SkipUnsupported: "true",
+					FilePattern:     "*.yml",
+					DataSource:      "grafanacloud-es-logs",
+				},
+				Conversions: []ConversionConfig{
+					{
+						Name:       "conv1",
+						RuleGroup:  "Every 5 Minutes",
+						TimeWindow: "5m",
+					},
+					{
+						Name:       "conv2",
+						RuleGroup:  "Every 10 Minutes",
+						TimeWindow: "10m",
+					},
+					{
+						Name:       "conv3",
+						RuleGroup:  "Every 30 Minutes",
+						TimeWindow: "30m",
+					},
+					{
+						Name:       "conv4",
+						RuleGroup:  "Every 20 Minutes",
+						TimeWindow: "20m",
+					},
+				},
+				IntegratorConfig: IntegrationConfig{
+					FolderID: "XXXX",
+					OrgID:    1,
+				},
+			},
+			expAdd:    []string{"testdata/conv1.txt", "testdata/conv3.txt"},
+			expDel:    []string{"testdata/conv2.txt", "testdata/conv4.txt"},
 			wantError: false,
 		},
 		{
@@ -138,15 +192,10 @@ func TestLoadConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			os.Setenv("INTEGRATOR_CONFIG_PATH", tt.configPath)
-			defer os.Unsetenv("INTEGRATOR_CONFIG_PATH")
 			os.Setenv("INTEGRATOR_GRAFANA_SA_TOKEN", tt.token)
-			defer os.Unsetenv("INTEGRATOR_GRAFANA_SA_TOKEN")
 			os.Setenv("ADDED_FILES", tt.added)
-			defer os.Unsetenv("ADDED_FILES")
 			os.Setenv("DELETED_FILES", tt.deleted)
-			defer os.Unsetenv("DELETED_FILES")
 			os.Setenv("MODIFIED_FILES", tt.modified)
-			defer os.Unsetenv("MODIFIED_FILES")
 
 			i := NewIntegrator()
 			err := i.LoadConfig()
@@ -154,10 +203,17 @@ func TestLoadConfig(t *testing.T) {
 				assert.NotNil(t, err)
 			} else {
 				assert.NoError(t, err)
-				assert.Equal(t, tt.expectedConfig, i.config)
+				assert.Equal(t, tt.expConfig, i.config)
+				assert.Equal(t, tt.expAdd, i.addedFiles)
+				assert.Equal(t, tt.expDel, i.removedFiles)
 			}
 		})
 	}
+	defer os.Unsetenv("INTEGRATOR_CONFIG_PATH")
+	defer os.Unsetenv("INTEGRATOR_GRAFANA_SA_TOKEN")
+	defer os.Unsetenv("ADDED_FILES")
+	defer os.Unsetenv("DELETED_FILES")
+	defer os.Unsetenv("MODIFIED_FILES")
 }
 
 func TestReadWriteAlertRule(t *testing.T) {
