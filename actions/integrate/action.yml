@@ -51,8 +51,9 @@ runs:
       id: integrate
       shell: bash
       run: |
-        ${{ github.action_path }}/integrator
+        ${ACTION_PATH}/integrator
       env:
+        ACTION_PATH: ${{ github.action_path }}
         INTEGRATOR_CONFIG_PATH: ${{ inputs.config_path }}
         INTEGRATOR_GRAFANA_SA_TOKEN: ${{ inputs.grafana_sa_token }}
         ADDED_FILES: ${{ steps.changed-files.outputs.added_files }}
