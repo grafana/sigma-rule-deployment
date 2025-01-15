@@ -35,7 +35,7 @@ runs:
       if: ${{ inputs.plugins != '' }}
       run: |
         # pySigma-backend-loki is a default plugin.
-        plugin_packages="${{ inputs.plugin_packages }}"
+        plugin_packages="${PLUGIN_PACKAGES}"
         valid_plugins=()  # Array to store valid plugins
 
         shopt -s nocasematch  # Enable case-insensitive matching
@@ -51,10 +51,17 @@ runs:
 
         # Install all valid plugins at once
         if [ ${#valid_plugins[@]} -gt 0 ]; then
-          uv add --directory ${{ github.action_path }} "${valid_plugins[@]}"
+          uv add --directory ${GITHUB_ACTION_PATH} "${valid_plugins[@]}"
         fi
+      env:
+        GITHUB_ACTION_PATH: ${{ github.action_path }}
+        PLUGIN_PACKAGES: ${{ inputs.plugin_packages }}
 
     - name: Run Sigma rule conversion
       shell: bash
       run: |
-        uv run --directory ${{ github.action_path }} main.py --config ${{ inputs.config_path }} --render-traceback ${{ inputs.render_traceback }}
+        uv run --directory ${GITHUB_ACTION_PATH} main.py --config ${CONFIG_PATH} --render-traceback ${RENDER_TRACEBACK}
+      env:
+        GITHUB_ACTION_PATH: ${{ github.action_path }}
+        CONFIG_PATH: ${{ inputs.config_path }}
+        RENDER_TRACEBACK: ${{ inputs.render_traceback }}
