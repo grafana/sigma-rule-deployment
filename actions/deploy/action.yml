@@ -59,8 +59,9 @@ runs:
       id: deploy
       shell: bash
       run: |
-        ${{ github.action_path }}/deployer
+        $ACTION_PATH/deployer
       env:
+        ACTION_PATH: ${{ github.action_path }}
         CONFIG_PATH: ${{ inputs.config_path }}
         DEPLOYER_GRAFANA_SA_TOKEN: ${{ inputs.grafana_sa_token }}
         DEPLOYER_FRESH_DEPLOY: ${{ inputs.fresh_deploy }}
