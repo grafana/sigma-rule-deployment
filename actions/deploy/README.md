@@ -1,6 +1,6 @@
 # Sigma Rule Deployer GitHub Action
 
-**Sigma Rule Deployer** is an experimental GitHub Action that automates the deployment of Grafana alerts based on Sigma rules. This action is part of the Sigma Rule Deployment GitHub Actions Suite and is meant to be used in conjunction with the Sigma Rule Integrator.
+**Sigma Rule Deployer** is an experimental GitHub Action that automates the deployment of Grafana alerts based on Sigma rules. This action is part of the Sigma Rule Deployment GitHub Actions Suite and is meant to be used in conjunction with the Sigma Rule Integrator, although it can work independently given the proper alert configuration files.
 
 ## Inputs
 | Name               | Description                                                                            | Required | Default |

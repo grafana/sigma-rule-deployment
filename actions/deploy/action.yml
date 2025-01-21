@@ -11,7 +11,7 @@ inputs:
     required: true
     default: ""
   fresh_deploy:
-    description: "If true, ALL the alert rules in the Grafana Alert folder specified in the config will be deleted, and the alerts in the deployment folder will be created from scratch. Warning: destructive action"
+    description: "If true, ALL the alert rules in the Grafana Alert folder specified in the config will be deleted, and the alerts in the deployment folder will be created from scratch. ⚠️ Warning: destructive action"
     required: false
     default: "false"
 
