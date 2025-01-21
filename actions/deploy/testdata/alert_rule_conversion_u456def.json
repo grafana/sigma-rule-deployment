@@ -1,12 +1,12 @@
 {
-    "condition": "A",
-    "data": [  ],
+  "condition": "A",
+  "data": [],
   "execErrState": "OK",
-  "folderUID": "de9a9z2zptqf4a",
+  "folderUID": "abcdef123",
   "for": "5m",
   "noDataState": "OK",
   "orgID": 1,
   "ruleGroup": "test",
-  "title": "My test rule",
-  "uid": "abcd123"
+  "title": "My test rule 2",
+  "uid": "u456def"
 }

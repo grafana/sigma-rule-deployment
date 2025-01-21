@@ -1,6 +1,6 @@
 {
-    "condition": "A",
-    "data": [  ],
+  "condition": "A",
+  "data": [],
   "execErrState": "OK",
   "folderUID": "abcdef123",
   "for": "5m",

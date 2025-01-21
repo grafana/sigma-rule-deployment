@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -20,7 +21,7 @@ import (
 var regexAlertFilename = regexp.MustCompile(`alert_rule_(?:.*)_([^\.]+)\.json`)
 
 // Timeout for the HTTP requests
-var requestTimeOut = 5 * time.Second
+var requestTimeOut = 10 * time.Second
 
 // Structure to store the deployment config
 type deploymentConfig struct {
@@ -65,15 +66,17 @@ type Alert struct {
 }
 
 func main() {
+	ctx := context.Background()
+
 	// Load the deployment config
 	deployer := NewDeployer()
-	if err := deployer.LoadConfig(); err != nil {
+	if err := deployer.LoadConfig(ctx); err != nil {
 		fmt.Printf("Error loading config: %v\n", err)
 		os.Exit(1)
 	}
 
 	// Deploy alerts
-	alertsCreated, alertsUpdated, alertsDeleted, errDeploy := deployer.Deploy()
+	alertsCreated, alertsUpdated, alertsDeleted, errDeploy := deployer.Deploy(ctx)
 
 	// Write action outputs
 	if err := deployer.writeOutput(alertsCreated, alertsUpdated, alertsDeleted); err != nil {
@@ -93,7 +96,7 @@ func NewDeployer() *Deployer {
 	return &Deployer{}
 }
 
-func (d *Deployer) Deploy() ([]string, []string, []string, error) {
+func (d *Deployer) Deploy(ctx context.Context) ([]string, []string, []string, error) {
 	// Lists to store the alerts that were created, updated and deleted at any point during the deployment
 	alertsCreated := make([]string, len(d.config.alertsToAdd))
 	alertsUpdated := make([]string, len(d.config.alertsToUpdate))
@@ -112,7 +115,7 @@ func (d *Deployer) Deploy() ([]string, []string, []string, error) {
 			err := fmt.Errorf("invalid alert filename: %s", alertFile)
 			return alertsCreated, alertsUpdated, alertsDeleted, err
 		}
-		uid, err := d.deleteAlert(alertUid)
+		uid, err := d.deleteAlert(ctx, alertUid)
 		if err != nil {
 			return alertsCreated, alertsUpdated, alertsDeleted, err
 		}
@@ -125,7 +128,7 @@ func (d *Deployer) Deploy() ([]string, []string, []string, error) {
 			log.Printf("Can't read file %s: %v", alertFile, err)
 			return alertsCreated, alertsUpdated, alertsDeleted, err
 		}
-		uid, err := d.createAlert(content)
+		uid, err := d.createAlert(ctx, content)
 		if err != nil {
 			return alertsCreated, alertsUpdated, alertsDeleted, err
 		}
@@ -138,7 +141,7 @@ func (d *Deployer) Deploy() ([]string, []string, []string, error) {
 			log.Printf("Can't read file %s: %v", alertFile, err)
 			return alertsCreated, alertsUpdated, alertsDeleted, err
 		}
-		uid, err := d.updateAlert(content)
+		uid, err := d.updateAlert(ctx, content)
 		if err != nil {
 			return alertsCreated, alertsUpdated, alertsDeleted, err
 		}
@@ -172,7 +175,7 @@ func (d *Deployer) writeOutput(alertsCreated []string, alertsUpdated []string, a
 	return nil
 }
 
-func (d *Deployer) LoadConfig() error {
+func (d *Deployer) LoadConfig(ctx context.Context) error {
 	// Load the sigma rule deployer config file
 	configFile := os.Getenv("CONFIG_PATH")
 	if configFile == "" {
@@ -212,63 +215,73 @@ func (d *Deployer) LoadConfig() error {
 	freshDeploy := strings.ToLower(os.Getenv("DEPLOYER_FRESH_DEPLOY")) == "true"
 	d.config.freshDeploy = freshDeploy
 
-	// For a normal deployment, we look at the changes in the alert folder
-	if !d.config.freshDeploy {
-		alertsToAdd := []string{}
-		alertsToDelete := []string{}
-		alertsToUpdate := []string{}
-
-		addedFiles := os.Getenv("ADDED_FILES")
-		deletedFiles := os.Getenv("DELETED_FILES")
-		modifiedFiles := os.Getenv("MODIFIED_FILES")
-		copiedFiles := os.Getenv("COPIED_FILES")
-
-		addedFilesList := strings.Split(addedFiles, " ")
-		deletedFilesList := strings.Split(deletedFiles, " ")
-		modifiedFilesList := strings.Split(modifiedFiles, " ")
-		copiedFilesList := strings.Split(copiedFiles, " ")
-
-		// Add the modified files to the alert lists if they are in the right filder (alertPath)
-		for _, filePath := range addedFilesList {
-			alertsToAdd = addToAlertList(alertsToAdd, filePath, d.config.alertPath)
-		}
-		// Copied files are treated as added files
-		for _, filePath := range copiedFilesList {
-			alertsToAdd = addToAlertList(alertsToAdd, filePath, d.config.alertPath)
-		}
-		for _, filePath := range deletedFilesList {
-			alertsToDelete = addToAlertList(alertsToDelete, filePath, d.config.alertPath)
-		}
-		for _, filePath := range modifiedFilesList {
-			alertsToUpdate = addToAlertList(alertsToUpdate, filePath, d.config.alertPath)
-		}
-		// Renamed files will be considered a deletion and a creation via the changed-files action configuration.
-		// This helps to avoid issues where we have both an alert being deleted and another one created in a single PR,
-		// as Git would typically consider this as a rename (which poses isues for our deployment logic)
-
-		d.config.alertsToAdd = alertsToAdd
-		d.config.alertsToRemove = alertsToDelete
-		d.config.alertsToUpdate = alertsToUpdate
+	if d.config.freshDeploy {
+		return d.configFreshDeployment(ctx)
 	} else {
-		log.Println("Running in fresh deployment mode.")
-		// For a fresh deployment, we'll deploy every alert in the deploment folder, regardless of the changes
-		alertsToAdd, err := d.listAlertsInDeploymentFolder()
-		if err != nil {
-			return fmt.Errorf("error listing alerts in deployment folder: %v", err)
-		}
-		// List the current alerts in the Grafana folder so that they can be deleted first
-		alertsToRemove, err := d.listAlerts()
-		if err != nil {
-			return fmt.Errorf("error listing alerts: %v", err)
-		}
-		for i, alert := range alertsToRemove {
-			// We give a fake alert filename so that we can delete it later
-			alertsToRemove[i] = d.fakeAlertFilename(alert)
-		}
-		d.config.alertsToAdd = alertsToAdd
-		d.config.alertsToRemove = alertsToRemove
-		d.config.alertsToUpdate = []string{}
+		return d.configNormalMode()
 	}
+}
+
+func (d *Deployer) configNormalMode() error {
+	// For a normal deployment, we look at the changes in the alert folder
+	alertsToAdd := []string{}
+	alertsToDelete := []string{}
+	alertsToUpdate := []string{}
+
+	addedFiles := os.Getenv("ADDED_FILES")
+	deletedFiles := os.Getenv("DELETED_FILES")
+	modifiedFiles := os.Getenv("MODIFIED_FILES")
+	copiedFiles := os.Getenv("COPIED_FILES")
+
+	addedFilesList := strings.Split(addedFiles, " ")
+	deletedFilesList := strings.Split(deletedFiles, " ")
+	modifiedFilesList := strings.Split(modifiedFiles, " ")
+	copiedFilesList := strings.Split(copiedFiles, " ")
+
+	// Add the modified files to the alert lists if they are in the right filder (alertPath)
+	for _, filePath := range addedFilesList {
+		alertsToAdd = addToAlertList(alertsToAdd, filePath, d.config.alertPath)
+	}
+	// Copied files are treated as added files
+	for _, filePath := range copiedFilesList {
+		alertsToAdd = addToAlertList(alertsToAdd, filePath, d.config.alertPath)
+	}
+	for _, filePath := range deletedFilesList {
+		alertsToDelete = addToAlertList(alertsToDelete, filePath, d.config.alertPath)
+	}
+	for _, filePath := range modifiedFilesList {
+		alertsToUpdate = addToAlertList(alertsToUpdate, filePath, d.config.alertPath)
+	}
+	// Renamed files will be considered a deletion and a creation via the changed-files action configuration.
+	// This helps to avoid issues where we have both an alert being deleted and another one created in a single PR,
+	// as Git would typically consider this as a rename (which poses isues for our deployment logic)
+
+	d.config.alertsToAdd = alertsToAdd
+	d.config.alertsToRemove = alertsToDelete
+	d.config.alertsToUpdate = alertsToUpdate
+
+	return nil
+}
+
+func (d *Deployer) configFreshDeployment(ctx context.Context) error {
+	log.Println("Running in fresh deployment mode.")
+	// For a fresh deployment, we'll deploy every alert in the deploment folder, regardless of the changes
+	alertsToAdd, err := d.listAlertsInDeploymentFolder()
+	if err != nil {
+		return fmt.Errorf("error listing alerts in deployment folder: %v", err)
+	}
+	// List the current alerts in the Grafana folder so that they can be deleted first
+	alertsToRemove, err := d.listAlerts(ctx)
+	if err != nil {
+		return fmt.Errorf("error listing alerts: %v", err)
+	}
+	for i, alert := range alertsToRemove {
+		// We give a fake alert filename so that we can delete it later
+		alertsToRemove[i] = d.fakeAlertFilename(alert)
+	}
+	d.config.alertsToAdd = alertsToAdd
+	d.config.alertsToRemove = alertsToRemove
+	d.config.alertsToUpdate = []string{}
 
 	return nil
 }
@@ -287,7 +300,7 @@ func addToAlertList(alertList []string, file string, prefix string) []string {
 	return alertList
 }
 
-func (d *Deployer) createAlert(content string) (string, error) {
+func (d *Deployer) createAlert(ctx context.Context, content string) (string, error) {
 	// For now, we are only interested in the response message, which provides context in case of errors
 	type Response struct {
 		Message string `json:"message"`
@@ -302,7 +315,7 @@ func (d *Deployer) createAlert(content string) (string, error) {
 	// Prepare the request
 	url := fmt.Sprintf("%sapi/v1/provisioning/alert-rules", d.config.endpoint)
 
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer([]byte(content)))
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer([]byte(content)))
 	if err != nil {
 		return "", err
 	}
@@ -335,7 +348,7 @@ func (d *Deployer) createAlert(content string) (string, error) {
 	return alert.Uid, nil
 }
 
-func (d *Deployer) updateAlert(content string) (string, error) {
+func (d *Deployer) updateAlert(ctx context.Context, content string) (string, error) {
 	// Retrieve some alert information
 	alert, err := parseAlert(content)
 	if err != nil {
@@ -345,7 +358,7 @@ func (d *Deployer) updateAlert(content string) (string, error) {
 	// Prepare the request
 	url := fmt.Sprintf("%sapi/v1/provisioning/alert-rules/%s", d.config.endpoint, alert.Uid)
 
-	req, err := http.NewRequest("PUT", url, bytes.NewBuffer([]byte(content)))
+	req, err := http.NewRequestWithContext(ctx, "PUT", url, bytes.NewBuffer([]byte(content)))
 	if err != nil {
 		return "", err
 	}
@@ -372,11 +385,11 @@ func (d *Deployer) updateAlert(content string) (string, error) {
 	return alert.Uid, nil
 }
 
-func (d *Deployer) deleteAlert(uid string) (string, error) {
+func (d *Deployer) deleteAlert(ctx context.Context, uid string) (string, error) {
 	// Prepare the request
 	url := fmt.Sprintf("%sapi/v1/provisioning/alert-rules/%s", d.config.endpoint, uid)
 
-	req, err := http.NewRequest("DELETE", url, bytes.NewBuffer([]byte{}))
+	req, err := http.NewRequestWithContext(ctx, "DELETE", url, bytes.NewBuffer([]byte{}))
 	if err != nil {
 		return "", err
 	}
@@ -403,7 +416,7 @@ func (d *Deployer) deleteAlert(uid string) (string, error) {
 	return uid, nil
 }
 
-func (d *Deployer) listAlerts() ([]string, error) {
+func (d *Deployer) listAlerts(ctx context.Context) ([]string, error) {
 	if d.config.folderUid == "" {
 		return nil, fmt.Errorf("folder UID is not set")
 	}
@@ -412,7 +425,7 @@ func (d *Deployer) listAlerts() ([]string, error) {
 	// Prepare the request
 	url := fmt.Sprintf("%sapi/v1/provisioning/alert-rules", d.config.endpoint)
 
-	req, err := http.NewRequest("GET", url, bytes.NewBuffer([]byte{}))
+	req, err := http.NewRequestWithContext(ctx, "GET", url, bytes.NewBuffer([]byte{}))
 	if err != nil {
 		return []string{}, err
 	}
@@ -472,6 +485,9 @@ func readFile(filePath string) (string, error) {
 		return "", fmt.Errorf("invalid file path: %s", filePath)
 	}
 
+	// TODO: When Go 1.24 releases, use Os.Root
+	// https://tip.golang.org/doc/go1.24#directory-limited-filesystem-access
+	// https://pkg.go.dev/os@master#Root
 	fileContent, err := os.ReadFile(filePath)
 
 	return string(fileContent), err

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -153,6 +154,8 @@ func TestAddAlertToList(t *testing.T) {
 }
 
 func TestUpdateAlert(t *testing.T) {
+	ctx := context.Background()
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/api/v1/provisioning/alert-rules/") {
 			uid := strings.TrimPrefix(r.URL.Path, "/api/v1/provisioning/alert-rules/")
@@ -187,12 +190,14 @@ func TestUpdateAlert(t *testing.T) {
 		},
 	}
 
-	uid, err := d.updateAlert(`{"uid":"abcd123","title":"Test alert", "folderUID": "efgh456", "orgID": 23}`)
+	uid, err := d.updateAlert(ctx, `{"uid":"abcd123","title":"Test alert", "folderUID": "efgh456", "orgID": 23}`)
 	assert.NoError(t, err)
 	assert.Equal(t, "abcd123", uid)
 }
 
 func TestCreateAlert(t *testing.T) {
+	ctx := context.Background()
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/v1/provisioning/alert-rules" {
 			t.Errorf("Expected to request '/api/v1/provisioning/alert-rules', got: %s", r.URL.Path)
@@ -222,12 +227,14 @@ func TestCreateAlert(t *testing.T) {
 		},
 	}
 
-	uid, err := d.createAlert(`{"uid":"abcd123","title":"Test alert", "folderUID": "efgh456", "orgID": 23}`)
+	uid, err := d.createAlert(ctx, `{"uid":"abcd123","title":"Test alert", "folderUID": "efgh456", "orgID": 23}`)
 	assert.NoError(t, err)
 	assert.Equal(t, "abcd123", uid)
 }
 
 func TestDeleteAlert(t *testing.T) {
+	ctx := context.Background()
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/api/v1/provisioning/alert-rules/") {
 			uid := strings.TrimPrefix(r.URL.Path, "/api/v1/provisioning/alert-rules/")
@@ -254,12 +261,14 @@ func TestDeleteAlert(t *testing.T) {
 		},
 	}
 
-	uid, err := d.deleteAlert("abcd123")
+	uid, err := d.deleteAlert(ctx, "abcd123")
 	assert.NoError(t, err)
 	assert.Equal(t, "abcd123", uid)
 }
 
 func TestListAlerts(t *testing.T) {
+	ctx := context.Background()
+
 	alertList := `[
 		{
 			"uid": "abcd123",
@@ -324,7 +333,7 @@ func TestListAlerts(t *testing.T) {
 		},
 	}
 
-	retrievedAlerts, err := d.listAlerts()
+	retrievedAlerts, err := d.listAlerts(ctx)
 	assert.NoError(t, err)
 	assert.Equal(t, []string{"abcd123", "qwerty123", "newalert1"}, retrievedAlerts)
 }
@@ -343,8 +352,9 @@ func TestLoadConfig(t *testing.T) {
 	os.Setenv("MODIFIED_FILES", "deployments/alert_rule_conversion_wxyz123.json deployments/alert_rule_conversion_123456789.json")
 	defer os.Unsetenv("UPDATED_FILES")
 
+	ctx := context.Background()
 	d := NewDeployer()
-	d.LoadConfig()
+	d.LoadConfig(ctx)
 	assert.Equal(t, "my-test-token", d.config.saToken)
 	assert.Equal(t, "https://myinstance.grafana.com/", d.config.endpoint)
 	assert.Equal(t, "deployments", d.config.alertPath)
