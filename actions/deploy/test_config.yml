@@ -1,0 +1,8 @@
+folders:
+  deployment_path: "./deployments"
+integration:
+  folder_id: abcdef123
+  org_id: 23
+deployment:
+  grafana_instance: https://myinstance.grafana.com
+
