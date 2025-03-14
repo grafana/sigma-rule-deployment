@@ -188,6 +188,21 @@ func TestLoadConfig(t *testing.T) {
 			configPath: "",
 			wantError:  true,
 		},
+		{
+			name:       "non-local config file",
+			configPath: "../testdata/missing_config.yml",
+			wantError:  true,
+		},
+		{
+			name:       "conversion path is not local",
+			configPath: "testdata/non-local-conv-config.yml",
+			wantError:  true,
+		},
+		{
+			name:       "deployment path is not local",
+			configPath: "testdata/non-local-deploy-config.yml",
+			wantError:  true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

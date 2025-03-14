@@ -56,6 +56,14 @@ func (i *Integrator) LoadConfig() error {
 		return fmt.Errorf("error unmarshalling config file: %v", err)
 	}
 	i.config = config
+
+	if !filepath.IsLocal(i.config.Folders.ConversionPath) {
+		return fmt.Errorf("conversion path is not local: %s", i.config.Folders.ConversionPath)
+	}
+	if !filepath.IsLocal(i.config.Folders.DeploymentPath) {
+		return fmt.Errorf("deployment path is not local: %s", i.config.Folders.DeploymentPath)
+	}
+
 	if _, err = os.Stat(i.config.Folders.DeploymentPath); err != nil {
 		err = os.MkdirAll(i.config.Folders.DeploymentPath, 0700)
 		if err != nil {
