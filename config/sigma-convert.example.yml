@@ -47,7 +47,7 @@ conversions:
     rule_group: Every 6 Hours
     time_window: 6h
 integration:
-  folder_id: XXXX
+  folder_id: XXXX # Use a dedicated folder that will only contain the alerts created by these actions
   org_id: 1
 deployment:
   grafana_instance: https://myinstance.grafana.com
