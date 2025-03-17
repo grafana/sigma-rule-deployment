@@ -1,0 +1,47 @@
+name: "Grafana Query Integration"
+description: "Take converted rules and convert them into deployable outputs (alert rules, dashboards, etc.) and test them."
+author: "security-operations"
+
+inputs:
+  config_path:
+    description: "Path to the configuration file for the Sigma Rule Deployer"
+    required: true
+    default: ""
+  grafana_sa_token:
+    description: "Service account token for Grafana for query testing"
+    required: false
+    default: ""
+  added_files:
+    description: "List of added files"
+    required: true
+    default: ""
+  modified_files:
+    description: "List of modified files"
+    required: true
+    default: ""
+  deleted_files:
+    description: "List of deleted files"
+    required: true
+    default: ""
+  copied_files:
+    description: "List of copied files"
+    required: true
+    default: ""
+
+outputs:
+  rules_integrated:
+    description: "The repository file names changed (added/updated or removed) by this Action"
+
+runs:
+  using: "docker"
+  image: "ghcr.io/grafana/sigma-rule-deployment/sigma-rule-integrator:${{ github.action_sha }}"
+  args:
+    - integrate
+  env:
+    ACTION_PATH: ${{ github.action_path }}
+    INTEGRATOR_CONFIG_PATH: ${{ inputs.config_path }}
+    INTEGRATOR_GRAFANA_SA_TOKEN: ${{ inputs.grafana_sa_token }}
+    ADDED_FILES: ${{ inputs.added_files }}
+    MODIFIED_FILES: ${{ inputs.modified_files }}
+    DELETED_FILES: ${{ inputs.deleted_files }}
+    COPIED_FILES: ${{ inputs.copied_files }}

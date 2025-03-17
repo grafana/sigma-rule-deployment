@@ -34,39 +34,29 @@ runs:
       uses: actions/checkout@v4
       with:
         fetch-depth: 0  # Important to ensure we'll have all the commits when a merge includes multiple
+
+    - name: "Setup Actions"
+      uses: actions/checkout@v4
+      with:
+        repository: ${{ github.action_repository }}
+        ref: ${{ github.action_sha }}
+        path: _sigma-rule-deployment
+        persist-credentials: false
+
     - name: "Detect changed files"
       id: changed-files
       uses: grafana/changed-files@9200e69727eb73eb060652b19946b8a2fdfb654b
       with:
         output_renamed_files_as_deleted_and_added: 'true'
 
-    # TODO: Dockerize the deployer and use it here instead of building and running the script locally.
-    - name: "Setup go"
-      id: setup-go
-      uses: actions/setup-go@v5
-      with:
-        go-version: '>=1.23.5'
-    
-    - name: "Build Deployer"
-      id: build
-      working-directory: ${{ github.action_path }}
-      shell: bash
-      run: |
-        go mod tidy
-        go build -o deployer
-        chmod +x deployer
-
     - name: "Run Sigma Rule Deployer"
       id: deploy
-      shell: bash
-      run: |
-        $ACTION_PATH/deployer
-      env:
-        ACTION_PATH: ${{ github.action_path }}
-        CONFIG_PATH: ${{ inputs.config_path }}
-        DEPLOYER_GRAFANA_SA_TOKEN: ${{ inputs.grafana_sa_token }}
-        DEPLOYER_FRESH_DEPLOY: ${{ inputs.fresh_deploy }}
-        ADDED_FILES: ${{ steps.changed-files.outputs.added_files }}
-        MODIFIED_FILES: ${{ steps.changed-files.outputs.modified_files }}
-        DELETED_FILES: ${{ steps.changed-files.outputs.deleted_files }}
-        COPIED_FILES: ${{ steps.changed-files.outputs.copied_files }}
+      uses: ./_sigma-rule-deployment/actions/deploy-docker
+      with:
+        config_path: ${{ inputs.config_path }}
+        grafana_sa_token: ${{ inputs.grafana_sa_token }}
+        fresh_deploy: ${{ inputs.fresh_deploy }}
+        added_files: ${{ steps.changed-files.outputs.added_files }}
+        modified_files: ${{ steps.changed-files.outputs.modified_files }}
+        deleted_files: ${{ steps.changed-files.outputs.deleted_files }}
+        copied_files: ${{ steps.changed-files.outputs.copied_files }}
