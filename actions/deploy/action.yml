@@ -69,7 +69,7 @@ runs:
       with:
         registry: ghcr.io
         username: ${{ github.actor }}
-        password: ${{ inputs.github_token }}
+        password: ${{ github.token }}
     - name: "Run Sigma Rule Deployer"
       id: deploy
       uses: ./_sigma-rule-deployment/actions/deploy-docker

@@ -59,7 +59,7 @@ runs:
       with:
         registry: ghcr.io
         username: ${{ github.actor }}
-        password: ${{ inputs.github_token }}
+        password: ${{ github.token }}
     - name: "Run Sigma Rule Integrator"
       id: integrate
       uses: ./_sigma-rule-deployment/actions/integrate-docker
