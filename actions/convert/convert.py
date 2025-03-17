@@ -2,6 +2,7 @@
 
 import fnmatch
 import glob
+import json
 import os
 from pathlib import Path
 import shutil
@@ -133,7 +134,7 @@ def convert_rules(
                 )
 
         # Output file path
-        output_file = path_prefix / conversions_output_dir / Path(f"{name}.txt")
+        output_file = path_prefix / conversions_output_dir / Path(f"{name}.json")
 
         encoding = conversion.get("encoding", "utf-8")
 
@@ -201,18 +202,21 @@ def convert_rules(
             # doesn't contain anything.
             print(f"Output:\n{result.output}".strip())
         else:
-            filtered_output = "\n".join(
-                line
+            filtered_output = [
+                {
+                    "query": line,
+                    "rule_name": name,
+                }
                 for line in result.stdout.splitlines()
                 if "Parsing Sigma rules" not in line
-            )
+            ]
 
             if not filtered_output:
                 print("No output generated, skipping writing to file")
                 continue
 
             with open(output_file, "w", encoding=encoding) as f:
-                f.write(filtered_output.strip())
+                f.write(json.dumps(filtered_output))
 
             print(f"Converting {name} completed with exit code" f" {result.exit_code}")
             print(f"Output written to {path_prefix / Path(output_file)}")
