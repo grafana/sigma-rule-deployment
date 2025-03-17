@@ -47,6 +47,12 @@ runs:
       with:
         output_renamed_files_as_deleted_and_added: "true"
 
+    - name: "Substitute action version"
+      shell: bash
+      id: substitute-action-version
+      run: |
+        sed -i "s/GITHUB_ACTION_SHA/${{ env.action_ref }}/g" ./_sigma-rule-deployment/actions/integrate-docker/action.yml
+
     - name: "Run Sigma Rule Integrator"
       id: integrate
       uses: ./_sigma-rule-deployment/actions/integrate-docker

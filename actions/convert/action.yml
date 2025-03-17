@@ -34,6 +34,12 @@ runs:
         path: _sigma-rule-deployment
         persist-credentials: false
         token: ${{ inputs.github_token }}
+    - name: "Substitute action version"
+      shell: bash
+      id: substitute-action-version
+      run: |
+        sed -i "s/GITHUB_ACTION_SHA/${{ env.action_ref }}/g" ./_sigma-rule-deployment/actions/convert-docker/action.yml
+
     - name: "Run Sigma Rule Converter"
       uses: ./_sigma-rule-deployment/actions/convert-docker
       with:

@@ -25,11 +25,10 @@ outputs:
 
 runs:
   using: "docker"
-  image: "ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:${{ github.action_sha }}"
+  image: "ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:GITHUB_ACTION_SHA"
   args:
     - deploy
   env:
-    ACTION_PATH: ${{ github.action_path }}
     CONFIG_PATH: ${{ inputs.config_path }}
     DEPLOYER_GRAFANA_SA_TOKEN: ${{ inputs.grafana_sa_token }}
     DEPLOYER_FRESH_DEPLOY: ${{ inputs.fresh_deploy }}

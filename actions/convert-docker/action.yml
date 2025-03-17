@@ -18,11 +18,10 @@ inputs:
 
 runs:
   using: "docker"
-  image: "ghcr.io/grafana/sigma-rule-deployment/sigma-rule-converter:${{ github.action_sha }}"
+  image: "ghcr.io/grafana/sigma-rule-deployment/sigma-rule-converter:GITHUB_ACTION_SHA"
   args:
     - convert
   env:
-    ACTION_PATH: ${{ github.action_path }}
     CONFIG_PATH: ${{ inputs.config_path }}
     RENDER_TRACEBACK: ${{ inputs.render_traceback }}
     PLUGIN_PACKAGES: ${{ inputs.plugin_packages }}
