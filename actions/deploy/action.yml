@@ -60,6 +60,8 @@ runs:
     - name: "Substitute action version"
       shell: bash
       id: substitute-action-version
+      env:
+        action_ref: ${{ github.action_ref }}
       run: |
         sed -i "s/GITHUB_ACTION_SHA/${{ env.action_ref }}/g" ./_sigma-rule-deployment/actions/deploy-docker/action.yml
 
