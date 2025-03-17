@@ -54,7 +54,12 @@ runs:
         action_ref: ${{ github.action_ref }}
       run: |
         sed -i "s/GITHUB_ACTION_SHA/${{ env.action_ref }}/g" ./_sigma-rule-deployment/actions/integrate-docker/action.yml
-
+    - name: Login to GitHub Container Registry
+      uses: docker/login-action@v4
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ inputs.github_token }}
     - name: "Run Sigma Rule Integrator"
       id: integrate
       uses: ./_sigma-rule-deployment/actions/integrate-docker
