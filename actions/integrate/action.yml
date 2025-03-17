@@ -15,51 +15,17 @@ inputs:
 outputs:
   rules_integrated:
     description: "The repository file names changed (added/updated or removed) by this Action"
-    value: ${{ steps.integrate.outputs.rules_integrated }}
 
 runs:
-  using: "composite"
-  steps:
-    - name: "Checkout repository (fetch-depth: 0)"
-      id: checkout
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0 # Important to ensure we'll have all the commits when a merge includes multiple
-
-    - name: "Detect changed files"
-      id: changed-files
-      uses: tj-actions/changed-files@v45
-      with:
-        output_renamed_files_as_deleted_and_added: "true"
-
-    # TODO: Dockerize the deployer and use it here instead of running the script locally.
-    - name: "Setup go"
-      id: setup-go
-      uses: actions/setup-go@v5
-      with:
-        go-version: ">=1.23.4"
-
-    - name: "Build Integrator"
-      id: build
-      working-directory: ${{ github.action_path }}
-      shell: bash
-      run: |
-        go build -o integrator
-        chmod +x integrator
-
-    - name: "Run Sigma Rule Integrator"
-      id: integrate
-      shell: bash
-      run: |
-        ${ACTION_PATH}/integrator
-      env:
-        ACTION_PATH: ${{ github.action_path }}
-        INTEGRATOR_CONFIG_PATH: ${{ inputs.config_path }}
-        INTEGRATOR_GRAFANA_SA_TOKEN: ${{ inputs.grafana_sa_token }}
-        ADDED_FILES: ${{ steps.changed-files.outputs.added_files }}
-        MODIFIED_FILES: ${{ steps.changed-files.outputs.modified_files }}
-        DELETED_FILES: ${{ steps.changed-files.outputs.deleted_files }}
-        COPIED_FILES: ${{ steps.changed-files.outputs.copied_files }}
-
-    - name: Commit integrated queries
-      uses: stefanzweifel/git-auto-commit-action@v4
+  using: "docker"
+  image: "ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:${{ github.action_sha }}"
+  args:
+    - integrate
+  env:
+    ACTION_PATH: ${{ github.action_path }}
+    INTEGRATOR_CONFIG_PATH: ${{ inputs.config_path }}
+    INTEGRATOR_GRAFANA_SA_TOKEN: ${{ inputs.grafana_sa_token }}
+    ADDED_FILES: ${{ steps.changed-files.outputs.added_files }}
+    MODIFIED_FILES: ${{ steps.changed-files.outputs.modified_files }}
+    DELETED_FILES: ${{ steps.changed-files.outputs.deleted_files }}
+    COPIED_FILES: ${{ steps.changed-files.outputs.copied_files }}

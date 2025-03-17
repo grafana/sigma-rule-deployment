@@ -18,55 +18,23 @@ inputs:
 outputs:
   alerts_created:
     description: "List of alerts UIDs created in Grafana"
-    value: ${{ steps.deploy.outputs.alerts_created }}
   alerts_updated:
     description: "List of alerts UIDs updated in Grafana"
-    value: ${{ steps.deploy.outputs.alerts_updated }}
   alerts_deleted:
     description: "List of alerts UIDs deleted in Grafana"
-    value: ${{ steps.deploy.outputs.alerts_deleted }}
 
 runs:
-  using: "composite"
-  steps:
-    - name: "Checkout repository (fetch-depth: 0)"
-      id: checkout
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0  # Important to ensure we'll have all the commits when a merge includes multiple
-    - name: "Detect changed files"
-      id: changed-files
-      uses: tj-actions/changed-files@v45
-      with:
-        output_renamed_files_as_deleted_and_added: 'true'
-
-    # TODO: Dockerize the deployer and use it here instead of building and running the script locally.
-    - name: "Setup go"
-      id: setup-go
-      uses: actions/setup-go@v5
-      with:
-        go-version: '>=1.23.5'
-    
-    - name: "Build Deployer"
-      id: build
-      working-directory: ${{ github.action_path }}
-      shell: bash
-      run: |
-        go mod tidy
-        go build -o deployer
-        chmod +x deployer
-
-    - name: "Run Sigma Rule Deployer"
-      id: deploy
-      shell: bash
-      run: |
-        $ACTION_PATH/deployer
-      env:
-        ACTION_PATH: ${{ github.action_path }}
-        CONFIG_PATH: ${{ inputs.config_path }}
-        DEPLOYER_GRAFANA_SA_TOKEN: ${{ inputs.grafana_sa_token }}
-        DEPLOYER_FRESH_DEPLOY: ${{ inputs.fresh_deploy }}
-        ADDED_FILES: ${{ steps.changed-files.outputs.added_files }}
-        MODIFIED_FILES: ${{ steps.changed-files.outputs.modified_files }}
-        DELETED_FILES: ${{ steps.changed-files.outputs.deleted_files }}
-        COPIED_FILES: ${{ steps.changed-files.outputs.copied_files }}
+  using: "docker"
+  image: "ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:${{ github.action_sha }}"
+  args:
+    - deploy
+  env:
+    ACTION_PATH: ${{ github.action_path }}
+    CONFIG_PATH: ${{ inputs.config_path }}
+    DEPLOYER_GRAFANA_SA_TOKEN: ${{ inputs.grafana_sa_token }}
+    DEPLOYER_FRESH_DEPLOY: ${{ inputs.fresh_deploy }}
+    ADDED_FILES: ${{ steps.changed-files.outputs.added_files }}
+    MODIFIED_FILES: ${{ steps.changed-files.outputs.modified_files }}
+    DELETED_FILES: ${{ steps.changed-files.outputs.deleted_files }}
+    COPIED_FILES: ${{ steps.changed-files.outputs.copied_files }}
+ 
