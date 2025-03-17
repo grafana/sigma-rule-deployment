@@ -21,6 +21,9 @@ runs:
   steps:
     - name: "Checkout Actions"
       uses: actions/checkout@v4
+      env:
+        action_repo: ${{ github.action_repository }}
+        action_ref: ${{ github.action_ref }}
       with:
         repository: ${{ env.action_repo }}
         ref: ${{ env.action_ref }}
