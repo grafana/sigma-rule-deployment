@@ -38,8 +38,8 @@ runs:
     - name: "Setup Actions"
       uses: actions/checkout@v4
       with:
-        repository: ${{ github.action_repository }}
-        ref: ${{ github.action_sha }}
+        repository: ${{ env.action_repo }}
+        ref: ${{ env.action_ref }}
         path: _sigma-rule-deployment
         persist-credentials: false
 
