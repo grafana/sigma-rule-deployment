@@ -15,6 +15,10 @@ inputs:
     description: "Whether to render the traceback in the output."
     required: false
     default: "false"
+  github_token:
+    description: "GitHub token to use for the action."
+    required: false
+    default: ${{ github.token }}
 
 runs:
   using: "composite"
@@ -29,6 +33,7 @@ runs:
         ref: ${{ env.action_ref }}
         path: _sigma-rule-deployment
         persist-credentials: false
+        token: ${{ inputs.github_token }}
     - name: "Run Sigma Rule Converter"
       uses: ./_sigma-rule-deployment/actions/convert-docker
       with:

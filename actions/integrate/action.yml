@@ -11,6 +11,10 @@ inputs:
     description: "Service account token for Grafana for query testing"
     required: false
     default: ""
+  github_token:
+    description: "GitHub token to use for the action."
+    required: false
+    default: ${{ github.token }}
 
 outputs:
   rules_integrated:
@@ -36,7 +40,7 @@ runs:
         ref: ${{ env.action_ref }}
         path: _sigma-rule-deployment
         persist-credentials: false
-
+        token: ${{ inputs.github_token }}
     - name: "Detect changed files"
       id: changed-files
       uses: grafana/changed-files@9200e69727eb73eb060652b19946b8a2fdfb654b
