@@ -17,18 +17,12 @@ inputs:
     default: "false"
 
 runs:
-  using: "composite"
-  steps:
-    - name: "Checkout Actions"
-      uses: actions/checkout@v4
-      with:
-        repository: ${{ github.action_repository }}
-        ref: ${{ github.action_sha }}
-        path: _sigma-rule-deployment
-        persist-credentials: false
-    - name: "Run Sigma Rule Converter"
-      uses: ./_sigma-rule-deployment/actions/convert-docker
-      with:
-        config_path: ${{ inputs.config_path }}
-        plugin_packages: ${{ inputs.plugin_packages }}
-        render_traceback: ${{ inputs.render_traceback }}
+  using: "docker"
+  image: "ghcr.io/grafana/sigma-rule-deployment/sigma-rule-converter:${{ github.action_sha }}"
+  args:
+    - convert
+  env:
+    ACTION_PATH: ${{ github.action_path }}
+    CONFIG_PATH: ${{ inputs.config_path }}
+    RENDER_TRACEBACK: ${{ inputs.render_traceback }}
+    PLUGIN_PACKAGES: ${{ inputs.plugin_packages }}

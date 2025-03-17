@@ -8,10 +8,21 @@ COPY ./integrate ./integrate
 RUN cd deploy && go build -o /build/deploy .
 RUN cd integrate && go build -o /build/integrate .
 
-FROM alpine:latest
+FROM python:3.10-alpine
+
+WORKDIR /app
 
 COPY --from=builder /build/deploy /usr/local/bin/deploy
 COPY --from=builder /build/integrate /usr/local/bin/integrate
+
+COPY ./convert ./convert
+
+WORKDIR /app/convert
+RUN python -m pip install --upgrade pip
+RUN pip install --disable-pip-version-check uv
+
+WORKDIR /app
+
 COPY ./entrypoint.sh /usr/local/bin/entrypoint.sh
 
 RUN chmod +x /usr/local/bin/entrypoint.sh
