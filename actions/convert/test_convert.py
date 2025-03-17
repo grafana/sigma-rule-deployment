@@ -1,5 +1,5 @@
 from pathlib import Path
-
+import json
 import pytest
 from unittest.mock import patch, MagicMock
 from dynaconf.utils import DynaconfDict
@@ -136,9 +136,11 @@ def test_convert_rules_successful_conversion(mock_invoke, temp_workspace, mock_c
         conversions_output_dir="conversions",
     )
 
-    output_file = temp_workspace / "conversions" / "test_conversion.txt"
+    output_file = temp_workspace / "conversions" / "test_conversion.json"
     assert output_file.exists()
-    assert output_file.read_text() == "Converted rule content"
+    assert output_file.read_text() == json.dumps(
+        [{"query": "Converted rule content", "rule_name": "test_conversion"}],
+    )
 
 
 def test_convert_rules_successful_conversion_on_rule(temp_workspace, mock_config):
@@ -156,11 +158,15 @@ def test_convert_rules_successful_conversion_on_rule(temp_workspace, mock_config
         conversions_output_dir="conversions",
     )
 
-    output_file = temp_workspace / "conversions" / "test_conversion.txt"
+    output_file = temp_workspace / "conversions" / "test_conversion.json"
     assert output_file.exists()
-    assert (
-        output_file.read_text()
-        == """{job=~".+"} | logfmt | userIdentity_type=~`(?i)^Root$` and eventType!~`(?i)^AwsServiceEvent$`"""
+    assert output_file.read_text() == json.dumps(
+        [
+            {
+                "query": """{job=~".+"} | logfmt | userIdentity_type=~`(?i)^Root$` and eventType!~`(?i)^AwsServiceEvent$`""",
+                "rule_name": "test_conversion",
+            }
+        ],
     )
 
 
@@ -180,7 +186,7 @@ def test_convert_rules_handles_empty_output(mock_invoke, temp_workspace, mock_co
         conversions_output_dir="conversions",
     )
 
-    output_file = temp_workspace / "conversions" / "test_conversion.txt"
+    output_file = temp_workspace / "conversions" / "test_conversion.json"
     assert not output_file.exists()
 
 
@@ -192,5 +198,5 @@ def test_convert_rules_handles_empty_output_on_rule(temp_workspace, mock_config)
         conversions_output_dir="conversions",
     )
 
-    output_file = temp_workspace / "conversions" / "test_conversion.txt"
+    output_file = temp_workspace / "conversions" / "test_conversion.json"
     assert not output_file.exists()
