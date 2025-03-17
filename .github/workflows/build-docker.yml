@@ -1,0 +1,16 @@
+name: "Build Consolidated Image"
+on:
+  push:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Checkout"
+        uses: actions/checkout@v4
+      - name: "Build and Push"
+        uses: docker/build-push-action@v4
+        with:
+          context: ./actions
+          file: actions/Dockerfile
+          tags: ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:${{ github.sha }}
+          push: true
