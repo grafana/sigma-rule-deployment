@@ -40,14 +40,6 @@ runs:
       with:
         output_renamed_files_as_deleted_and_added: "true"
 
-    # Login to GitHub Container Registry
-    - name: "Login to GitHub Container Registry"
-      uses: docker/login-action@v4
-      with:
-        registry: ghcr.io
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-
     - name: "Run Sigma Rule Integrator"
       id: integrate
       uses: ./_sigma-rule-deployment/actions/integrate-docker
