@@ -28,7 +28,7 @@ runs:
 
     - name: "Detect changed files"
       id: changed-files
-      uses: tj-actions/changed-files@v45
+      uses: grafana/changed-files@9200e69727eb73eb060652b19946b8a2fdfb654b
       with:
         output_renamed_files_as_deleted_and_added: "true"
 
