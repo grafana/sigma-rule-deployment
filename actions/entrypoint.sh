@@ -26,7 +26,7 @@ case "$1" in
         shift
         echo "Converting Sigma rules"
         plugin_packages=${PLUGIN_PACKAGES}
-        valid_plugins=()
+        declare -a valid_plugins=()
 
         shopt -s nocasematch
         for plugin in $(echo $plugin_packages | tr ',' ' '); do
