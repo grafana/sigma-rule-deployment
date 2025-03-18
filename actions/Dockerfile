@@ -18,6 +18,7 @@ COPY --from=builder /build/integrate /usr/local/bin/integrate
 COPY ./convert ./convert
 
 WORKDIR /app/convert
+RUN apk add --no-cache bash
 RUN python -m pip install --upgrade pip
 RUN pip install --disable-pip-version-check uv
 
