@@ -43,7 +43,7 @@ runs:
         token: ${{ inputs.github_token }}
     - name: "Detect changed files"
       id: changed-files
-      uses: grafana/changed-files@9200e69727eb73eb060652b19946b8a2fdfb654b
+      uses: step-security/changed-files@3dbe17c78367e7d60f00d78ae6781a35be47b4a1 # v45.0.1
       with:
         output_renamed_files_as_deleted_and_added: "true"
 
