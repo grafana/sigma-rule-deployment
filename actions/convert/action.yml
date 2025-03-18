@@ -47,9 +47,12 @@ runs:
         registry: ghcr.io
         username: ${{ github.actor }}
         password: ${{ github.token }}
-    - name: "Run Sigma Rule Converter"
-      uses: ./_sigma-rule-deployment/actions/convert-docker
-      with:
-        config_path: ${{ inputs.config_path }}
-        plugin_packages: ${{ inputs.plugin_packages }}
-        render_traceback: ${{ inputs.render_traceback }}
+    - name: Run Sigma Rule Converter
+      id: convert
+      shell: bash
+      run: |
+        docker run --rm -v $(pwd):/sigma-rules\
+        -e CONFIG_PATH=$${{ inputs.config_path }}\
+        -e PLUGIN_PACKAGES=$${{ inputs.plugin_packages }}\
+        -e RENDER_TRACEBACK=$${{ inputs.render_traceback }}\
+        ghcr.io/SigmaHQ/sigma-cli:latest convert
