@@ -70,14 +70,11 @@ runs:
         registry: ghcr.io
         username: ${{ github.actor }}
         password: ${{ github.token }}
-    - name: "Run Sigma Rule Deployer"
-      id: deploy
-      uses: ./_sigma-rule-deployment/actions/deploy-docker
-      with:
-        config_path: ${{ inputs.config_path }}
-        grafana_sa_token: ${{ inputs.grafana_sa_token }}
-        fresh_deploy: ${{ inputs.fresh_deploy }}
-        added_files: ${{ steps.changed-files.outputs.added_files }}
-        modified_files: ${{ steps.changed-files.outputs.modified_files }}
-        deleted_files: ${{ steps.changed-files.outputs.deleted_files }}
-        copied_files: ${{ steps.changed-files.outputs.copied_files }}
+    - name: Run Sigma Rule Deployer
+      id: convert
+      shell: bash
+      env:
+        action_ref: ${{ github.action_ref }}
+      run: |
+        docker pull "ghcr.io/grafana/sigma-rule-deployment/sigma-rule-converter:${{ env.action_ref }}"
+        docker run --rm -v "$(pwd):/sigma-rules" -w /sigma-rules -e CONFIG_PATH="${{ inputs.config_path }}" -e DEPLOYER_GRAFANA_SA_TOKEN="${{ inputs.grafana_sa_token }}" -e DEPLOYER_FRESH_DEPLOY="${{ inputs.fresh_deploy }}" -e ADDED_FILES="${{ steps.changed-files.outputs.added_files }}" -e MODIFIED_FILES="${{ steps.changed-files.outputs.modified_files }}" -e DELETED_FILES="${{ steps.changed-files.outputs.deleted_files }}" -e COPIED_FILES="${{ steps.changed-files.outputs.copied_files }}" "ghcr.io/grafana/sigma-rule-deployment/sigma-rule-converter:${{ env.action_ref }}" deploy
