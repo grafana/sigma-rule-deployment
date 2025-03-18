@@ -3,8 +3,9 @@ import json
 import pytest
 from unittest.mock import patch, MagicMock
 from dynaconf.utils import DynaconfDict
-
-from .convert import convert_rules, is_safe_path, is_path
+import tempfile
+import os
+from .convert import convert_rules, is_safe_path, is_path, load_rule
 
 
 @pytest.fixture
@@ -139,9 +140,21 @@ def test_convert_rules_successful_conversion(temp_workspace, mock_config):
         [
             {
                 "query": '{job=~".+"} | logfmt | userIdentity_type=~`(?i)^Root$` and eventType!~`(?i)^AwsServiceEvent$`',
-                "rule_name": "test_conversion",
+                "conversion_name": "test_conversion",
+                "rule": {
+                    "title": "AWS Root Credentials",
+                    "description": "Detects AWS root account usage",
+                    "logsource": {"product": "aws", "service": "cloudtrail"},
+                    "detection": {
+                        "selection": {"userIdentity.type": "Root"},
+                        "filter": {"eventType": "AwsServiceEvent"},
+                        "condition": "selection and not filter",
+                    },
+                    "falsepositives": ["AWS Tasks That Require Root User Credentials"],
+                    "level": "medium",
+                },
             }
-        ],
+        ]
     )
 
 
@@ -158,10 +171,22 @@ def test_convert_rules_successful_conversion_on_rule(temp_workspace, mock_config
     assert output_file.read_text() == json.dumps(
         [
             {
-                "query": """{job=~".+"} | logfmt | userIdentity_type=~`(?i)^Root$` and eventType!~`(?i)^AwsServiceEvent$`""",
-                "rule_name": "test_conversion",
+                "query": '{job=~".+"} | logfmt | userIdentity_type=~`(?i)^Root$` and eventType!~`(?i)^AwsServiceEvent$`',
+                "conversion_name": "test_conversion",
+                "rule": {
+                    "title": "AWS Root Credentials",
+                    "description": "Detects AWS root account usage",
+                    "logsource": {"product": "aws", "service": "cloudtrail"},
+                    "detection": {
+                        "selection": {"userIdentity.type": "Root"},
+                        "filter": {"eventType": "AwsServiceEvent"},
+                        "condition": "selection and not filter",
+                    },
+                    "falsepositives": ["AWS Tasks That Require Root User Credentials"],
+                    "level": "medium",
+                },
             }
-        ],
+        ]
     )
 
 
@@ -200,3 +225,81 @@ def test_convert_rules_handles_empty_output_on_rule(temp_workspace, mock_config)
 
     output_file = temp_workspace / "conversions" / "test_conversion.json"
     assert not output_file.exists()
+
+
+def test_load_rule_valid_yaml():
+    """Test loading a valid YAML rule file."""
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
+        f.write(
+            """
+title: Test Rule
+description: Test description
+status: test
+level: low
+logsource:
+    category: test
+detection:
+    selection:
+        field: value
+    condition: selection
+        """
+        )
+        f.flush()
+
+        result = load_rule(f.name)
+
+    # Clean up the temporary file
+    os.unlink(f.name)
+
+    assert isinstance(result, dict)
+    assert result["title"] == "Test Rule"
+    assert result["description"] == "Test description"
+    assert result["status"] == "test"
+    assert result["level"] == "low"
+    assert "logsource" in result
+    assert "detection" in result
+
+
+def test_load_rule_invalid_yaml():
+    """Test loading an invalid YAML file raises ValueError."""
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
+        f.write(
+            """
+title: Invalid Rule
+description: Invalid YAML
+    wrong:
+      indentation:
+    - not valid yaml
+        """
+        )
+        f.flush()
+
+        with pytest.raises(ValueError) as exc_info:
+            load_rule(f.name)
+
+    # Clean up the temporary file
+    os.unlink(f.name)
+
+    assert "Error loading rule file" in str(exc_info.value)
+
+
+def test_load_rule_nonexistent_file():
+    """Test loading a non-existent file raises ValueError."""
+    with pytest.raises(ValueError) as exc_info:
+        load_rule("nonexistent_file.yml")
+
+    assert "Error loading rule file" in str(exc_info.value)
+
+
+def test_load_rule_empty_file():
+    """Test loading an empty file."""
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
+        f.write("")
+        f.flush()
+
+        result = load_rule(f.name)
+
+    # Clean up the temporary file
+    os.unlink(f.name)
+
+    assert result is None
