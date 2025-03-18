@@ -38,7 +38,13 @@ def temp_workspace(tmp_path):
     rules_dir = workspace / "rules"
     rules_dir.mkdir()
     test_rule = rules_dir / "test.yml"
-    test_rule.write_text("title: Test Rule")
+    test_rule_src = Path("test.yml")
+    # Copy the test rule to the rules directory
+    with (
+        open(test_rule, "w", encoding="utf-8") as f,
+        open(test_rule_src, "r", encoding="utf-8") as src,
+    ):
+        f.write(src.read())
     return workspace
 
 
@@ -119,17 +125,8 @@ def test_is_path(path_string, file_pattern, expected):
         assert result == expected
 
 
-@patch("click.testing.CliRunner.invoke")
-def test_convert_rules_successful_conversion(mock_invoke, temp_workspace, mock_config):
-    """Test that convert_rules successfully converts Sigma rules
-    by mocking the click.invoke function."""
-    mock_result = MagicMock()
-    mock_result.exception = None
-    mock_result.exc_info = None
-    mock_result.exit_code = 0
-    mock_result.stdout = "Converted rule content"
-    mock_invoke.return_value = mock_result
-
+def test_convert_rules_successful_conversion(temp_workspace, mock_config):
+    """Test that convert_rules successfully converts Sigma rules."""
     convert_rules(
         config=mock_config,
         path_prefix=temp_workspace,
@@ -139,19 +136,17 @@ def test_convert_rules_successful_conversion(mock_invoke, temp_workspace, mock_c
     output_file = temp_workspace / "conversions" / "test_conversion.json"
     assert output_file.exists()
     assert output_file.read_text() == json.dumps(
-        [{"query": "Converted rule content", "rule_name": "test_conversion"}],
+        [
+            {
+                "query": '{job=~".+"} | logfmt | userIdentity_type=~`(?i)^Root$` and eventType!~`(?i)^AwsServiceEvent$`',
+                "rule_name": "test_conversion",
+            }
+        ],
     )
 
 
 def test_convert_rules_successful_conversion_on_rule(temp_workspace, mock_config):
     """Test that convert_rules successfully converts a Sigma rule."""
-
-    # We need to create a test rule file in the workspace, because
-    # all files must be relative to the workspace.
-    test_rule_src = Path("test.yml")
-    test_rule = temp_workspace / "rules" / "test.yml"
-    test_rule.write_text(test_rule_src.read_text())
-
     convert_rules(
         config=mock_config,
         path_prefix=temp_workspace,
@@ -192,6 +187,11 @@ def test_convert_rules_handles_empty_output(mock_invoke, temp_workspace, mock_co
 
 def test_convert_rules_handles_empty_output_on_rule(temp_workspace, mock_config):
     """Test that convert_rules handles empty output on a rule."""
+
+    # Create a test rule with empty content
+    test_rule = temp_workspace / "rules" / "test.yml"
+    test_rule.write_text("")
+
     convert_rules(
         config=mock_config,
         path_prefix=temp_workspace,
