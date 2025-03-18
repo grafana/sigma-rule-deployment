@@ -66,7 +66,7 @@ runs:
       env:
         action_ref: ${{ github.action_ref }}
       run: |
-        docker pull "ghcr.io/grafana/sigma-rule-deployment/sigma-rule-converter:${{ env.action_ref }}"
-        docker run --rm -v "$(pwd):/sigma-rules" -w /sigma-rules -e INTEGRATOR_CONFIG_PATH="${{ inputs.config_path }}" -e INTEGRATOR_GRAFANA_SA_TOKEN="${{ inputs.grafana_sa_token }}" -e ADDED_FILES="${{ steps.changed-files.outputs.added_files }}" -e MODIFIED_FILES="${{ steps.changed-files.outputs.modified_files }}" -e DELETED_FILES="${{ steps.changed-files.outputs.deleted_files }}" -e COPIED_FILES="${{ steps.changed-files.outputs.copied_files }}" "ghcr.io/grafana/sigma-rule-deployment/sigma-rule-converter:${{ env.action_ref }}" integrate
+        docker pull ghcr.io/grafana/sigma-rule-deployment/sigma-rule-converter:${{ env.action_ref }}
+        docker run --rm -v "$(pwd):/sigma-rules" -w /sigma-rules -e INTEGRATOR_CONFIG_PATH="${{ inputs.config_path }}" -e INTEGRATOR_GRAFANA_SA_TOKEN="${{ inputs.grafana_sa_token }}" -e ADDED_FILES="${{ steps.changed-files.outputs.added_files }}" -e MODIFIED_FILES="${{ steps.changed-files.outputs.modified_files }}" -e DELETED_FILES="${{ steps.changed-files.outputs.deleted_files }}" -e COPIED_FILES="${{ steps.changed-files.outputs.copied_files }}" ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${{ env.action_ref }} integrate
     - name: Commit integrated queries
       uses: stefanzweifel/git-auto-commit-action@v4

@@ -30,7 +30,7 @@ jobs:
               with:
                   images: "ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer"
                   tags: |
-                      type=sha,format=short
+                      type=sha,format=long
 
             - name: "Build and Push"
               uses: docker/build-push-action@v4
