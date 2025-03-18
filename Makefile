@@ -7,6 +7,6 @@ test-convert:
 
 test:
 	@uv sync --directory actions/convert -q
-	@GITHUB_WORKSPACE=$(realpath ../sigma-internal) uv run --directory actions/convert pytest -v .
+	@GITHUB_WORKSPACE=$(realpath ../sigma-internal) uv run --directory actions/convert pytest -vv .
 
 .PHONY: test test-convert
