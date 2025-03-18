@@ -1,4 +1,4 @@
-#! /bin/sh
+#! /bin/bash
 
 function _integrate() {
     echo "Integrating Sigma Rules";
