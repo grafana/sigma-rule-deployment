@@ -50,9 +50,7 @@ runs:
     - name: Run Sigma Rule Converter
       id: convert
       shell: bash
+      env:
+        action_ref: ${{ github.action_ref }}
       run: |
-        docker run --rm -v $(pwd):/sigma-rules\
-        -e CONFIG_PATH=$${{ inputs.config_path }}\
-        -e PLUGIN_PACKAGES=$${{ inputs.plugin_packages }}\
-        -e RENDER_TRACEBACK=$${{ inputs.render_traceback }}\
-        ghcr.io/SigmaHQ/sigma-cli:latest convert
+        docker run --rm -v "$(pwd):/sigma-rules" -e CONFIG_PATH="${{ inputs.config_path }}" -e PLUGIN_PACKAGES="${{ inputs.plugin_packages }}" -e RENDER_TRACEBACK="${{ inputs.render_traceback }}" "ghcr.io/grafana/sigma-rule-deployment/sigma-rule-converter:${{ env.action_ref }}" convert
