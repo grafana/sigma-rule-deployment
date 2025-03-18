@@ -1,5 +1,38 @@
 #! /bin/sh
 
+function _integrate() {
+    echo "Integrating Sigma Rules";
+    integrate "$@";
+}
+
+function _deploy() {
+    echo "Deploying Sigma Rules";
+    deploy "$@";
+}
+
+function _convert() {
+    echo "Converting Sigma Rules";
+    plugin_packages=${PLUGIN_PACKAGES:-}
+    declare -a valid_plugins=()
+
+    shopt -s nocasematch
+    for plugin in $(echo $plugin_packages | tr ',' ' '); do
+        if [[ "$plugin" == pysigma-backend-* ]]; then
+            valid_plugins+=("$plugin")
+        else
+            echo "Error: Invalid plugin name: $plugin"
+            exit 1
+        fi
+    done
+    shopt -u nocasematch
+
+    if [ ${#valid_plugins[@]} -gt 0 ]; then
+        uv add --directory /app/convert "${valid_plugins[@]}"
+    fi
+
+    uv run --directory /app/convert main.py --config ${CONFIG_PATH:-} --render-traceback ${RENDER_TRACEBACK:-}
+}
+
 set -euo pipefail
 set +x
 
@@ -14,37 +47,15 @@ fi
 case "$1" in
     "integrate")
         shift
-        echo "Integrating Sigma rules"
-        integrate "$@"
+        _integrate "$@"
         ;;
     "deploy")
         shift
-        echo "Deploying Sigma rules"
-        deploy "$@"
+        _deploy "$@"
         ;;
     "convert")
         shift
-        echo "Converting Sigma rules"
-        plugin_packages=${PLUGIN_PACKAGES}
-        declare -a valid_plugins=()
-
-        shopt -s nocasematch
-        for plugin in $(echo $plugin_packages | tr ',' ' '); do
-            if [[ "$plugin" == pysigma-backend-* ]]; then
-                valid_plugins+=("$plugin")
-            else
-                echo "Error: Invalid plugin name: $plugin"
-                exit 1
-            fi
-        done
-        shopt -u nocasematch
-
-        if [ ${#valid_plugins[@]} -gt 0 ]; then
-            uv add --directory /app/convert "${valid_plugins[@]}"
-        fi
-
-        uv run --directory /app/convert main.py --config ${CONFIG_PATH} --render-traceback ${RENDER_TRACEBACK}
-
+        _convert "$@"
         ;;
     *)
         echo "Invalid argument: $1"
