@@ -23,8 +23,8 @@ RUN pip install --disable-pip-version-check uv
 
 WORKDIR /app
 
-COPY ./entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY ./entrypoint.sh ./entrypoint.sh
 
-RUN chmod +x /usr/local/bin/entrypoint.sh
+RUN chmod +x ./entrypoint.sh
 
-ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+ENTRYPOINT ["/bin/bash", "./entrypoint.sh"]
