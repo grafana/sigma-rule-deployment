@@ -7,10 +7,12 @@ import os
 from pathlib import Path
 import shutil
 import traceback
+from typing import Any
 
 from dynaconf import Dynaconf
 from click.testing import CliRunner
 from sigma.cli.convert import convert
+from yaml import safe_load
 
 
 def convert_rules(
@@ -39,6 +41,7 @@ def convert_rules(
         ValueError: Invalid input file type.
         ValueError: No files matched the patterns after applying --file-pattern: {file_pattern}.
         ValueError: Pipeline file path must be relative to the project root.
+        ValueError: Error loading rule file {rule_file}.
     """
     # Check if the path_prefix is set
     if not path_prefix or path_prefix == Path("."):
@@ -202,18 +205,31 @@ def convert_rules(
             # doesn't contain anything.
             print(f"Output:\n{result.output}".strip())
         else:
-            filtered_output = [
-                {
-                    "query": line,
-                    "rule_name": name,
-                }
+            queries = [
+                line
                 for line in result.stdout.splitlines()
                 if "Parsing Sigma rules" not in line
             ]
 
-            if not filtered_output:
+            if not queries:
                 print("No output generated, skipping writing to file")
                 continue
+
+            # It's hard to determine which query corresponds to which file, so we'll raise an
+            # error if the number of queries doesn't match the number of files.
+            if len(queries) != len(filtered_files):
+                raise ValueError(
+                    f"Number of queries ({len(queries)}) does not match the number of files ({len(filtered_files)})"
+                )
+
+            filtered_output = [
+                {
+                    "query": queries[idx],
+                    "conversion_name": name,
+                    "rule": load_rule(filtered_files[idx]),
+                }
+                for idx in range(len(queries))
+            ]
 
             with open(output_file, "w", encoding=encoding) as f:
                 f.write(json.dumps(filtered_output))
@@ -260,3 +276,26 @@ def is_path(path_string, file_pattern) -> bool:
         return True
 
     return False
+
+
+def load_rule(rule_file: str) -> dict[str, Any]:
+    """Load a Sigma rule file.
+
+    Args:
+        rule_file (str): The path to the Sigma rule file in YAML format.
+
+    Returns:
+        dict: The Sigma rule file as a dictionary.
+
+    Raises:
+        ValueError: Error loading rule file {rule_file}.
+    """
+
+    try:
+        with open(rule_file, "r", encoding="utf-8") as f:
+            rule_content = f.read()
+
+        return safe_load(rule_content)
+    except Exception as e:
+        print(f"{e.__class__.__name__}: Error loading rule file {rule_file}: {str(e)}")
+        raise ValueError(f"Error loading rule file {rule_file}") from e
