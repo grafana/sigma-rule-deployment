@@ -24,15 +24,19 @@ jobs:
                   registry: ghcr.io
                   username: ${{ github.actor }}
                   password: ${{ secrets.GITHUB_TOKEN }}
-            - name: Calculate Version
-              id: calculate-version
-              shell: bash
-              run: |
-                  echo "VERSION=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+            - name: "Docker Metadata"
+              id: docker-meta
+              uses: docker/metadata-action@v5
+              with:
+                  images: "ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer"
+                  tags: |
+                      type=sha,format=short
+
             - name: "Build and Push"
               uses: docker/build-push-action@v4
               with:
                   context: ./actions
                   file: actions/Dockerfile
-                  tags: "ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:v0.0.0-${{ env.VERSION }}"
+                  tags: ${{ steps.docker-meta.outputs.tags }}
+                  labels: ${{ steps.docker-meta.outputs.labels }}
                   push: true
