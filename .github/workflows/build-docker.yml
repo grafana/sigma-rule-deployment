@@ -24,11 +24,14 @@ jobs:
                   registry: ghcr.io
                   username: ${{ github.actor }}
                   password: ${{ secrets.GITHUB_TOKEN }}
+            - name: Extract SHA
+              id: extract-sha
+              run: echo "sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
             - name: "Build and Push"
               uses: docker/build-push-action@v4
               with:
                   context: ./actions
                   file: actions/Dockerfile
                   tags: |
-                      ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${{ github.sha }}
+                      ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${{ steps.extract-sha.outputs.sha }}
                   push: true
