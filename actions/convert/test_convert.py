@@ -1,11 +1,13 @@
-from pathlib import Path
 import json
-import pytest
-from unittest.mock import patch, MagicMock
-from dynaconf.utils import DynaconfDict
-import tempfile
 import os
-from .convert import convert_rules, is_safe_path, is_path, load_rule
+import tempfile
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
+from dynaconf.utils import DynaconfDict
+
+from .convert import convert_rules, is_path, is_safe_path, load_rule
 
 
 @pytest.fixture

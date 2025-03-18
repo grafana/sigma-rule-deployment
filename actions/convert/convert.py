@@ -4,13 +4,13 @@ import fnmatch
 import glob
 import json
 import os
-from pathlib import Path
 import shutil
 import traceback
+from pathlib import Path
 from typing import Any
 
-from dynaconf import Dynaconf
 from click.testing import CliRunner
+from dynaconf import Dynaconf
 from sigma.cli.convert import convert
 from yaml import safe_load
 
