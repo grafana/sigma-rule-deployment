@@ -36,4 +36,4 @@ runs:
         action_ref: ${{ github.action_ref }}
       run: |
         docker pull ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${{ env.action_ref }}
-        docker run --rm -v "$(pwd):/sigma-rules" -w /sigma-rules -e CONFIG_PATH="${{ inputs.config_path }}" -e PLUGIN_PACKAGES="${{ inputs.plugin_packages }}" -e RENDER_TRACEBACK="${{ inputs.render_traceback }}" ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${{ env.action_ref }} convert
+        docker run --rm -v "$(pwd):/sigma-rules" -w /sigma-rules -e GITHUB_WORKSPACE=/sigma-rules -e CONFIG_PATH="${{ inputs.config_path }}" -e PLUGIN_PACKAGES="${{ inputs.plugin_packages }}" -e RENDER_TRACEBACK="${{ inputs.render_traceback }}" ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${{ env.action_ref }} convert
