@@ -126,6 +126,9 @@ def convert_rules(
                 f"No files matched the patterns after applying file-pattern: {file_pattern}"
             )
 
+        ignored_files = [f for f in input_files if not fnmatch.fnmatch(f, file_pattern)]
+        print(f"Ignored files: {ignored_files}")
+
         print(f"Total files: {len(filtered_files)}")
         print(f"Target backend: {conversion.get('target', default_target)}")
 
