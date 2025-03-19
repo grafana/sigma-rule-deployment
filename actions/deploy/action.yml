@@ -38,32 +38,11 @@ runs:
       uses: actions/checkout@v4
       with:
         fetch-depth: 0  # Important to ensure we'll have all the commits when a merge includes multiple
-
-    - name: "Setup Actions"
-      uses: actions/checkout@v4
-      env:
-        action_repo: ${{ github.action_repository }}
-        action_ref: ${{ github.action_ref }}
-      with:
-        repository: ${{ env.action_repo }}
-        ref: ${{ env.action_ref }}
-        path: _sigma-rule-deployment
-        persist-credentials: false
-        token: ${{ inputs.github_token }}
-
     - name: "Detect changed files"
       id: changed-files
       uses: step-security/changed-files@3dbe17c78367e7d60f00d78ae6781a35be47b4a1 # v45.0.1
       with:
         output_renamed_files_as_deleted_and_added: 'true'
-
-    - name: "Substitute action version"
-      shell: bash
-      id: substitute-action-version
-      env:
-        action_ref: ${{ github.action_ref }}
-      run: |
-        sed -i "s/GITHUB_ACTION_SHA/${{ env.action_ref }}/g" ./_sigma-rule-deployment/actions/deploy-docker/action.yml
     - name: Login to GitHub Container Registry
       uses: docker/login-action@v3
       with:
@@ -71,7 +50,7 @@ runs:
         username: ${{ github.actor }}
         password: ${{ github.token }}
     - name: Run Sigma Rule Deployer
-      id: convert
+      id: deploy
       shell: bash
       env:
         action_ref: ${{ github.action_ref }}

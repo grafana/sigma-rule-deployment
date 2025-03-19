@@ -5,8 +5,8 @@ WORKDIR /src
 COPY ./deploy ./deploy
 COPY ./integrate ./integrate
 
-RUN cd deploy && go build -o /build/deploy .
-RUN cd integrate && go build -o /build/integrate .
+RUN cd deploy && go build -ldflags="-s -w" -o /build/deploy .
+RUN cd integrate && go build -ldflags="-s -w" -o /build/integrate .
 
 FROM python:3.10-alpine
 
