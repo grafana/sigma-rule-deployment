@@ -319,6 +319,8 @@ def load_rules(rule_file: str) -> list[dict[str, Any]]:
         with open(rule_file, "r", encoding="utf-8") as f:
             rule_content = f.read()
 
+        # `load_all` is a generator function, hence the use of `list`
+        # to enumerate all items.
         return list(load_all(rule_content, FullLoader))
     except Exception as e:
         print(f"{e.__class__.__name__}: Error loading rule file {rule_file}: {str(e)}")
