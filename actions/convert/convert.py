@@ -242,7 +242,7 @@ def convert_rules(
                     json.dumps(
                         filtered_output,
                         option=json.OPT_NAIVE_UTC,
-                    ).decode(encoding, "replace")
+                    ).decode(encoding, "blackslashreplace")
                 )
 
             print(f"Output written to {path_prefix / Path(output_file)}")
