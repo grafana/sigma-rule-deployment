@@ -14,6 +14,10 @@ inputs:
     description: "If true, ALL the alert rules in the Grafana Alert folder specified in the config will be deleted, and the alerts in the deployment folder will be created from scratch. ⚠️ Warning: destructive action"
     required: false
     default: "false"
+  github_token:
+    description: "GitHub token to use for the action."
+    required: false
+    default: ${{ github.token }}
 
 outputs:
   alerts_created:
@@ -39,34 +43,24 @@ runs:
       uses: step-security/changed-files@3dbe17c78367e7d60f00d78ae6781a35be47b4a1 # v45.0.1
       with:
         output_renamed_files_as_deleted_and_added: 'true'
-
-    # TODO: Dockerize the deployer and use it here instead of building and running the script locally.
-    - name: "Setup go"
-      id: setup-go
-      uses: actions/setup-go@v5
+    - name: Login to GitHub Container Registry
+      uses: docker/login-action@v3
       with:
-        go-version: '>=1.23.5'
-    
-    - name: "Build Deployer"
-      id: build
-      working-directory: ${{ github.action_path }}
-      shell: bash
-      run: |
-        go mod tidy
-        go build -o deployer
-        chmod +x deployer
-
-    - name: "Run Sigma Rule Deployer"
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ github.token }}
+    - name: Run Sigma Rule Deployer
       id: deploy
       shell: bash
-      run: |
-        $ACTION_PATH/deployer
       env:
-        ACTION_PATH: ${{ github.action_path }}
         CONFIG_PATH: ${{ inputs.config_path }}
-        DEPLOYER_GRAFANA_SA_TOKEN: ${{ inputs.grafana_sa_token }}
-        DEPLOYER_FRESH_DEPLOY: ${{ inputs.fresh_deploy }}
+        GRAFANA_SA_TOKEN: ${{ inputs.grafana_sa_token }}
+        FRESH_DEPLOY: ${{ inputs.fresh_deploy }}
         ADDED_FILES: ${{ steps.changed-files.outputs.added_files }}
         MODIFIED_FILES: ${{ steps.changed-files.outputs.modified_files }}
         DELETED_FILES: ${{ steps.changed-files.outputs.deleted_files }}
         COPIED_FILES: ${{ steps.changed-files.outputs.copied_files }}
+        action_ref: ${{ github.action_ref }}
+      run: |
+        docker pull ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${{ env.action_ref }}
+        docker run --rm -v "$(pwd):/sigma-rules" -w /sigma-rules -e CONFIG_PATH="${CONFIG_PATH}" -e DEPLOYER_GRAFANA_SA_TOKEN="${GRAFANA_SA_TOKEN}" -e DEPLOYER_FRESH_DEPLOY="${FRESH_DEPLOY}" -e ADDED_FILES="${ADDED_FILES}" -e MODIFIED_FILES="${MODIFIED_FILES}" -e DELETED_FILES="${DELETED_FILES}" -e COPIED_FILES="${COPIED_FILES}" ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${action_ref} deploy

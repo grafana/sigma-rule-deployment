@@ -11,6 +11,10 @@ inputs:
     description: "Service account token for Grafana for query testing"
     required: false
     default: ""
+  github_token:
+    description: "GitHub token to use for the action."
+    required: false
+    default: ${{ github.token }}
 
 outputs:
   rules_integrated:
@@ -25,41 +29,30 @@ runs:
       uses: actions/checkout@v4
       with:
         fetch-depth: 0 # Important to ensure we'll have all the commits when a merge includes multiple
-
     - name: "Detect changed files"
       id: changed-files
       uses: step-security/changed-files@3dbe17c78367e7d60f00d78ae6781a35be47b4a1 # v45.0.1
       with:
         output_renamed_files_as_deleted_and_added: "true"
-
-    # TODO: Dockerize the deployer and use it here instead of running the script locally.
-    - name: "Setup go"
-      id: setup-go
-      uses: actions/setup-go@v5
+    - name: Login to GitHub Container Registry
+      uses: docker/login-action@v3
       with:
-        go-version: ">=1.23.4"
-
-    - name: "Build Integrator"
-      id: build
-      working-directory: ${{ github.action_path }}
-      shell: bash
-      run: |
-        go build -o integrator
-        chmod +x integrator
-
-    - name: "Run Sigma Rule Integrator"
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ github.token }}
+    - name: Run Sigma Rule Integrator
       id: integrate
       shell: bash
-      run: |
-        ${ACTION_PATH}/integrator
       env:
-        ACTION_PATH: ${{ github.action_path }}
-        INTEGRATOR_CONFIG_PATH: ${{ inputs.config_path }}
-        INTEGRATOR_GRAFANA_SA_TOKEN: ${{ inputs.grafana_sa_token }}
+        CONFIG_PATH: ${{ inputs.config_path }}
+        GRAFANA_SA_TOKEN: ${{ inputs.grafana_sa_token }}
         ADDED_FILES: ${{ steps.changed-files.outputs.added_files }}
         MODIFIED_FILES: ${{ steps.changed-files.outputs.modified_files }}
         DELETED_FILES: ${{ steps.changed-files.outputs.deleted_files }}
         COPIED_FILES: ${{ steps.changed-files.outputs.copied_files }}
-
+        action_ref: ${{ github.action_ref }}
+      run: |
+        docker pull ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${{ env.action_ref }}
+        docker run --rm -v "$(pwd):/sigma-rules" -w /sigma-rules -e INTEGRATOR_CONFIG_PATH="${CONFIG_PATH}" -e INTEGRATOR_GRAFANA_SA_TOKEN="${GRAFANA_SA_TOKEN}" -e ADDED_FILES="${ADDED_FILES}" -e MODIFIED_FILES="${MODIFIED_FILES}" -e DELETED_FILES="${DELETED_FILES}" -e COPIED_FILES="${COPIED_FILES}" ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${action_ref} integrate
     - name: Commit integrated queries
       uses: stefanzweifel/git-auto-commit-action@v4
