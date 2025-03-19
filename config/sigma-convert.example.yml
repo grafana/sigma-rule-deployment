@@ -7,7 +7,6 @@ conversion_defaults:
   skip_unsupported: true
   file_pattern: "*.yml"
   data_source: grafanacloud-logs
-  print_ignored_files: false
 conversions:
   - name: aws_cloudtrail
     input: "rules-development/cloud/aws/cloudtrail/*"

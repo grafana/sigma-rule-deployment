@@ -76,9 +76,6 @@ def convert_rules(
         "conversion_defaults.skip-unsupported", "true"
     )
     default_file_pattern = config.get("conversion_defaults.file-pattern", "*.yml")
-    default_print_ignored_files = config.get(
-        "conversion_defaults.print_ignored_files", False
-    )
 
     # Convert Sigma rules to the target format per each conversion object in the config
     for conversion in config.get("conversions", []):
@@ -128,17 +125,6 @@ def convert_rules(
             raise ValueError(
                 f"No files matched the patterns after applying file-pattern: {file_pattern}"
             )
-
-        # Print ignored files if the option is set either in
-        # the conversion object or in the defaults.
-        print_ignored_files = conversion.get(
-            "print_ignored_files", default_print_ignored_files
-        )
-        if print_ignored_files:
-            ignored_files = [
-                f for f in input_files if not fnmatch.fnmatch(f, file_pattern)
-            ]
-            print(f"Ignored files: {ignored_files}")
 
         print(f"Total files: {len(filtered_files)}")
         print(f"Target backend: {conversion.get('target', default_target)}")
