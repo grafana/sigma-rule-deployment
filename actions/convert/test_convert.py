@@ -182,7 +182,9 @@ def test_convert_rules_successful_conversion(temp_workspace, mock_config):
     assert output_file.read_text() == json.dumps(
         [
             {
-                "queries": '{job=~".+"} | logfmt | userIdentity_type=~`(?i)^Root$` and eventType!~`(?i)^AwsServiceEvent$`',
+                "queries": [
+                    '{job=~".+"} | logfmt | userIdentity_type=~`(?i)^Root$` and eventType!~`(?i)^AwsServiceEvent$`'
+                ],
                 "conversion_name": "test_conversion",
                 "input_file": "rules/test.yml",
                 "rules": [
@@ -226,7 +228,9 @@ def test_convert_rules_successful_conversion_with_correlation_rule(
     assert output_file.read_text() == json.dumps(
         [
             {
-                "queries": 'sum by (userIdentity_arn) (count_over_time({job=~".+"} | logfmt | eventSource=~`(?i)^s3\\.amazonaws\\.com$` and eventName=~`(?i)^ListBuckets$` and userIdentity_type!~`(?i)^AssumedRole$` [1h])) >= 100',
+                "queries": [
+                    'sum by (userIdentity_arn) (count_over_time({job=~".+"} | logfmt | eventSource=~`(?i)^s3\\.amazonaws\\.com$` and eventName=~`(?i)^ListBuckets$` and userIdentity_type!~`(?i)^AssumedRole$` [1h])) >= 100'
+                ],
                 "conversion_name": "test_conversion_with_correlation_rule",
                 "input_file": "rules/correlation.yml",
                 "rules": [

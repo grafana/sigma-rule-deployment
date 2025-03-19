@@ -234,7 +234,7 @@ def convert_rules(
 
                 filtered_output.append(
                     {
-                        "queries": "\n\n".join(queries),
+                        "queries": queries,
                         "conversion_name": name,
                         "input_file": str(Path(input_file).relative_to(path_prefix)),
                         "rules": load_rules(input_file),
