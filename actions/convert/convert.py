@@ -2,7 +2,7 @@
 
 import fnmatch
 import glob
-import json
+import orjson as json
 import os
 import shutil
 import traceback
@@ -12,7 +12,7 @@ from typing import Any
 from click.testing import CliRunner
 from dynaconf import Dynaconf
 from sigma.cli.convert import convert
-from yaml import safe_load
+from yaml import FullLoader, load_all
 
 
 def convert_rules(
@@ -151,93 +151,103 @@ def convert_rules(
             else:
                 pipelines.append(f"--pipeline={pipeline}")
 
-        args = [
-            "--target",
-            conversion.get("target", default_target),
-            *pipelines,
-            "--format",
-            conversion.get("format", default_format),
-            *(
-                ["--correlation-method", conversion["correlation-method"]]
-                if "correlation-method" in conversion
-                and conversion["correlation-method"]
-                else []
-            ),
-            *[f"--filter={f}" for f in conversion.get("filter", [])],
-            "--file-pattern",
-            file_pattern,
-            "--output",
-            "-",  # Output to stdout, so we can write to a file later
-            "--encoding",
-            encoding,
-            "--json-indent",
-            str(conversion.get("json-indent", "0")),
-            *[
-                f"--backend-option={k}={v}"
-                for k, v in conversion.get("backend-option", {}).items()
-            ],
-            *(
-                ["--without-pipeline"]
-                if conversion.get("without_pipelines", False)
-                else []
-            ),
-            *(
-                ["--disable-pipeline-check"]
-                if not conversion.get("pipeline-check", True)
-                else []
-            ),
-            *(
-                ["--skip-unsupported"]
-                if conversion.get("skip-unsupported", default_skip_unsupported)
-                else ["--fail-unsupported"]
-            ),
-            *filtered_files,
-        ]
+        filtered_output = []
 
-        runner = CliRunner()
-        result = runner.invoke(convert, args=args)
-
-        if result.exception and result.exc_info:
-            # If an exception occurred, print the exception and the traceback
-            # and the output of the command. We'll continue to run the next conversion.
-            print(f"Error during conversion:\n{result.exception}")
-            if render_traceback:
-                trace = "".join(traceback.format_tb(result.exc_info[2]))
-                print(f"Traceback:\n{trace}")
-            # If an error occurred, print the output of the command. Sometimes the output
-            # doesn't contain anything.
-            print(f"Output:\n{result.output}".strip())
-        else:
-            queries = [
-                line
-                for line in result.stdout.splitlines()
-                if "Parsing Sigma rules" not in line
+        for input_file in filtered_files:
+            args = [
+                "--target",
+                conversion.get("target", default_target),
+                *pipelines,
+                "--format",
+                conversion.get("format", default_format),
+                *(
+                    ["--correlation-method", conversion["correlation-method"]]
+                    if "correlation-method" in conversion
+                    and conversion["correlation-method"]
+                    else []
+                ),
+                *[f"--filter={f}" for f in conversion.get("filter", [])],
+                "--file-pattern",
+                file_pattern,
+                "--output",
+                "-",  # Output to stdout, so we can write to a file later
+                "--encoding",
+                encoding,
+                "--json-indent",
+                str(conversion.get("json-indent", "0")),
+                *[
+                    f"--backend-option={k}={v}"
+                    for k, v in conversion.get("backend-option", {}).items()
+                ],
+                *(
+                    ["--without-pipeline"]
+                    if conversion.get("without_pipelines", False)
+                    else []
+                ),
+                *(
+                    ["--disable-pipeline-check"]
+                    if not conversion.get("pipeline-check", True)
+                    else []
+                ),
+                *(
+                    ["--skip-unsupported"]
+                    if conversion.get("skip-unsupported", default_skip_unsupported)
+                    else ["--fail-unsupported"]
+                ),
+                input_file,
             ]
 
-            if not queries:
+            runner = CliRunner()
+            result = runner.invoke(convert, args=args)
+
+            if result.exception and result.exc_info:
+                # If an exception occurred, print the exception and the traceback
+                # and the output of the command. We'll continue to run the next conversion.
+                print(f"Error during conversion:\n{result.exception}")
+                if render_traceback:
+                    trace = "".join(traceback.format_tb(result.exc_info[2]))
+                    print(f"Traceback:\n{trace}")
+                # If an error occurred, print the output of the command. Sometimes the output
+                # doesn't contain anything.
+                print(f"Output:\n{result.output}".strip())
+            else:
+                queries = [
+                    line
+                    for line in result.stdout.splitlines()
+                    if "Parsing Sigma rules" not in line
+                ]
+
+                if not queries:
+                    print("No output generated, skipping writing to file")
+                    continue
+
+                filtered_output.append(
+                    {
+                        "queries": "\n\n".join(queries),
+                        "conversion_name": name,
+                        "input_file": str(Path(input_file).relative_to(path_prefix)),
+                        "rules": load_rules(input_file),
+                        "output_file": str(Path(output_file).relative_to(path_prefix)),
+                    }
+                )
+
+                print(
+                    f"Converting {name} completed with exit code" f" {result.exit_code}"
+                )
+
+            if not filtered_output:
                 print("No output generated, skipping writing to file")
                 continue
 
-            # It's hard to determine which query corresponds to which file, so we'll raise an
-            # error if the number of queries doesn't match the number of files.
-            if len(queries) != len(filtered_files):
-                raise ValueError(
-                    f"Number of queries ({len(queries)}) does not match the number of files ({len(filtered_files)})"
+            # Write the output to a file per conversion
+            with open(output_file, "w", encoding=encoding) as f:
+                f.write(
+                    json.dumps(
+                        filtered_output,
+                        option=json.OPT_NAIVE_UTC,
+                    ).decode(encoding, "replace")
                 )
 
-            filtered_output = [
-                {
-                    "query": queries[idx],
-                    "conversion_name": name,
-                    "rule": load_rule(filtered_files[idx]),
-                }
-                for idx in range(len(queries))
-            ]
-
-            with open(output_file, "w", encoding=encoding) as f:
-                f.write(json.dumps(filtered_output))
-
-            print(f"Converting {name} completed with exit code" f" {result.exit_code}")
             print(f"Output written to {path_prefix / Path(output_file)}")
         print("-" * 80)
 
@@ -281,14 +291,14 @@ def is_path(path_string, file_pattern) -> bool:
     return False
 
 
-def load_rule(rule_file: str) -> dict[str, Any]:
-    """Load a Sigma rule file.
+def load_rules(rule_file: str) -> list[dict[str, Any]]:
+    """Load a Sigma rule file(s).
 
     Args:
         rule_file (str): The path to the Sigma rule file in YAML format.
 
     Returns:
-        dict: The Sigma rule file as a dictionary.
+        Iterator[dict[str, Any]]: The Sigma rule file as a list of dictionaries.
 
     Raises:
         ValueError: Error loading rule file {rule_file}.
@@ -298,7 +308,7 @@ def load_rule(rule_file: str) -> dict[str, Any]:
         with open(rule_file, "r", encoding="utf-8") as f:
             rule_content = f.read()
 
-        return safe_load(rule_content)
+        return list(load_all(rule_content, FullLoader))
     except Exception as e:
         print(f"{e.__class__.__name__}: Error loading rule file {rule_file}: {str(e)}")
         raise ValueError(f"Error loading rule file {rule_file}") from e
