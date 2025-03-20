@@ -4,6 +4,7 @@ go 1.23.4
 
 require (
 	github.com/go-openapi/strfmt v0.23.0
+	github.com/google/uuid v1.6.0
 	github.com/grafana/alerting v0.0.0-20241211182001-0f317eb6b2f7
 	github.com/grafana/grafana v6.1.6+incompatible
 	github.com/grafana/grafana-plugin-sdk-go v0.261.0
@@ -13,7 +14,6 @@ require (
 	github.com/prometheus/client_golang v1.20.5
 	github.com/prometheus/common v0.61.0
 	github.com/prometheus/prometheus v0.301.0
-	github.com/spaolacci/murmur3 v1.1.0
 	github.com/stretchr/testify v1.10.0
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -57,7 +57,6 @@ require (
 	github.com/google/flatbuffers v24.3.25+incompatible // indirect
 	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/mux v1.8.0 // indirect
 	github.com/grafana/otel-profiling-go v0.5.1 // indirect
 	github.com/grafana/pyroscope-go/godeltaprof v0.1.8 // indirect
