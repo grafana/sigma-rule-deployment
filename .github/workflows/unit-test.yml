@@ -57,11 +57,11 @@ jobs:
         run: |
           go test -v ./...
 
-  convert-test:
+  deploy-test:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: actions/convert
+        working-directory: actions/deploy
 
     steps:
       - name: Checkout repository
@@ -79,4 +79,3 @@ jobs:
       - name: Run unit tests
         run: |
           go test -v ./...
-
