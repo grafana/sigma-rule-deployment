@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/grafana/sigma-rule-deployment/actions/integrate/definitions"
-	"github.com/spaolacci/murmur3"
 	"gopkg.in/yaml.v3"
 )
 
@@ -37,11 +37,13 @@ type SigmaRule struct {
 		Definition string `json:"definition"`
 	} `json:"logsource"`
 	Detection      struct{} `json:"detection"`
+	Correlation    struct{} `json:"correlation"`
 	Fields         []string `json:"fields"`
 	FalsePositives []string `json:"falsepositives"`
 	Level          string   `json:"level"`
 	Tags           []string `json:"tags"`
 	Scope          string   `json:"scope"`
+	Generate       bool     `json:"generate"`
 }
 
 type ConversionOutput struct {
@@ -154,14 +156,14 @@ func (i *Integrator) LoadConfig() error {
 
 func (i *Integrator) Run() error {
 	for _, inputFile := range i.addedFiles {
-		raw_queries, err := ReadLocalFile(inputFile)
+		conversionContent, err := ReadLocalFile(inputFile)
 		if err != nil {
 			return err
 		}
 
 		config := ConversionConfig{}
 		for _, conf := range i.config.Conversions {
-			if conf.Name+".txt" == filepath.Base(inputFile) {
+			if conf.Name+".json" == filepath.Base(inputFile) {
 				config = conf
 				break
 			}
@@ -170,21 +172,31 @@ func (i *Integrator) Run() error {
 			return fmt.Errorf("no conversion configuration found for file: %s", inputFile)
 		}
 
-		queries := strings.Split(string(raw_queries), "\n\n") // Separator taken from the Sigma source code
-		if len(queries) == 0 {
-			return fmt.Errorf("no queries found in file: %s", inputFile)
+		var conversionObjects []ConversionOutput
+		err = json.Unmarshal([]byte(conversionContent), &conversionObjects)
+		if err != nil {
+			return fmt.Errorf("error unmarshalling conversion output: %v", err)
 		}
 
-		for _, query := range queries {
-			id := int64(murmur3.Sum32([]byte(query)))
-			hash := fmt.Sprintf("%x", id) // FIXME: extract from Sigma rule file
-			file := fmt.Sprintf("%s%salert_rule_%s_%s.json", i.config.Folders.DeploymentPath, string(filepath.Separator), config.Name, hash)
-			rule := &definitions.ProvisionedAlertRule{ID: id, UID: hash}
-			err := readRuleFromFile(rule, file)
+		for conversionIndex, conversionObject := range conversionObjects {
+			queries := conversionObject.Queries
+			if len(queries) == 0 {
+				fmt.Printf("no queries found in conversion object: %d", conversionIndex)
+				continue
+			}
+
+			conversionID, titles, err := summariseSigmaRules(conversionObject.Rules)
+			if err != nil {
+				return fmt.Errorf("error summarising sigma rules: %v", err)
+			}
+
+			file := fmt.Sprintf("%s%salert_rule_%s_%s.json", i.config.Folders.DeploymentPath, string(filepath.Separator), config.Name, conversionID.String())
+			rule := &definitions.ProvisionedAlertRule{UID: conversionID.String()}
+			err = readRuleFromFile(rule, file)
 			if err != nil {
 				return err
 			}
-			err = i.ConvertToAlert(rule, query, config)
+			err = i.ConvertToAlert(rule, queries, titles, config)
 			if err != nil {
 				return err
 			}
@@ -219,7 +231,7 @@ func (i *Integrator) Run() error {
 	return nil
 }
 
-func (i *Integrator) ConvertToAlert(rule *definitions.ProvisionedAlertRule, query string, config ConversionConfig) error {
+func (i *Integrator) ConvertToAlert(rule *definitions.ProvisionedAlertRule, queries []string, titles string, config ConversionConfig) error {
 	datasource := getC(config.DataSource, i.config.ConversionDefaults.DataSource, "nil")
 	timewindow := getC(config.TimeWindow, i.config.ConversionDefaults.TimeWindow, "1m")
 	duration, err := time.ParseDuration(timewindow)
@@ -235,52 +247,53 @@ func (i *Integrator) ConvertToAlert(rule *definitions.ProvisionedAlertRule, quer
 	rule.NoDataState = definitions.OK
 	rule.ExecErrState = definitions.OkErrState
 	rule.Updated = time.Now()
-	rule.Title = fmt.Sprintf("Alert Rule %s", rule.UID)
+	rule.Title = titles
 
-	// alerting rule query
-	// disabled for time being due to dependency conflict between loki and alerting :confused:
-	// if getC(config.Target, i.config.ConversionDefaults.Target, "loki") == "loki" {
-	// 	queryType, err := logql.QueryType(query)
-	// 	if err != nil {
-	// 		return fmt.Errorf("error parsing loki query: %v", err)
-	// 	}
-	// 	if queryType != logql.QueryTypeMetric {
-	// 		query = fmt.Sprintf("sum(count_over_time(%s[$__auto]))", query)
-	// 	}
-	// }
-	if getC(config.Target, i.config.ConversionDefaults.Target, "loki") == "loki" {
-		query = fmt.Sprintf("sum(count_over_time(%s[$__auto]))", query)
+	rule.Data = []definitions.AlertQuery{}
+	refIds := make([]string, len(queries))
+	for index, query := range queries {
+		if getC(config.Target, i.config.ConversionDefaults.Target, "loki") == "loki" {
+			// if the query is not a metric query, we need to add a sum aggregation to it
+			if !strings.HasPrefix(query, "sum") {
+				query = fmt.Sprintf("sum(count_over_time(%s[$__auto]))", query)
+			}
+		}
+		// Must manually escape the query as JSON to include it in a json.RawMessage
+		escapedQuery, err := escapeQueryJSON(query)
+		if err != nil {
+			return fmt.Errorf("could not escape provided query: %s", query)
+		}
+		refIds[index] = fmt.Sprintf("A%d", index)
+		rule.Data = append(rule.Data,
+			definitions.AlertQuery{
+				RefID:             refIds[index],
+				QueryType:         "instant",
+				DatasourceUID:     datasource,
+				RelativeTimeRange: timerange,
+				Model:             json.RawMessage(fmt.Sprintf(`{"refId":"%s","hide":false,"expr":"%s","queryType":"instant","editorMode":"code"}`, refIds[index], escapedQuery)),
+			})
 	}
-	reducer := json.RawMessage(`{"refId":"B","hide":false,"type":"reduce","datasource":{"uid":"__expr__","type":"__expr__"},"conditions":[{"type":"query","evaluator":{"params":[],"type":"gt"},"operator":{"type":"and"},"query":{"params":["B"]},"reducer":{"params":[],"type":"last"}}],"reducer":"last","expression":"A"}`)
+	reducer := json.RawMessage(
+		fmt.Sprintf(`{"refId":"B","hide":false,"type":"reduce","datasource":{"uid":"__expr__","type":"__expr__"},"conditions":[{"type":"query","evaluator":{"params":[],"type":"gt"},"operator":{"type":"and"},"query":{"params":["B"]},"reducer":{"params":[],"type":"last"}}],"reducer":"last","expression":"%s"}`,
+			strings.Join(refIds, "||")))
 	threshold := json.RawMessage(`{"refId":"C","hide":false,"type":"threshold","datasource":{"uid":"__expr__","type":"__expr__"},"conditions":[{"type":"query","evaluator":{"params":[1],"type":"gt"},"operator":{"type":"and"},"query":{"params":["C"]},"reducer":{"params":[],"type":"last"}}],"expression":"B"}`)
-	// Must manually escape the query as JSON to include it in a json.RawMessage
-	escapedQuery, err := escapeQueryJSON(query)
-	if err != nil {
-		return fmt.Errorf("could not escape provided query: %s", query)
-	}
-	rule.Data = []definitions.AlertQuery{
-		{
-			RefID:             "A",
-			QueryType:         "instant",
-			DatasourceUID:     datasource,
-			RelativeTimeRange: timerange,
-			Model:             json.RawMessage(fmt.Sprintf(`{"refId":"A","hide":false,"expr":"%s","queryType":"instant","editorMode":"code"}`, escapedQuery)),
-		},
-		{
+
+	rule.Data = append(rule.Data,
+		definitions.AlertQuery{
 			RefID:             "B",
 			DatasourceUID:     "__expr__",
 			RelativeTimeRange: timerange,
 			QueryType:         "",
 			Model:             reducer,
 		},
-		{
+		definitions.AlertQuery{
 			RefID:             "C",
 			DatasourceUID:     "__expr__",
 			RelativeTimeRange: timerange,
 			QueryType:         "",
 			Model:             threshold,
 		},
-	}
+	)
 	rule.Condition = "C"
 
 	return nil
@@ -336,4 +349,39 @@ func getC(config, defaultConf, def string) string {
 		return defaultConf
 	}
 	return def
+}
+
+func summariseSigmaRules(rules []SigmaRule) (id uuid.UUID, title string, err error) {
+	if len(rules) == 0 {
+		return uuid.Nil, "", fmt.Errorf("no rules provided")
+	}
+	conversionIDBytes := make([]byte, 16)
+	titles := make([]string, len(rules))
+	for ruleIndex, rule := range rules {
+		titles[ruleIndex] = rule.Title
+		if ruleID, err := uuid.Parse(rule.ID); err == nil {
+			if ruleIndex > 0 {
+				// xor the rule IDs together to get a unique conversion ID
+				for i, b := range ruleID {
+					conversionIDBytes[i] ^= b
+				}
+			} else {
+				conversionIDBytes = ruleID[:]
+			}
+		} else {
+			return uuid.Nil, "", fmt.Errorf("error parsing rule ID %s: %v", rule.ID, err)
+		}
+	}
+	// Ensure the final conversion ID is version 4 and variant 10
+	conversionIDBytes[6] = (conversionIDBytes[6] & 0x0f) | 0x40
+	conversionIDBytes[8] = (conversionIDBytes[8] & 0x3f) | 0x80
+	conversionID, err := uuid.FromBytes(conversionIDBytes)
+	if err != nil {
+		return uuid.Nil, "", fmt.Errorf("error creating conversion ID from bytes %s: %v", conversionIDBytes, err)
+	}
+	title = strings.Join(titles, " & ")
+	if len(title) > 190 {
+		title = title[:190]
+	}
+	return conversionID, title, nil
 }

@@ -4,6 +4,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/grafana/sigma-rule-deployment/actions/integrate/definitions"
 	"github.com/stretchr/testify/assert"
 )
@@ -11,15 +12,17 @@ import (
 func TestConvertToAlert(t *testing.T) {
 	tests := []struct {
 		name          string
-		query         string
+		queries       []string
 		rule          *definitions.ProvisionedAlertRule
+		titles        string
 		config        ConversionConfig
 		wantQueryText string
 		wantError     bool
 	}{
 		{
-			name:  "valid new loki query",
-			query: "{job=`.+`} | json | test=`true`",
+			name:    "valid new loki query",
+			queries: []string{"{job=`.+`} | json | test=`true`"},
+			titles:  "Alert Rule 1",
 			rule: &definitions.ProvisionedAlertRule{
 				UID: "5c1c217a",
 			},
@@ -34,8 +37,9 @@ func TestConvertToAlert(t *testing.T) {
 			wantError:     false,
 		},
 		{
-			name:  "valid ES query",
-			query: `from * | where eventSource=="kms.amazonaws.com" and eventName=="CreateGrant"`,
+			name:    "valid ES query",
+			queries: []string{`from * | where eventSource=="kms.amazonaws.com" and eventName=="CreateGrant"`},
+			titles:  "Alert Rule 2",
 			rule: &definitions.ProvisionedAlertRule{
 				UID: "3bb06d82",
 			},
@@ -46,15 +50,28 @@ func TestConvertToAlert(t *testing.T) {
 				RuleGroup:  "Every 5 Minutes",
 				TimeWindow: "5m",
 			},
-			wantQueryText: `from * | where eventSource=="kms.amazonaws.com" and eventName=="CreateGrant"`,
+			wantQueryText: `from * | where eventSource==\"kms.amazonaws.com\" and eventName==\"CreateGrant\"`,
 			wantError:     false,
 		},
 		{
-			name:  "invalid time window",
-			query: "{job=`.+`} | json | test=`true`",
+			name:    "invalid time window",
+			queries: []string{"{job=`.+`} | json | test=`true`"},
+			titles:  "Alert Rule 3",
 			rule: &definitions.ProvisionedAlertRule{
 				ID:  0,
 				UID: "5c1c217a",
+			},
+			config: ConversionConfig{
+				TimeWindow: "1y",
+			},
+			wantError: true,
+		},
+		{
+			name:    "invalid time window",
+			queries: []string{"{job=`.+`} | json | test=`true`", "sum(count_over_time({job=`.+`} | json | test=`false`[$__auto]))"},
+			titles:  "Alert Rule 4 & Alert Rule 5",
+			rule: &definitions.ProvisionedAlertRule{
+				UID: "f4c34eae-c7c3-4891-8965-08a01e8286b8",
 			},
 			config: ConversionConfig{
 				TimeWindow: "1y",
@@ -66,15 +83,15 @@ func TestConvertToAlert(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			i := NewIntegrator()
-			escapedQuery, _ := escapeQueryJSON(tt.wantQueryText)
-			err := i.ConvertToAlert(tt.rule, tt.query, tt.config)
+			err := i.ConvertToAlert(tt.rule, tt.queries, tt.titles, tt.config)
 			if tt.wantError {
 				assert.NotNil(t, err)
 			} else {
 				assert.NoError(t, err)
-				assert.Contains(t, string(tt.rule.Data[0].Model), escapedQuery)
+				assert.Contains(t, string(tt.rule.Data[0].Model), tt.wantQueryText)
 				assert.Equal(t, tt.config.RuleGroup, tt.rule.RuleGroup)
 				assert.Equal(t, tt.config.DataSource, tt.rule.Data[0].DatasourceUID)
+				assert.Equal(t, tt.titles, tt.rule.Title)
 			}
 		})
 	}
@@ -238,4 +255,52 @@ func TestReadWriteAlertRule(t *testing.T) {
 	assert.NoError(t, err)
 	err = writeRuleToFile(rule, "testdata/sample_rule.json")
 	assert.NoError(t, err)
+}
+
+func TestSummariseSigmaRules(t *testing.T) {
+	tests := []struct {
+		name      string
+		rules     []SigmaRule
+		wantID    uuid.UUID
+		wantTitle string
+		wantError bool
+	}{
+		{
+			name: "valid rule",
+			rules: []SigmaRule{
+				{ID: "996f8884-9144-40e7-ac63-29090ccde9a0", Title: "Rule 1"},
+			},
+			wantID:    uuid.MustParse("996f8884-9144-40e7-ac63-29090ccde9a0"),
+			wantTitle: "Rule 1",
+			wantError: false,
+		},
+		{
+			name:      "no rules",
+			rules:     []SigmaRule{},
+			wantError: true,
+		},
+		{
+			name: "multiple rules",
+			rules: []SigmaRule{
+				{ID: "a6b097fd-44d2-413f-b5cd-0916e22e6d5c", Title: "Rule 1"},
+				{ID: "37f6f301-ddba-496f-9a84-853886ffff6b", Title: "Rule 2"},
+			},
+			wantID:    uuid.MustParse("914664fc-9968-4850-af49-8c2e64d19237"),
+			wantTitle: "Rule 1 & Rule 2",
+			wantError: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			id, title, err := summariseSigmaRules(tt.rules)
+			if tt.wantError {
+				assert.NotNil(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.wantID, id)
+				assert.Equal(t, id.Version(), uuid.Version(0x4))
+				assert.Equal(t, tt.wantTitle, title)
+			}
+		})
+	}
 }
