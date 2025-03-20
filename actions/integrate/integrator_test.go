@@ -318,36 +318,6 @@ func TestIntegratorRun(t *testing.T) {
 		wantError      bool
 	}{
 		{
-			name:           "multiple conversion objects",
-			conversionName: "test_conv3",
-			convOutput: []ConversionOutput{
-				{
-					Queries: []string{"{job=`test1`} | json"},
-					Rules: []SigmaRule{
-						{
-							ID:    "996f8884-9144-40e7-ac63-29090ccde9a0",
-							Title: "Test Rule 1",
-						},
-					},
-				},
-				{
-					Queries: []string{"{job=`test2`} | json"},
-					Rules: []SigmaRule{
-						{
-							ID:    "37f6f301-ddba-496f-9a84-853886ffff6b",
-							Title: "Test Rule 2",
-						},
-					},
-				},
-			},
-			wantQueries: []string{
-				"sum(count_over_time({job=`test1`} | json[$__auto]))",
-				"sum(count_over_time({job=`test2`} | json[$__auto]))",
-			},
-			wantTitles: []string{"Test Rule 1", "Test Rule 2"},
-			wantError:  false,
-		},
-		{
 			name:           "single rule single query",
 			conversionName: "test_conv1",
 			convOutput: []ConversionOutput{
@@ -391,6 +361,36 @@ func TestIntegratorRun(t *testing.T) {
 				"sum(count_over_time({job=`test2`} | json[$__auto]))",
 			},
 			wantTitles: []string{"Test Rule 1 & Test Rule 2"},
+			wantError:  false,
+		},
+		{
+			name:           "multiple conversion objects",
+			conversionName: "test_conv3",
+			convOutput: []ConversionOutput{
+				{
+					Queries: []string{"{job=`test1`} | json"},
+					Rules: []SigmaRule{
+						{
+							ID:    "996f8884-9144-40e7-ac63-29090ccde9a0",
+							Title: "Test Rule 1",
+						},
+					},
+				},
+				{
+					Queries: []string{"{job=`test2`} | json"},
+					Rules: []SigmaRule{
+						{
+							ID:    "37f6f301-ddba-496f-9a84-853886ffff6b",
+							Title: "Test Rule 2",
+						},
+					},
+				},
+			},
+			wantQueries: []string{
+				"sum(count_over_time({job=`test1`} | json[$__auto]))",
+				"sum(count_over_time({job=`test2`} | json[$__auto]))",
+			},
+			wantTitles: []string{"Test Rule 1", "Test Rule 2"},
 			wantError:  false,
 		},
 		{
