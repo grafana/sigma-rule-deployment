@@ -36,8 +36,8 @@ type SigmaRule struct {
 		Service    string `json:"service"`
 		Definition string `json:"definition"`
 	} `json:"logsource"`
-	Detection      struct{} `json:"detection"`
-	Correlation    struct{} `json:"correlation"`
+	Detection      any      `json:"detection"`
+	Correlation    any      `json:"correlation"`
 	Fields         []string `json:"fields"`
 	FalsePositives []string `json:"falsepositives"`
 	Level          string   `json:"level"`
