@@ -1,10 +1,13 @@
+import orjson as json
+import os
+import tempfile
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
-from unittest.mock import patch, MagicMock
 from dynaconf.utils import DynaconfDict
 
-from .convert import convert_rules, is_safe_path, is_path
+from .convert import convert_rules, is_path, is_safe_path, load_rules
 
 
 @pytest.fixture
@@ -31,6 +34,30 @@ def mock_config():
 
 
 @pytest.fixture
+def mock_config_with_correlation_rule():
+    """Mock configuration object with a correlation rule."""
+    return DynaconfDict(
+        {
+            "defaults": {
+                "target": "loki",
+                "format": "default",
+                "skip-unsupported": "true",
+                "file-pattern": "*.yml",
+                "encoding": "utf-8",
+            },
+            "conversions": [
+                {
+                    "name": "test_conversion_with_correlation_rule",
+                    "input": ["rules/correlation.yml"],
+                    "target": "loki",
+                    "format": "default",
+                }
+            ],
+        }
+    )
+
+
+@pytest.fixture
 def temp_workspace(tmp_path):
     """Create a temporary workspace with a rules directory."""
     workspace = tmp_path / "workspace"
@@ -38,7 +65,30 @@ def temp_workspace(tmp_path):
     rules_dir = workspace / "rules"
     rules_dir.mkdir()
     test_rule = rules_dir / "test.yml"
-    test_rule.write_text("title: Test Rule")
+    test_rule_src = Path("test.yml")
+    # Copy the test rule to the rules directory
+    with (
+        open(test_rule, "w", encoding="utf-8") as f,
+        open(test_rule_src, "r", encoding="utf-8") as src,
+    ):
+        f.write(src.read())
+    return workspace
+
+
+@pytest.fixture
+def temp_workspace_with_correlation_rule(tmp_path):
+    """Create a correlation rule file."""
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    rules_dir = workspace / "rules"
+    rules_dir.mkdir()
+    correlation_rule = rules_dir / "correlation.yml"
+    correlation_rule_src = Path("test_correlation.yml")
+    with (
+        open(correlation_rule, "w", encoding="utf-8") as f,
+        open(correlation_rule_src, "r", encoding="utf-8") as src,
+    ):
+        f.write(src.read())
     return workspace
 
 
@@ -119,49 +169,125 @@ def test_is_path(path_string, file_pattern, expected):
         assert result == expected
 
 
-@patch("click.testing.CliRunner.invoke")
-def test_convert_rules_successful_conversion(mock_invoke, temp_workspace, mock_config):
-    """Test that convert_rules successfully converts Sigma rules
-    by mocking the click.invoke function."""
-    mock_result = MagicMock()
-    mock_result.exception = None
-    mock_result.exc_info = None
-    mock_result.exit_code = 0
-    mock_result.stdout = "Converted rule content"
-    mock_invoke.return_value = mock_result
-
+def test_convert_rules_successful_conversion(temp_workspace, mock_config):
+    """Test that convert_rules successfully converts Sigma rules."""
     convert_rules(
         config=mock_config,
         path_prefix=temp_workspace,
         conversions_output_dir="conversions",
     )
 
-    output_file = temp_workspace / "conversions" / "test_conversion.txt"
+    output_file = temp_workspace / "conversions" / "test_conversion.json"
     assert output_file.exists()
-    assert output_file.read_text() == "Converted rule content"
+    assert output_file.read_text() == json.dumps(
+        [
+            {
+                "queries": [
+                    '{job=~".+"} | logfmt | userIdentity_type=~`(?i)^Root$` and eventType!~`(?i)^AwsServiceEvent$`'
+                ],
+                "conversion_name": "test_conversion",
+                "input_file": "rules/test.yml",
+                "rules": [
+                    {
+                        "title": "AWS Root Credentials",
+                        "description": "Detects AWS root account usage",
+                        "logsource": {"product": "aws", "service": "cloudtrail"},
+                        "detection": {
+                            "selection": {"userIdentity.type": "Root"},
+                            "filter": {"eventType": "AwsServiceEvent"},
+                            "condition": "selection and not filter",
+                        },
+                        "falsepositives": [
+                            "AWS Tasks That Require Root User Credentials"
+                        ],
+                        "level": "medium",
+                    }
+                ],
+                "output_file": "conversions/test_conversion.json",
+            }
+        ]
+    ).decode("utf-8", "replace")
 
 
-def test_convert_rules_successful_conversion_on_rule(temp_workspace, mock_config):
-    """Test that convert_rules successfully converts a Sigma rule."""
-
-    # We need to create a test rule file in the workspace, because
-    # all files must be relative to the workspace.
-    test_rule_src = Path("test.yml")
-    test_rule = temp_workspace / "rules" / "test.yml"
-    test_rule.write_text(test_rule_src.read_text())
-
+def test_convert_rules_successful_conversion_with_correlation_rule(
+    temp_workspace_with_correlation_rule, mock_config_with_correlation_rule
+):
+    """Test that convert_rules successfully converts a Sigma correlation rule."""
     convert_rules(
-        config=mock_config,
-        path_prefix=temp_workspace,
+        config=mock_config_with_correlation_rule,
+        path_prefix=temp_workspace_with_correlation_rule,
         conversions_output_dir="conversions",
     )
 
-    output_file = temp_workspace / "conversions" / "test_conversion.txt"
-    assert output_file.exists()
-    assert (
-        output_file.read_text()
-        == """{job=~".+"} | logfmt | userIdentity_type=~`(?i)^Root$` and eventType!~`(?i)^AwsServiceEvent$`"""
+    output_file = (
+        temp_workspace_with_correlation_rule
+        / "conversions"
+        / "test_conversion_with_correlation_rule.json"
     )
+    assert output_file.exists()
+    assert output_file.read_text() == json.dumps(
+        [
+            {
+                "queries": [
+                    'sum by (userIdentity_arn) (count_over_time({job=~".+"} | logfmt | eventSource=~`(?i)^s3\\.amazonaws\\.com$` and eventName=~`(?i)^ListBuckets$` and userIdentity_type!~`(?i)^AssumedRole$` [1h])) >= 100'
+                ],
+                "conversion_name": "test_conversion_with_correlation_rule",
+                "input_file": "rules/correlation.yml",
+                "rules": [
+                    {
+                        "title": "Potential Bucket Enumeration on AWS",
+                        "id": "f305fd62-beca-47da-ad95-7690a0620084",
+                        "related": [
+                            {
+                                "id": "4723218f-2048-41f6-bcb0-417f2d784f61",
+                                "type": "similar",
+                            }
+                        ],
+                        "status": "test",
+                        "description": "Looks for potential enumeration of AWS buckets via ListBuckets.",
+                        "references": [
+                            "https://github.com/Lifka/hacking-resources/blob/c2ae355d381bd0c9f0b32c4ead049f44e5b1573f/cloud-hacking-cheat-sheets.md",
+                            "https://jamesonhacking.blogspot.com/2020/12/pivoting-to-private-aws-s3-buckets.html",
+                            "https://securitycafe.ro/2022/12/14/aws-enumeration-part-ii-practical-enumeration/",
+                        ],
+                        "author": "Christopher Peacock @securepeacock, SCYTHE @scythe_io",
+                        "date": "2023-01-06",
+                        "modified": "2024-07-10",
+                        "tags": ["attack.discovery", "attack.t1580"],
+                        "logsource": {"product": "aws", "service": "cloudtrail"},
+                        "detection": {
+                            "selection": {
+                                "eventSource": "s3.amazonaws.com",
+                                "eventName": "ListBuckets",
+                            },
+                            "filter": {"userIdentity.type": "AssumedRole"},
+                            "condition": "selection and not filter",
+                        },
+                        "falsepositives": [
+                            "Administrators listing buckets, it may be necessary to filter out users who commonly conduct this activity."
+                        ],
+                        "level": "low",
+                    },
+                    {
+                        "title": "Multiple AWS bucket enumerations by a single user",
+                        "id": "be246094-01d3-4bba-88de-69e582eba0cc",
+                        "author": "kelnage",
+                        "date": "2024-07-29",
+                        "status": "experimental",
+                        "correlation": {
+                            "type": "event_count",
+                            "rules": ["f305fd62-beca-47da-ad95-7690a0620084"],
+                            "group-by": ["userIdentity.arn"],
+                            "timespan": "1h",
+                            "condition": {"gte": 100},
+                        },
+                        "level": "high",
+                    },
+                ],
+                "output_file": "conversions/test_conversion_with_correlation_rule.json",
+            }
+        ]
+    ).decode("utf-8", "replace")
 
 
 @patch("click.testing.CliRunner.invoke")
@@ -180,17 +306,101 @@ def test_convert_rules_handles_empty_output(mock_invoke, temp_workspace, mock_co
         conversions_output_dir="conversions",
     )
 
-    output_file = temp_workspace / "conversions" / "test_conversion.txt"
+    output_file = temp_workspace / "conversions" / "test_conversion.json"
     assert not output_file.exists()
 
 
 def test_convert_rules_handles_empty_output_on_rule(temp_workspace, mock_config):
     """Test that convert_rules handles empty output on a rule."""
+
+    # Create a test rule with empty content
+    test_rule = temp_workspace / "rules" / "test.yml"
+    test_rule.write_text("")
+
     convert_rules(
         config=mock_config,
         path_prefix=temp_workspace,
         conversions_output_dir="conversions",
     )
 
-    output_file = temp_workspace / "conversions" / "test_conversion.txt"
+    output_file = temp_workspace / "conversions" / "test_conversion.json"
     assert not output_file.exists()
+
+
+def test_load_rule_valid_yaml():
+    """Test loading a valid YAML rule file."""
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
+        f.write(
+            """
+title: Test Rule
+description: Test description
+status: test
+level: low
+logsource:
+    category: test
+detection:
+    selection:
+        field: value
+    condition: selection
+        """
+        )
+        f.flush()
+
+        result = load_rules(f.name)
+
+    # Clean up the temporary file
+    os.unlink(f.name)
+
+    assert isinstance(result, list)
+    assert len(result) == 1
+    assert result[0]["title"] == "Test Rule"
+    assert result[0]["description"] == "Test description"
+    assert result[0]["status"] == "test"
+    assert result[0]["level"] == "low"
+    assert "logsource" in result[0]
+    assert "detection" in result[0]
+
+
+def test_load_rule_invalid_yaml():
+    """Test loading an invalid YAML file raises ValueError."""
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
+        f.write(
+            """
+title: Invalid Rule
+description: Invalid YAML
+    wrong:
+      indentation:
+    - not valid yaml
+        """
+        )
+        f.flush()
+
+        with pytest.raises(ValueError) as exc_info:
+            load_rules(f.name)
+
+    # Clean up the temporary file
+    os.unlink(f.name)
+
+    assert "Error loading rule file" in str(exc_info.value)
+
+
+def test_load_rule_nonexistent_file():
+    """Test loading a non-existent file raises ValueError."""
+    with pytest.raises(ValueError) as exc_info:
+        load_rules("nonexistent_file.yml")
+
+    assert "Error loading rule file" in str(exc_info.value)
+
+
+def test_load_rule_empty_file():
+    """Test loading an empty file."""
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
+        f.write("")
+        f.flush()
+
+        result = load_rules(f.name)
+
+    # Clean up the temporary file
+    os.unlink(f.name)
+
+    assert result == []

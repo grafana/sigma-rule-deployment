@@ -2,14 +2,17 @@
 
 import fnmatch
 import glob
+import orjson as json
 import os
-from pathlib import Path
 import shutil
 import traceback
+from pathlib import Path
+from typing import Any
 
-from dynaconf import Dynaconf
 from click.testing import CliRunner
+from dynaconf import Dynaconf
 from sigma.cli.convert import convert
+from yaml import FullLoader, load_all
 
 
 def convert_rules(
@@ -38,6 +41,7 @@ def convert_rules(
         ValueError: Invalid input file type.
         ValueError: No files matched the patterns after applying --file-pattern: {file_pattern}.
         ValueError: Pipeline file path must be relative to the project root.
+        ValueError: Error loading rule file {rule_file}.
     """
     # Check if the path_prefix is set
     if not path_prefix or path_prefix == Path("."):
@@ -133,7 +137,7 @@ def convert_rules(
                 )
 
         # Output file path
-        output_file = path_prefix / conversions_output_dir / Path(f"{name}.txt")
+        output_file = path_prefix / conversions_output_dir / Path(f"{name}.json")
 
         encoding = conversion.get("encoding", "utf-8")
 
@@ -144,77 +148,103 @@ def convert_rules(
             else:
                 pipelines.append(f"--pipeline={pipeline}")
 
-        args = [
-            "--target",
-            conversion.get("target", default_target),
-            *pipelines,
-            "--format",
-            conversion.get("format", default_format),
-            *(
-                ["--correlation-method", conversion["correlation-method"]]
-                if "correlation-method" in conversion
-                and conversion["correlation-method"]
-                else []
-            ),
-            *[f"--filter={f}" for f in conversion.get("filter", [])],
-            "--file-pattern",
-            file_pattern,
-            "--output",
-            "-",  # Output to stdout, so we can write to a file later
-            "--encoding",
-            encoding,
-            "--json-indent",
-            str(conversion.get("json-indent", "0")),
-            *[
-                f"--backend-option={k}={v}"
-                for k, v in conversion.get("backend-option", {}).items()
-            ],
-            *(
-                ["--without-pipeline"]
-                if conversion.get("without_pipelines", False)
-                else []
-            ),
-            *(
-                ["--disable-pipeline-check"]
-                if not conversion.get("pipeline-check", True)
-                else []
-            ),
-            *(
-                ["--skip-unsupported"]
-                if conversion.get("skip-unsupported", default_skip_unsupported)
-                else ["--fail-unsupported"]
-            ),
-            *filtered_files,
-        ]
+        filtered_output = []
 
-        runner = CliRunner()
-        result = runner.invoke(convert, args=args)
+        for input_file in filtered_files:
+            args = [
+                "--target",
+                conversion.get("target", default_target),
+                *pipelines,
+                "--format",
+                conversion.get("format", default_format),
+                *(
+                    ["--correlation-method", conversion["correlation-method"]]
+                    if "correlation-method" in conversion
+                    and conversion["correlation-method"]
+                    else []
+                ),
+                *[f"--filter={f}" for f in conversion.get("filter", [])],
+                "--file-pattern",
+                file_pattern,
+                "--output",
+                "-",  # Output to stdout, so we can write to a file later
+                "--encoding",
+                encoding,
+                "--json-indent",
+                str(conversion.get("json-indent", "0")),
+                *[
+                    f"--backend-option={k}={v}"
+                    for k, v in conversion.get("backend-option", {}).items()
+                ],
+                *(
+                    ["--without-pipeline"]
+                    if conversion.get("without_pipelines", False)
+                    else []
+                ),
+                *(
+                    ["--disable-pipeline-check"]
+                    if not conversion.get("pipeline-check", True)
+                    else []
+                ),
+                *(
+                    ["--skip-unsupported"]
+                    if conversion.get("skip-unsupported", default_skip_unsupported)
+                    else ["--fail-unsupported"]
+                ),
+                input_file,
+            ]
 
-        if result.exception and result.exc_info:
-            # If an exception occurred, print the exception and the traceback
-            # and the output of the command. We'll continue to run the next conversion.
-            print(f"Error during conversion:\n{result.exception}")
-            if render_traceback:
-                trace = "".join(traceback.format_tb(result.exc_info[2]))
-                print(f"Traceback:\n{trace}")
-            # If an error occurred, print the output of the command. Sometimes the output
-            # doesn't contain anything.
-            print(f"Output:\n{result.output}".strip())
-        else:
-            filtered_output = "\n".join(
-                line
-                for line in result.stdout.splitlines()
-                if "Parsing Sigma rules" not in line
-            )
+            runner = CliRunner()
+            result = runner.invoke(convert, args=args)
+
+            if result.exception and result.exc_info:
+                # If an exception occurred, print the exception and the traceback
+                # and the output of the command. We'll continue to run the next conversion.
+                print(f"Error during conversion:\n{result.exception}")
+                if render_traceback:
+                    trace = "".join(traceback.format_tb(result.exc_info[2]))
+                    print(f"Traceback:\n{trace}")
+                # If an error occurred, print the output of the command. Sometimes the output
+                # doesn't contain anything.
+                print(f"Output:\n{result.output}".strip())
+            else:
+                queries = [
+                    line
+                    for line in result.stdout.splitlines()
+                    if "Parsing Sigma rules" not in line
+                ]
+
+                if not queries:
+                    print("No output generated, skipping writing to file")
+                    continue
+
+                filtered_output.append(
+                    {
+                        "queries": queries,
+                        "conversion_name": name,
+                        "input_file": str(Path(input_file).relative_to(path_prefix)),
+                        "rules": load_rules(input_file),
+                        "output_file": str(Path(output_file).relative_to(path_prefix)),
+                    }
+                )
+
+                print(
+                    f"Converting {name} completed with exit code" f" {result.exit_code}"
+                )
 
             if not filtered_output:
                 print("No output generated, skipping writing to file")
                 continue
 
+            # Write the output to a file per conversion
             with open(output_file, "w", encoding=encoding) as f:
-                f.write(filtered_output.strip())
+                f.write(
+                    json.dumps(
+                        filtered_output,
+                        option=json.OPT_NAIVE_UTC,
+                    ).decode(encoding, "blackslashreplace")
+                )
 
-            print(f"Converting {name} completed with exit code" f" {result.exit_code}")
             print(f"Output written to {path_prefix / Path(output_file)}")
         print("-" * 80)
 
@@ -256,3 +286,28 @@ def is_path(path_string, file_pattern) -> bool:
         return True
 
     return False
+
+
+def load_rules(rule_file: str) -> list[dict[str, Any]]:
+    """Load a Sigma rule file(s).
+
+    Args:
+        rule_file (str): The path to the Sigma rule file in YAML format.
+
+    Returns:
+        Iterator[dict[str, Any]]: The Sigma rule file as a list of dictionaries.
+
+    Raises:
+        ValueError: Error loading rule file {rule_file}.
+    """
+
+    try:
+        with open(rule_file, "r", encoding="utf-8") as f:
+            rule_content = f.read()
+
+        # `load_all` is a generator function, hence the use of `list`
+        # to enumerate all items.
+        return list(load_all(rule_content, FullLoader))
+    except Exception as e:
+        print(f"{e.__class__.__name__}: Error loading rule file {rule_file}: {str(e)}")
+        raise ValueError(f"Error loading rule file {rule_file}") from e
