@@ -208,7 +208,7 @@ func (i *Integrator) Run() error {
 	}
 
 	for _, deletedFile := range i.removedFiles {
-		deploymentGlob := fmt.Sprintf("alert_rule_%s_*.json", strings.TrimSuffix(filepath.Base(deletedFile), ".txt"))
+		deploymentGlob := fmt.Sprintf("alert_rule_%s_*.json", strings.TrimSuffix(filepath.Base(deletedFile), ".json"))
 		deploymentFiles, err := fs.Glob(os.DirFS(i.config.Folders.DeploymentPath), deploymentGlob)
 		if err != nil {
 			return fmt.Errorf("error when searching for deployment files for %s: %v", deletedFile, err)

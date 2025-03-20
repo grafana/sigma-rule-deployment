@@ -114,7 +114,7 @@ func TestLoadConfig(t *testing.T) {
 			name:       "valid loki config, single added file",
 			configPath: "testdata/config.yml",
 			token:      "my-test-token",
-			added:      "testdata/conv.txt",
+			added:      "testdata/conv.json",
 			deleted:    "",
 			modified:   "",
 			expConfig: Configuration{
@@ -141,7 +141,7 @@ func TestLoadConfig(t *testing.T) {
 					OrgID:    1,
 				},
 			},
-			expAdd:    []string{"testdata/conv.txt"},
+			expAdd:    []string{"testdata/conv.json"},
 			expDel:    []string{},
 			wantError: false,
 		},
@@ -149,9 +149,9 @@ func TestLoadConfig(t *testing.T) {
 			name:       "valid es config, multiple files added, changed and removed",
 			configPath: "testdata/es-config.yml",
 			token:      "my-test-token",
-			added:      "testdata/conv1.txt",
-			deleted:    "testdata/conv2.txt testdata/conv4.txt",
-			modified:   "testdata/conv3.txt",
+			added:      "testdata/conv1.json",
+			deleted:    "testdata/conv2.json testdata/conv4.json",
+			modified:   "testdata/conv3.json",
 			expConfig: Configuration{
 				Folders: FoldersConfig{
 					ConversionPath: "./testdata",
@@ -191,8 +191,8 @@ func TestLoadConfig(t *testing.T) {
 					OrgID:    1,
 				},
 			},
-			expAdd:    []string{"testdata/conv1.txt", "testdata/conv3.txt"},
-			expDel:    []string{"testdata/conv2.txt", "testdata/conv4.txt"},
+			expAdd:    []string{"testdata/conv1.json", "testdata/conv3.json"},
+			expDel:    []string{"testdata/conv2.json", "testdata/conv4.json"},
 			wantError: false,
 		},
 		{
