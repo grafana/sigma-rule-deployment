@@ -1,7 +1,9 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/google/uuid"
@@ -303,4 +305,98 @@ func TestSummariseSigmaRules(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestIntegratorRun(t *testing.T) {
+	// Create temporary test directory
+	testDir := "testdata/test_run"
+	err := os.MkdirAll(testDir, 0755)
+	assert.NoError(t, err)
+	defer os.RemoveAll(testDir)
+
+	// Create conversion and deployment subdirectories
+	convPath := filepath.Join(testDir, "conv")
+	deployPath := filepath.Join(testDir, "deploy")
+	err = os.MkdirAll(convPath, 0755)
+	assert.NoError(t, err)
+	err = os.MkdirAll(deployPath, 0755)
+	assert.NoError(t, err)
+
+	// Create test configuration
+	config := Configuration{
+		Folders: FoldersConfig{
+			ConversionPath: convPath,
+			DeploymentPath: deployPath,
+		},
+		ConversionDefaults: ConversionConfig{
+			Target:     "loki",
+			DataSource: "test-datasource",
+		},
+		Conversions: []ConversionConfig{
+			{
+				Name:       "test_conv",
+				RuleGroup:  "Test Rules",
+				TimeWindow: "5m",
+			},
+		},
+		IntegratorConfig: IntegrationConfig{
+			FolderID: "test-folder",
+			OrgID:    1,
+		},
+	}
+
+	// Create test conversion output file
+	convOutput := []ConversionOutput{
+		{
+			Queries: []string{"{job=`test`} | json"},
+			Rules: []SigmaRule{
+				{
+					ID:    "996f8884-9144-40e7-ac63-29090ccde9a0",
+					Title: "Test Rule",
+				},
+			},
+		},
+	}
+	convBytes, err := json.Marshal(convOutput)
+	assert.NoError(t, err)
+	err = os.WriteFile(filepath.Join(convPath, "test_conv.json"), convBytes, 0644)
+	assert.NoError(t, err)
+
+	// Set up integrator
+	i := &Integrator{
+		config:       config,
+		addedFiles:   []string{filepath.Join(convPath, "test_conv.json")},
+		removedFiles: []string{},
+	}
+
+	// Run integration
+	err = i.Run()
+	assert.NoError(t, err)
+
+	// Verify output file exists
+	expectedFile := filepath.Join(deployPath, "alert_rule_test_conv_996f8884-9144-40e7-ac63-29090ccde9a0.json")
+	_, err = os.Stat(expectedFile)
+	assert.NoError(t, err)
+
+	// Verify file contents
+	rule := &definitions.ProvisionedAlertRule{}
+	err = readRuleFromFile(rule, expectedFile)
+	assert.NoError(t, err)
+
+	// Verify rule properties
+	assert.Equal(t, "996f8884-9144-40e7-ac63-29090ccde9a0", rule.UID)
+	assert.Equal(t, "Test Rule", rule.Title)
+	assert.Equal(t, "Test Rules", rule.RuleGroup)
+	assert.Equal(t, "test-datasource", rule.Data[0].DatasourceUID)
+	assert.Contains(t, string(rule.Data[0].Model), "sum(count_over_time({job=`test`} | json[$__auto]))")
+
+	// Test file removal
+	i.addedFiles = []string{}
+	i.removedFiles = []string{filepath.Join(convPath, "test_conv.json")}
+	err = i.Run()
+	assert.NoError(t, err)
+
+	// Verify file was removed
+	_, err = os.Stat(expectedFile)
+	assert.True(t, os.IsNotExist(err))
 }
