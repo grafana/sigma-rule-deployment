@@ -14,6 +14,44 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+type SigmaRule struct {
+	Title   string `json:"title"`
+	ID      string `json:"id"`
+	Related []struct {
+		ID   string `json:"id"`
+		Type string `json:"type"`
+	} `json:"related"`
+	Name        string   `json:"name"`
+	Taxonomy    string   `json:"taxonomy"`
+	Status      string   `json:"status"`
+	Description string   `json:"description"`
+	License     string   `json:"license"`
+	Author      string   `json:"author"`
+	References  []string `json:"references"`
+	Date        string   `json:"date"`
+	Modified    string   `json:"modified"`
+	Logsource   struct {
+		Category   string `json:"category"`
+		Product    string `json:"product"`
+		Service    string `json:"service"`
+		Definition string `json:"definition"`
+	} `json:"logsource"`
+	Detection      struct{} `json:"detection"`
+	Fields         []string `json:"fields"`
+	FalsePositives []string `json:"falsepositives"`
+	Level          string   `json:"level"`
+	Tags           []string `json:"tags"`
+	Scope          string   `json:"scope"`
+}
+
+type ConversionOutput struct {
+	Queries        []string    `json:"queries"`
+	ConversionName string      `json:"conversion_name"`
+	InputFile      string      `json:"input_file"`
+	Rules          []SigmaRule `json:"rules"`
+	OutputFile     string      `json:"output_file"`
+}
+
 type Integrator struct {
 	config Configuration
 
