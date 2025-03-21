@@ -175,6 +175,10 @@ func (i *Integrator) Run() error {
 		}
 	}
 
+	if i.config.DeployerConfig.TestQueries {
+		fmt.Println("Testing queries against the datasource")
+	}
+
 	for _, inputFile := range i.addedFiles {
 		conversionContent, err := ReadLocalFile(inputFile)
 		if err != nil {
@@ -225,35 +229,37 @@ func (i *Integrator) Run() error {
 				return err
 			}
 
-			// Test all queries against the datasource
-			var queryResults []QueryTestResult
-			for _, query := range queries {
-				resp, err := TestQuery(
-					query,
-					config.DataSource,
-					i.config.DeployerConfig.GrafanaInstance,
-					os.Getenv("INTEGRATOR_GRAFANA_SA_TOKEN"),
-					timeoutDuration,
-				)
-				if err != nil {
-					return fmt.Errorf("error testing query %s: %v", query, err)
+			if i.config.DeployerConfig.TestQueries {
+				// Test all queries against the datasource
+				var queryResults []QueryTestResult
+				for _, query := range queries {
+					resp, err := TestQuery(
+						query,
+						config.DataSource,
+						i.config.DeployerConfig.GrafanaInstance,
+						os.Getenv("INTEGRATOR_GRAFANA_SA_TOKEN"),
+						timeoutDuration,
+					)
+					if err != nil {
+						return fmt.Errorf("error testing query %s: %v", query, err)
+					}
+
+					queryResults = append(queryResults, QueryTestResult{
+						Query:      query,
+						Datasource: config.DataSource,
+						Result:     json.RawMessage(resp),
+					})
 				}
 
-				queryResults = append(queryResults, QueryTestResult{
-					Query:      query,
-					Datasource: config.DataSource,
-					Result:     json.RawMessage(resp),
-				})
-			}
+				// Marshal all query results into a single JSON object
+				resultsJSON, err := json.Marshal(queryResults)
+				if err != nil {
+					return fmt.Errorf("error marshalling query results: %v", err)
+				}
 
-			// Marshal all query results into a single JSON object
-			resultsJSON, err := json.Marshal(queryResults)
-			if err != nil {
-				return fmt.Errorf("error marshalling query results: %v", err)
+				// Set a single output with all results
+				SetOutput("test_query_results", string(resultsJSON))
 			}
-
-			// Set a single output with all results
-			SetOutput("test_query_results", string(resultsJSON))
 		}
 	}
 

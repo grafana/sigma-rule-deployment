@@ -52,3 +52,4 @@ integration:
 deployment:
   grafana_instance: https://myinstance.grafana.com
   timeout: 10s # HTTP request timeout for testing queries
+  test_queries: true # Whether to test the queries against the datasource

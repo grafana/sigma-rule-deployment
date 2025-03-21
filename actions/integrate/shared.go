@@ -33,6 +33,7 @@ type IntegrationConfig struct {
 type DeploymentConfig struct {
 	GrafanaInstance string `yaml:"grafana_instance"`
 	Timeout         string `yaml:"timeout"`
+	TestQueries     bool   `yaml:"test_queries"`
 }
 
 type Configuration struct {
