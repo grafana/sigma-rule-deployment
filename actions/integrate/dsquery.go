@@ -6,23 +6,43 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"time"
 )
 
-type Datasource struct {
-	Type string `json:"type,omitempty"`
-	UID  string `json:"uid"`
+type GrafanaDatasource struct {
+	ID                int             `json:"id,omitempty"`
+	UID               string          `json:"uid"`
+	OrgID             int             `json:"orgId,omitempty"`
+	Name              string          `json:"name,omitempty"`
+	Type              string          `json:"type"`
+	TypeLogoURL       string          `json:"typeLogoUrl,omitempty"`
+	Access            string          `json:"access,omitempty"`
+	URL               string          `json:"url,omitempty"`
+	Password          string          `json:"password,omitempty"`
+	User              string          `json:"user,omitempty"`
+	Database          string          `json:"database,omitempty"`
+	BasicAuth         bool            `json:"basicAuth,omitempty"`
+	BasicAuthUser     string          `json:"basicAuthUser,omitempty"`
+	BasicAuthPassword string          `json:"basicAuthPassword,omitempty"`
+	WithCredentials   bool            `json:"withCredentials,omitempty"`
+	IsDefault         bool            `json:"isDefault,omitempty"`
+	JSONData          json.RawMessage `json:"jsonData,omitempty"`
+	SecureJSONFields  map[string]bool `json:"secureJsonFields,omitempty"`
+	Version           int             `json:"version,omitempty"`
+	ReadOnly          bool            `json:"readOnly,omitempty"`
 }
 
 type Query struct {
-	RefID         string     `json:"refId"`
-	Expr          string     `json:"expr"`
-	QueryType     string     `json:"queryType"`
-	Datasource    Datasource `json:"datasource"`
-	EditorMode    string     `json:"editorMode,omitempty"`
-	MaxLines      int        `json:"maxLines"`
-	Format        string     `json:"format"`
-	IntervalMs    int        `json:"intervalMs"`
-	MaxDataPoints int        `json:"maxDataPoints"`
+	RefID         string            `json:"refId"`
+	Expr          string            `json:"expr"`
+	QueryType     string            `json:"queryType"`
+	Datasource    GrafanaDatasource `json:"datasource"`
+	EditorMode    string            `json:"editorMode,omitempty"`
+	MaxLines      int               `json:"maxLines"`
+	Format        string            `json:"format"`
+	IntervalMs    int               `json:"intervalMs"`
+	MaxDataPoints int               `json:"maxDataPoints"`
 }
 
 type Body struct {
@@ -31,25 +51,33 @@ type Body struct {
 	To      string  `json:"to"`
 }
 
-// TODO: make it configurable
-func TestQuery(query_str, dsUID, url, apiKey string) ([]byte, error) {
+func TestQuery(
+	query, dsName, baseURL, apiKey string,
+	timeout time.Duration,
+) ([]byte, error) {
+	datasource, err := GetDatasourceByName(dsName, baseURL, apiKey, timeout)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get datasource: %v", err)
+	}
+
 	body := Body{
 		Queries: []Query{
 			{
 				RefID:     "A",
-				Expr:      query_str,
+				Expr:      query,
 				QueryType: "range",
-				Datasource: Datasource{
-					Type: "loki",
-					UID:  dsUID,
+				Datasource: GrafanaDatasource{
+					Type: datasource.Type,
+					UID:  datasource.UID,
 				},
-				MaxLines:      1000,
+				MaxLines:      100,
 				Format:        "time_series",
 				IntervalMs:    2000,
 				MaxDataPoints: 100,
 			},
 		},
-		From: "now-15m",
+		// Query for the last hour
+		From: "now-1h",
 		To:   "now",
 	}
 
@@ -58,7 +86,12 @@ func TestQuery(query_str, dsUID, url, apiKey string) ([]byte, error) {
 		return nil, err
 	}
 
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonBody))
+	dsQueryURL, err := url.JoinPath(baseURL, "api/ds/query")
+	if err != nil {
+		return nil, fmt.Errorf("failed to construct API URL: %v", err)
+	}
+
+	req, err := http.NewRequest("POST", dsQueryURL, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %v", err)
 	}
@@ -67,7 +100,10 @@ func TestQuery(query_str, dsUID, url, apiKey string) ([]byte, error) {
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
 
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: timeout,
+	}
+
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute request: %v", err)
@@ -80,8 +116,64 @@ func TestQuery(query_str, dsUID, url, apiKey string) ([]byte, error) {
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("HTTP error: %s, Response: %s", resp.Status, string(responseData))
+		return nil, fmt.Errorf("HTTP error %d when querying datasource: %s, Response: %s",
+			resp.StatusCode, resp.Status, string(responseData))
+	}
+
+	if len(responseData) == 0 {
+		return nil, fmt.Errorf("empty response from datasource")
+	}
+
+	var jsonResponse interface{}
+	if err := json.Unmarshal(responseData, &jsonResponse); err != nil {
+		return nil, fmt.Errorf("invalid JSON response: %v", err)
 	}
 
 	return responseData, nil
+}
+
+func GetDatasourceByName(dsName, baseURL, apiKey string, timeout time.Duration) (*GrafanaDatasource, error) {
+	dsURL, err := url.JoinPath(baseURL, "api/datasources/name", dsName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to construct API URL: %v", err)
+	}
+
+	req, err := http.NewRequest("GET", dsURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %v", err)
+	}
+
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{
+		Timeout: timeout,
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	responseData, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %v", err)
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("HTTP error getting datasource: %s, Response: %s", resp.Status, string(responseData))
+	}
+
+	if len(responseData) == 0 {
+		return nil, fmt.Errorf("empty response from datasource")
+	}
+
+	var datasource GrafanaDatasource
+	err = json.Unmarshal(responseData, &datasource)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response body: %v", err)
+	}
+
+	return &datasource, nil
 }

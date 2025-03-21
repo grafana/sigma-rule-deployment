@@ -63,6 +63,12 @@ type Integrator struct {
 	removedFiles []string
 }
 
+type QueryTestResult struct {
+	Query      string          `json:"query"`
+	Datasource string          `json:"datasource"`
+	Result     json.RawMessage `json:"result"`
+}
+
 func main() {
 	integrator := NewIntegrator()
 	if err := integrator.LoadConfig(); err != nil {
@@ -219,17 +225,35 @@ func (i *Integrator) Run() error {
 				return err
 			}
 
-			resp, err := TestQuery(
-				query,
-				config.DataSource,
-				i.config.DeployerConfig.GrafanaInstance,
-				// FIXME: where should I get the API key from?
-				i.config.DeployerConfig.GrafanaInstance,
-			)
-			if err != nil {
-				return err
+			// Test all queries against the datasource
+			var queryResults []QueryTestResult
+			for _, query := range queries {
+				resp, err := TestQuery(
+					query,
+					config.DataSource,
+					i.config.DeployerConfig.GrafanaInstance,
+					os.Getenv("INTEGRATOR_GRAFANA_SA_TOKEN"),
+					timeoutDuration,
+				)
+				if err != nil {
+					return fmt.Errorf("error testing query %s: %v", query, err)
+				}
+
+				queryResults = append(queryResults, QueryTestResult{
+					Query:      query,
+					Datasource: config.DataSource,
+					Result:     json.RawMessage(resp),
+				})
 			}
-			fmt.Println(string(resp))
+
+			// Marshal all query results into a single JSON object
+			resultsJSON, err := json.Marshal(queryResults)
+			if err != nil {
+				return fmt.Errorf("error marshalling query results: %v", err)
+			}
+
+			// Set a single output with all results
+			SetOutput("test_query_results", string(resultsJSON))
 		}
 	}
 
