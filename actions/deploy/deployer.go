@@ -389,7 +389,7 @@ func (d *Deployer) createAlert(ctx context.Context, content string) (string, err
 		return "", err
 	}
 
-	if res.StatusCode != 201 {
+	if res.StatusCode != http.StatusCreated {
 		log.Printf("Can't create alert. Status: %d, Message: %s", res.StatusCode, resp.Message)
 		return "", fmt.Errorf("error creating alert: returned status %s", res.Status)
 	}
@@ -424,7 +424,7 @@ func (d *Deployer) updateAlert(ctx context.Context, content string) (string, err
 	defer res.Body.Close()
 
 	// Check the response
-	if res.StatusCode != 200 {
+	if res.StatusCode != http.StatusOK {
 		log.Printf("Can't update alert. Status: %d", res.StatusCode)
 		return "", fmt.Errorf("error updating alert: returned status %s", res.Status)
 	}
@@ -451,7 +451,7 @@ func (d *Deployer) updateAlertGroupInterval(ctx context.Context, folderUid strin
 	defer res.Body.Close()
 
 	// Check the response
-	if res.StatusCode != 200 {
+	if res.StatusCode != http.StatusOK {
 		log.Printf("Can't find alert group. Status: %d", res.StatusCode)
 		return fmt.Errorf("error finding alert group %s/%s: returned status %s", folderUid, group, res.Status)
 	}
@@ -483,7 +483,7 @@ func (d *Deployer) updateAlertGroupInterval(ctx context.Context, folderUid strin
 		}
 		defer res.Body.Close()
 
-		if res.StatusCode != 200 {
+		if res.StatusCode != http.StatusOK {
 			log.Printf("Can't update alert group interval. Status: %d", res.StatusCode)
 			return fmt.Errorf("error updating alert group interval %s/%s: returned status %s", folderUid, group, res.Status)
 		}
@@ -510,7 +510,7 @@ func (d *Deployer) deleteAlert(ctx context.Context, uid string) (string, error) 
 	defer res.Body.Close()
 
 	// Check the response
-	if res.StatusCode != 204 {
+	if res.StatusCode != http.StatusNoContent {
 		log.Printf("Can't delete alert. Status: %d", res.StatusCode)
 		return "", fmt.Errorf("error deleting alert: returned status %s", res.Status)
 	}
@@ -543,7 +543,7 @@ func (d *Deployer) listAlerts(ctx context.Context) ([]string, error) {
 	defer res.Body.Close()
 
 	// Check the response code
-	if res.StatusCode != 200 {
+	if res.StatusCode != http.StatusOK {
 		log.Printf("Can't list alerts. Status: %d", res.StatusCode)
 		return []string{}, fmt.Errorf("error listing alert: returned status %s", res.Status)
 	}
