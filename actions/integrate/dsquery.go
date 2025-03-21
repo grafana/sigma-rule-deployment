@@ -10,6 +10,18 @@ import (
 	"time"
 )
 
+// DatasourceQuery is an interface for executing Grafana datasource queries
+type DatasourceQuery interface {
+	GetDatasource(dsName, baseURL, apiKey string, timeout time.Duration) (*GrafanaDatasource, error)
+	ExecuteQuery(query, dsName, baseURL, apiKey string, timeout time.Duration) ([]byte, error)
+}
+
+// HTTPDatasourceQuery is the default implementation of DatasourceQuery
+type HTTPDatasourceQuery struct{}
+
+// DefaultDatasourceQuery is the default implementation used throughout the application
+var DefaultDatasourceQuery DatasourceQuery = &HTTPDatasourceQuery{}
+
 type GrafanaDatasource struct {
 	ID                int             `json:"id,omitempty"`
 	UID               string          `json:"uid"`
@@ -51,11 +63,25 @@ type Body struct {
 	To      string  `json:"to"`
 }
 
+// TestQuery uses the default executor to query a datasource
 func TestQuery(
 	query, dsName, baseURL, apiKey string,
 	timeout time.Duration,
 ) ([]byte, error) {
-	datasource, err := GetDatasourceByName(dsName, baseURL, apiKey, timeout)
+	return DefaultDatasourceQuery.ExecuteQuery(query, dsName, baseURL, apiKey, timeout)
+}
+
+// GetDatasourceByName uses the default executor to get datasource information
+func GetDatasourceByName(dsName, baseURL, apiKey string, timeout time.Duration) (*GrafanaDatasource, error) {
+	return DefaultDatasourceQuery.GetDatasource(dsName, baseURL, apiKey, timeout)
+}
+
+// ExecuteQuery implementation for HTTPDatasourceQuery
+func (h *HTTPDatasourceQuery) ExecuteQuery(
+	query, dsName, baseURL, apiKey string,
+	timeout time.Duration,
+) ([]byte, error) {
+	datasource, err := h.GetDatasource(dsName, baseURL, apiKey, timeout)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get datasource: %v", err)
 	}
@@ -132,7 +158,8 @@ func TestQuery(
 	return responseData, nil
 }
 
-func GetDatasourceByName(dsName, baseURL, apiKey string, timeout time.Duration) (*GrafanaDatasource, error) {
+// GetDatasource implementation for HTTPDatasourceQuery
+func (h *HTTPDatasourceQuery) GetDatasource(dsName, baseURL, apiKey string, timeout time.Duration) (*GrafanaDatasource, error) {
 	dsURL, err := url.JoinPath(baseURL, "api/datasources/name", dsName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to construct API URL: %v", err)
