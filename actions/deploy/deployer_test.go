@@ -188,6 +188,7 @@ func TestUpdateAlert(t *testing.T) {
 			endpoint: server.URL + "/",
 			saToken:  "my-test-token",
 		},
+		client: server.Client(),
 	}
 
 	uid, err := d.updateAlert(ctx, `{"uid":"abcd123","title":"Test alert", "folderUID": "efgh456", "orgID": 23}`)
@@ -225,6 +226,7 @@ func TestCreateAlert(t *testing.T) {
 			endpoint: server.URL + "/",
 			saToken:  "my-test-token",
 		},
+		client: server.Client(),
 	}
 
 	uid, err := d.createAlert(ctx, `{"uid":"abcd123","title":"Test alert", "folderUID": "efgh456", "orgID": 23}`)
@@ -259,6 +261,7 @@ func TestDeleteAlert(t *testing.T) {
 			endpoint: server.URL + "/",
 			saToken:  "my-test-token",
 		},
+		client: server.Client(),
 	}
 
 	uid, err := d.deleteAlert(ctx, "abcd123")
@@ -331,6 +334,7 @@ func TestListAlerts(t *testing.T) {
 			folderUid: "efgh456",
 			orgId:     23,
 		},
+		client: server.Client(),
 	}
 
 	retrievedAlerts, err := d.listAlerts(ctx)
@@ -382,6 +386,9 @@ func TestFakeAlertFilename(t *testing.T) {
 		config: deploymentConfig{
 			alertPath: "deployments",
 		},
+		client: &http.Client{
+			Timeout: requestTimeOut,
+		},
 	}
 	assert.Equal(t, "abcd123", getAlertUidFromFilename(d.fakeAlertFilename("abcd123")))
 }
@@ -392,6 +399,9 @@ func TestListAlertsInDeploymentFolder(t *testing.T) {
 			alertPath: "testdata",
 			folderUid: "abcdef123",
 			orgId:     1,
+		},
+		client: &http.Client{
+			Timeout: requestTimeOut,
 		},
 	}
 	alerts, err := d.listAlertsInDeploymentFolder()
