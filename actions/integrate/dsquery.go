@@ -124,7 +124,7 @@ func TestQuery(
 		return nil, fmt.Errorf("empty response from datasource")
 	}
 
-	var jsonResponse interface{}
+	var jsonResponse any
 	if err := json.Unmarshal(responseData, &jsonResponse); err != nil {
 		return nil, fmt.Errorf("invalid JSON response: %v", err)
 	}
