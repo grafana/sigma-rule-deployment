@@ -239,11 +239,13 @@ def convert_rules(
 
             # Write the output to a file per conversion
             with open(output_file, "w", encoding=encoding) as f:
+                options = json.OPT_NAIVE_UTC
+                if pretty_print:
+                    options = options | json.OPT_INDENT_2
                 f.write(
                     json.dumps(
                         filtered_output,
-                        option=json.OPT_NAIVE_UTC,
-                        indent=2 if pretty_print else None,
+                        option=options,
                     ).decode(encoding, "blackslashreplace")
                 )
 
