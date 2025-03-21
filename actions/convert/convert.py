@@ -184,8 +184,6 @@ def convert_rules(
                 "-",  # Output to stdout, so we can write to a file later
                 "--encoding",
                 encoding,
-                "--json-indent",
-                str(conversion.get("json-indent", "0")),
                 *[
                     f"--backend-option={k}={v}"
                     for k, v in conversion.get(
@@ -214,12 +212,12 @@ def convert_rules(
                 *(
                     [
                         "--json-indent",
-                        conversion.get("json_indent"),
+                        str(conversion.get("json_indent")),
                     ]
                     if conversion.get("json_indent")
                     else [
                         "--json-indent",
-                        default_json_indent,
+                        str(default_json_indent),
                     ]
                 ),
                 *(["--verbose"] if conversion.get("verbose", verbose) else []),
