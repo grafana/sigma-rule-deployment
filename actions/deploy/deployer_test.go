@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -188,7 +189,8 @@ func TestUpdateAlert(t *testing.T) {
 			endpoint: server.URL + "/",
 			saToken:  "my-test-token",
 		},
-		client: server.Client(),
+		client:         server.Client(),
+		groupsToUpdate: map[string]bool{},
 	}
 
 	uid, err := d.updateAlert(ctx, `{"uid":"abcd123","title":"Test alert", "folderUID": "efgh456", "orgID": 23}`)
@@ -226,7 +228,8 @@ func TestCreateAlert(t *testing.T) {
 			endpoint: server.URL + "/",
 			saToken:  "my-test-token",
 		},
-		client: server.Client(),
+		client:         server.Client(),
+		groupsToUpdate: map[string]bool{},
 	}
 
 	uid, err := d.createAlert(ctx, `{"uid":"abcd123","title":"Test alert", "folderUID": "efgh456", "orgID": 23}`)
@@ -343,6 +346,7 @@ func TestListAlerts(t *testing.T) {
 }
 
 func TestLoadConfig(t *testing.T) {
+	// Set up environment variables
 	os.Setenv("CONFIG_PATH", "test_config.yml")
 	defer os.Unsetenv("CONFIG_PATH")
 	os.Setenv("DEPLOYER_GRAFANA_SA_TOKEN", "my-test-token")
@@ -354,17 +358,22 @@ func TestLoadConfig(t *testing.T) {
 	os.Setenv("DELETED_FILES", "deployments/alert_rule_conversion_opqr123.json deployments/alert_rule_conversion_stuv123.json")
 	defer os.Unsetenv("DELETED_FILES")
 	os.Setenv("MODIFIED_FILES", "deployments/alert_rule_conversion_wxyz123.json deployments/alert_rule_conversion_123456789.json")
-	defer os.Unsetenv("UPDATED_FILES")
+	defer os.Unsetenv("MODIFIED_FILES")
 
 	ctx := context.Background()
 	d := NewDeployer()
-	d.LoadConfig(ctx)
+	err := d.LoadConfig(ctx)
+	assert.NoError(t, err)
+
+	// Test basic config values
 	assert.Equal(t, "my-test-token", d.config.saToken)
 	assert.Equal(t, "https://myinstance.grafana.com/", d.config.endpoint)
 	assert.Equal(t, "deployments", d.config.alertPath)
 	assert.Equal(t, "abcdef123", d.config.folderUid)
 	assert.Equal(t, int64(23), d.config.orgId)
 	assert.Equal(t, false, d.config.freshDeploy)
+
+	// Test alert file lists
 	assert.Equal(t, []string{
 		"deployments/alert_rule_conversion_abcd123.json",
 		"deployments/alert_rule_conversion_def3456789.json",
@@ -379,6 +388,15 @@ func TestLoadConfig(t *testing.T) {
 		"deployments/alert_rule_conversion_wxyz123.json",
 		"deployments/alert_rule_conversion_123456789.json",
 	}, d.config.alertsToUpdate)
+
+	// Test group intervals
+	expectedIntervals := map[string]int64{
+		"group1": 600,   // 10m in seconds
+		"group2": 3600,  // 1h in seconds
+		"group3": 21600, // 6h (default) in seconds
+	}
+
+	assert.Equal(t, expectedIntervals, d.config.groupsIntervals)
 }
 
 func TestFakeAlertFilename(t *testing.T) {
@@ -407,4 +425,151 @@ func TestListAlertsInDeploymentFolder(t *testing.T) {
 	alerts, err := d.listAlertsInDeploymentFolder()
 	assert.NoError(t, err)
 	assert.Equal(t, []string{"testdata/alert_rule_conversion_u123abc.json", "testdata/alert_rule_conversion_u456def.json", "testdata/alert_rule_conversion_u789ghi.json"}, alerts)
+}
+
+func TestUpdateAlertGroupInterval(t *testing.T) {
+	testCases := []struct {
+		name               string
+		folderUid          string
+		group              string
+		interval           int64
+		currentInterval    int64
+		getStatusCode      int
+		putStatusCode      int
+		expectError        bool
+		expectPutRequest   bool
+		responseBody       string
+		expectedRequestURL string
+	}{
+		{
+			name:               "successful interval update",
+			folderUid:          "folder123",
+			group:              "group1",
+			interval:           600, // 10m
+			currentInterval:    300, // 5m
+			getStatusCode:      http.StatusOK,
+			putStatusCode:      http.StatusOK,
+			expectError:        false,
+			expectPutRequest:   true,
+			responseBody:       `{"folderUID":"folder123","interval":300,"rules":[],"title":"group1"}`,
+			expectedRequestURL: "/api/v1/provisioning/folder/folder123/rule-groups/group1",
+		},
+		{
+			name:               "interval already set correctly",
+			folderUid:          "folder123",
+			group:              "group2",
+			interval:           600, // 10m
+			currentInterval:    600, // 10m (already correct)
+			getStatusCode:      http.StatusOK,
+			putStatusCode:      http.StatusOK, // Should not be used
+			expectError:        false,
+			expectPutRequest:   false, // No PUT should be made
+			responseBody:       `{"folderUID":"folder123","interval":600,"rules":[],"title":"group2"}`,
+			expectedRequestURL: "/api/v1/provisioning/folder/folder123/rule-groups/group2",
+		},
+		{
+			name:               "get request returns error",
+			folderUid:          "folder123",
+			group:              "group3",
+			interval:           600,
+			currentInterval:    300,
+			getStatusCode:      http.StatusNotFound,
+			putStatusCode:      http.StatusOK, // Should not be used
+			expectError:        true,
+			expectPutRequest:   false,
+			responseBody:       `{"message":"Alert rule group not found"}`,
+			expectedRequestURL: "/api/v1/provisioning/folder/folder123/rule-groups/group3",
+		},
+		{
+			name:               "put request returns error",
+			folderUid:          "folder123",
+			group:              "group4",
+			interval:           600,
+			currentInterval:    300,
+			getStatusCode:      http.StatusOK,
+			putStatusCode:      http.StatusBadRequest,
+			expectError:        true,
+			expectPutRequest:   true,
+			responseBody:       `{"folderUID":"folder123","interval":300,"rules":[],"title":"group4"}`,
+			expectedRequestURL: "/api/v1/provisioning/folder/folder123/rule-groups/group4",
+		},
+		{
+			name:               "special characters in folder and group",
+			folderUid:          "folder-with_special.chars",
+			group:              "group-with_special.chars",
+			interval:           3600, // 1h
+			currentInterval:    600,  // 10m
+			getStatusCode:      http.StatusOK,
+			putStatusCode:      http.StatusOK,
+			expectError:        false,
+			expectPutRequest:   true,
+			responseBody:       `{"folderUID":"folder-with_special.chars","interval":600,"rules":[],"title":"group-with_special.chars"}`,
+			expectedRequestURL: "/api/v1/provisioning/folder/folder-with_special.chars/rule-groups/group-with_special.chars",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			putRequestMade := false
+
+			// Create a test server that validates our requests
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				// Check the URL is what we expect
+				assert.Equal(t, tc.expectedRequestURL, r.URL.Path)
+
+				// Validate authorization header
+				assert.Equal(t, "Bearer test-token", r.Header.Get("Authorization"))
+
+				if r.Method == http.MethodGet {
+					// Return the mocked response for GET
+					w.WriteHeader(tc.getStatusCode)
+					w.Write([]byte(tc.responseBody))
+				} else if r.Method == http.MethodPut {
+					// Mark that a PUT request was made
+					putRequestMade = true
+
+					// Validate the PUT request contains the updated interval
+					body, err := io.ReadAll(r.Body)
+					assert.NoError(t, err)
+
+					var updatedGroup AlertRuleGroup
+					err = json.Unmarshal(body, &updatedGroup)
+					assert.NoError(t, err)
+
+					// Verify interval was updated
+					assert.Equal(t, tc.interval, updatedGroup.Interval)
+
+					// Return status code based on test case
+					w.WriteHeader(tc.putStatusCode)
+				} else {
+					t.Errorf("Unexpected HTTP method: %s", r.Method)
+					w.WriteHeader(http.StatusMethodNotAllowed)
+				}
+			}))
+			defer server.Close()
+
+			// Create a deployer with mocked client and config
+			d := Deployer{
+				config: deploymentConfig{
+					endpoint: server.URL + "/",
+					saToken:  "test-token",
+				},
+				client: server.Client(),
+			}
+
+			// Call the function being tested
+			err := d.updateAlertGroupInterval(context.Background(), tc.folderUid, tc.group, tc.interval)
+
+			// Verify error expectation
+			if tc.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+
+			// Verify if PUT request was made or not
+			assert.Equal(t, tc.expectPutRequest, putRequestMade,
+				"Expected PUT request to be %v but was %v", tc.expectPutRequest, putRequestMade)
+		})
+	}
 }
