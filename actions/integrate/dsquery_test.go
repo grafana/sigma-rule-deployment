@@ -49,7 +49,7 @@ func (m *MockDatasourceQuery) GetDatasource(dsName, baseURL, apiKey string, time
 	}, nil
 }
 
-func (m *MockDatasourceQuery) ExecuteQuery(query, dsName, baseURL, apiKey string, timeout time.Duration) ([]byte, error) {
+func (m *MockDatasourceQuery) ExecuteQuery(query, dsName, baseURL, apiKey, from, to string, timeout time.Duration) ([]byte, error) {
 	m.execQueries = append(m.execQueries, query)
 
 	if response, exists := m.mockResponses[query]; exists {
@@ -138,7 +138,7 @@ func TestTestQuery(t *testing.T) {
 	}()
 
 	// Test successful case
-	result, err := TestQuery("{job=\"loki\"} |= \"error\"", "test-datasource", "http://grafana:3000", "test-api-key", 5*time.Second)
+	result, err := TestQuery("{job=\"loki\"} |= \"error\"", "test-datasource", "http://grafana:3000", "test-api-key", "now-1h", "now", 5*time.Second)
 	require.NoError(t, err)
 
 	// Verify the result contains expected data
@@ -158,7 +158,7 @@ func TestTestQuery(t *testing.T) {
 	assert.Contains(t, mockQuery.execQueries, "{job=\"loki\"} |= \"error\"")
 
 	// Test with a different query that uses the default response
-	result, err = TestQuery("{job=\"loki\"} |= \"debug\"", "test-datasource", "http://grafana:3000", "test-api-key", 5*time.Second)
+	result, err = TestQuery("{job=\"loki\"} |= \"debug\"", "test-datasource", "http://grafana:3000", "test-api-key", "now-1h", "now", 5*time.Second)
 	require.NoError(t, err)
 
 	// Verify the query was made

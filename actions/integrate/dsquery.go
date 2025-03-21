@@ -13,7 +13,7 @@ import (
 // DatasourceQuery is an interface for executing Grafana datasource queries
 type DatasourceQuery interface {
 	GetDatasource(dsName, baseURL, apiKey string, timeout time.Duration) (*GrafanaDatasource, error)
-	ExecuteQuery(query, dsName, baseURL, apiKey string, timeout time.Duration) ([]byte, error)
+	ExecuteQuery(query, dsName, baseURL, apiKey, from, to string, timeout time.Duration) ([]byte, error)
 }
 
 // HTTPDatasourceQuery is the default implementation of DatasourceQuery
@@ -65,10 +65,10 @@ type Body struct {
 
 // TestQuery uses the default executor to query a datasource
 func TestQuery(
-	query, dsName, baseURL, apiKey string,
+	query, dsName, baseURL, apiKey, from, to string,
 	timeout time.Duration,
 ) ([]byte, error) {
-	return DefaultDatasourceQuery.ExecuteQuery(query, dsName, baseURL, apiKey, timeout)
+	return DefaultDatasourceQuery.ExecuteQuery(query, dsName, baseURL, apiKey, from, to, timeout)
 }
 
 // GetDatasourceByName uses the default executor to get datasource information
@@ -78,7 +78,7 @@ func GetDatasourceByName(dsName, baseURL, apiKey string, timeout time.Duration) 
 
 // ExecuteQuery implementation for HTTPDatasourceQuery
 func (h *HTTPDatasourceQuery) ExecuteQuery(
-	query, dsName, baseURL, apiKey string,
+	query, dsName, baseURL, apiKey, from, to string,
 	timeout time.Duration,
 ) ([]byte, error) {
 	datasource, err := h.GetDatasource(dsName, baseURL, apiKey, timeout)
@@ -102,9 +102,8 @@ func (h *HTTPDatasourceQuery) ExecuteQuery(
 				MaxDataPoints: 100,
 			},
 		},
-		// Query for the last hour
-		From: "now-1h",
-		To:   "now",
+		From: from,
+		To:   to,
 	}
 
 	jsonBody, err := json.Marshal(body)

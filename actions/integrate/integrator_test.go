@@ -195,6 +195,8 @@ func TestLoadConfig(t *testing.T) {
 				IntegratorConfig: IntegrationConfig{
 					FolderID: "XXXX",
 					OrgID:    1,
+					From:     "now-1h",
+					To:       "now",
 				},
 			},
 			expAdd:    []string{"testdata/conv.json"},
@@ -245,6 +247,8 @@ func TestLoadConfig(t *testing.T) {
 				IntegratorConfig: IntegrationConfig{
 					FolderID: "XXXX",
 					OrgID:    1,
+					From:     "now-1h",
+					To:       "now",
 				},
 			},
 			expAdd:    []string{"testdata/conv1.json", "testdata/conv3.json"},
@@ -596,7 +600,7 @@ func (t *testDatasourceQuery) GetDatasource(dsName, baseURL, apiKey string, time
 	}, nil
 }
 
-func (t *testDatasourceQuery) ExecuteQuery(query, dsName, baseURL, apiKey string, timeout time.Duration) ([]byte, error) {
+func (t *testDatasourceQuery) ExecuteQuery(query, dsName, baseURL, apiKey, from, to string, timeout time.Duration) ([]byte, error) {
 	t.queryLog = append(t.queryLog, query)
 	t.datasourceLog = append(t.datasourceLog, dsName)
 
@@ -662,13 +666,15 @@ func TestIntegratorWithQueryTesting(t *testing.T) {
 			},
 		},
 		IntegratorConfig: IntegrationConfig{
-			FolderID: "test-folder",
-			OrgID:    1,
+			FolderID:    "test-folder",
+			OrgID:       1,
+			TestQueries: true,
+			From:        "now-1h",
+			To:          "now",
 		},
 		DeployerConfig: DeploymentConfig{
 			GrafanaInstance: "https://test.grafana.com",
 			Timeout:         "5s",
-			TestQueries:     true,
 		},
 	}
 

@@ -120,6 +120,15 @@ func (i *Integrator) LoadConfig() error {
 		}
 	}
 
+	// If from and to are not provided, use the default values
+	// to query for the last hour.
+	if i.config.IntegratorConfig.From == "" {
+		i.config.IntegratorConfig.From = "now-1h"
+	}
+	if i.config.IntegratorConfig.To == "" {
+		i.config.IntegratorConfig.To = "now"
+	}
+
 	addedFiles := strings.Split(os.Getenv("ADDED_FILES"), " ")
 	deletedFiles := strings.Split(os.Getenv("DELETED_FILES"), " ")
 	modifiedFiles := strings.Split(os.Getenv("MODIFIED_FILES"), " ")
@@ -238,6 +247,8 @@ func (i *Integrator) Run() error {
 						config.DataSource,
 						i.config.DeployerConfig.GrafanaInstance,
 						os.Getenv("INTEGRATOR_GRAFANA_SA_TOKEN"),
+						i.config.IntegratorConfig.From,
+						i.config.IntegratorConfig.To,
 						timeoutDuration,
 					)
 					if err != nil {
