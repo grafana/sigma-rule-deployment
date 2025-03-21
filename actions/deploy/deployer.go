@@ -65,6 +65,13 @@ type Alert struct {
 	OrgID     int64  `json:"orgID"`
 }
 
+type AlertRuleGroup struct {
+	FolderUID string `json:"folderUID"`
+	Interval  int64  `json:"interval"`
+	Rules     any    `json:"rules"`
+	Title     string `json:"title"`
+}
+
 func main() {
 	ctx := context.Background()
 
@@ -383,6 +390,68 @@ func (d *Deployer) updateAlert(ctx context.Context, content string) (string, err
 	log.Printf("Alert %s (%s) updated", alert.Uid, alert.Title)
 
 	return alert.Uid, nil
+}
+
+func (d *Deployer) updateAlertGroupInterval(ctx context.Context, folderUid string, group string, interval int64) error {
+	url := fmt.Sprintf("%sapi/v1/provisioning/folder/%s/rule-groups/%s", d.config.endpoint, folderUid, group)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", d.config.saToken))
+
+	client := &http.Client{
+		Timeout: requestTimeOut,
+	}
+	res, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+
+	// Check the response
+	if res.StatusCode != 200 {
+		log.Printf("Can't find alert group. Status: %d", res.StatusCode)
+		return fmt.Errorf("error finding alert group %s/%s: returned status %s", folderUid, group, res.Status)
+	}
+
+	// Check the response
+	resp := AlertRuleGroup{}
+	if err := json.NewDecoder(res.Body).Decode(&resp); err != nil {
+		return err
+	}
+
+	if resp.Interval != interval {
+		resp.Interval = interval
+		content, err := json.Marshal(resp)
+		if err != nil {
+			log.Printf("Can't update alert group interval. Error: %s", err.Error())
+			return fmt.Errorf("error updating alert group interval %s/%s: returned error %s", folderUid, group, err.Error())
+		}
+
+		// Note the implicit race condition - if a rule is added to the group between these two requests,
+		// they will be overwritten by this request. There's nothing we can do about this; alerting
+		// would need to update their API to allow the interval to be updated independently
+		req, err := http.NewRequestWithContext(ctx, "PUT", url, bytes.NewBuffer([]byte(content)))
+		if err != nil {
+			return err
+		}
+		req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", d.config.saToken))
+
+		res, err := client.Do(req)
+		if err != nil {
+			return err
+		}
+		defer res.Body.Close()
+
+		if res.StatusCode != 200 {
+			log.Printf("Can't update alert group interval. Status: %d", res.StatusCode)
+			return fmt.Errorf("error updating alert group interval %s/%s: returned status %s", folderUid, group, res.Status)
+		}
+	}
+
+	return nil
 }
 
 func (d *Deployer) deleteAlert(ctx context.Context, uid string) (string, error) {
