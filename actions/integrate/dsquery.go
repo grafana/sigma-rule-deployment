@@ -141,7 +141,7 @@ func (h *HTTPDatasourceQuery) ExecuteQuery(
 		return nil, fmt.Errorf("failed to read response body: %v", err)
 	}
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusBadRequest {
 		return nil, fmt.Errorf("HTTP error %d when querying datasource: %s, Response: %s",
 			resp.StatusCode, resp.Status, string(responseData))
 	}
@@ -188,7 +188,7 @@ func (h *HTTPDatasourceQuery) GetDatasource(dsName, baseURL, apiKey string, time
 		return nil, fmt.Errorf("failed to read response body: %v", err)
 	}
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusBadRequest {
 		return nil, fmt.Errorf("HTTP error getting datasource: %s, Response: %s", resp.Status, string(responseData))
 	}
 
