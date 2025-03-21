@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/grafana/sigma-rule-deployment/actions/integrate/definitions"
@@ -13,6 +14,8 @@ import (
 )
 
 func TestConvertToAlert(t *testing.T) {
+	fixedTime := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+
 	tests := []struct {
 		name          string
 		queries       []string
@@ -20,6 +23,7 @@ func TestConvertToAlert(t *testing.T) {
 		titles        string
 		config        ConversionConfig
 		wantQueryText string
+		wantUpdated   *time.Time // nil means expect an update, specified time means expect no change
 		wantError     bool
 	}{
 		{
@@ -37,6 +41,7 @@ func TestConvertToAlert(t *testing.T) {
 				TimeWindow: "5m",
 			},
 			wantQueryText: "sum(count_over_time({job=`.+`} | json | test=`true`[$__auto]))",
+			wantUpdated:   nil, // expect timestamp update
 			wantError:     false,
 		},
 		{
@@ -54,6 +59,7 @@ func TestConvertToAlert(t *testing.T) {
 				TimeWindow: "5m",
 			},
 			wantQueryText: `from * | where eventSource==\"kms.amazonaws.com\" and eventName==\"CreateGrant\"`,
+			wantUpdated:   nil, // expect timestamp update
 			wantError:     false,
 		},
 		{
@@ -67,7 +73,8 @@ func TestConvertToAlert(t *testing.T) {
 			config: ConversionConfig{
 				TimeWindow: "1y",
 			},
-			wantError: true,
+			wantUpdated: nil, // expect timestamp update
+			wantError:   true,
 		},
 		{
 			name:    "invalid time window",
@@ -79,22 +86,67 @@ func TestConvertToAlert(t *testing.T) {
 			config: ConversionConfig{
 				TimeWindow: "1y",
 			},
-			wantError: true,
+			wantUpdated: nil, // expect timestamp update
+			wantError:   true,
+		},
+		{
+			name:    "unchanged queries should not update timestamp",
+			queries: []string{"{job=`.+`} | json | test=`true`"},
+			titles:  "Alert Rule 6",
+			rule: &definitions.ProvisionedAlertRule{
+				UID: "5c1c217a",
+				Data: []definitions.AlertQuery{
+					{
+						RefID:         "A0",
+						QueryType:     "instant",
+						DatasourceUID: "my_data_source",
+						Model:         json.RawMessage("{\"refId\":\"A0\",\"hide\":false,\"expr\":\"sum(count_over_time({job=`.+`} | json | test=`true`[$__auto]))\",\"queryType\":\"instant\",\"editorMode\":\"code\"}"),
+					},
+					{
+						RefID:         "B",
+						DatasourceUID: "__expr__",
+						Model:         json.RawMessage(`{"refId":"B","hide":false,"type":"reduce","datasource":{"uid":"__expr__","type":"__expr__"},"conditions":[{"type":"query","evaluator":{"params":[],"type":"gt"},"operator":{"type":"and"},"query":{"params":["B"]},"reducer":{"params":[],"type":"last"}}],"reducer":"last","expression":"A0"}`),
+					},
+					{
+						RefID:         "C",
+						DatasourceUID: "__expr__",
+						Model:         json.RawMessage(`{"refId":"C","hide":false,"type":"threshold","datasource":{"uid":"__expr__","type":"__expr__"},"conditions":[{"type":"query","evaluator":{"params":[1],"type":"gt"},"operator":{"type":"and"},"query":{"params":["C"]},"reducer":{"params":[],"type":"last"}}],"expression":"B"}`),
+					},
+				},
+				Updated: fixedTime,
+			},
+			config: ConversionConfig{
+				Name:       "conv",
+				Target:     "loki",
+				DataSource: "my_data_source",
+				RuleGroup:  "Every 5 Minutes",
+				TimeWindow: "5m",
+			},
+			wantQueryText: "sum(count_over_time({job=`.+`} | json | test=`true`[$__auto]))",
+			wantUpdated:   &fixedTime, // expect timestamp to remain unchanged
+			wantError:     false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			i := NewIntegrator()
+			originalTimestamp := tt.rule.Updated
 			err := i.ConvertToAlert(tt.rule, tt.queries, tt.titles, tt.config)
 			if tt.wantError {
 				assert.NotNil(t, err)
 			} else {
 				assert.NoError(t, err)
-				assert.Contains(t, string(tt.rule.Data[0].Model), tt.wantQueryText)
-				assert.Equal(t, tt.config.RuleGroup, tt.rule.RuleGroup)
-				assert.Equal(t, tt.config.DataSource, tt.rule.Data[0].DatasourceUID)
-				assert.Equal(t, tt.titles, tt.rule.Title)
+				if tt.wantUpdated != nil {
+					assert.Equal(t, *tt.wantUpdated, tt.rule.Updated, "timestamp should not have changed")
+				} else {
+					assert.NotEqual(t, originalTimestamp, tt.rule.Updated, "timestamp should have been updated")
+					assert.True(t, tt.rule.Updated.After(originalTimestamp), "new timestamp should be after original")
+					assert.Contains(t, string(tt.rule.Data[0].Model), tt.wantQueryText)
+					assert.Equal(t, tt.config.RuleGroup, tt.rule.RuleGroup)
+					assert.Equal(t, tt.config.DataSource, tt.rule.Data[0].DatasourceUID)
+					assert.Equal(t, tt.titles, tt.rule.Title)
+				}
 			}
 		})
 	}

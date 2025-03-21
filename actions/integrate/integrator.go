@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -240,16 +241,7 @@ func (i *Integrator) ConvertToAlert(rule *definitions.ProvisionedAlertRule, quer
 	}
 	timerange := definitions.RelativeTimeRange{From: definitions.Duration(duration), To: definitions.Duration(time.Duration(0))}
 
-	// alerting rule metadata
-	rule.OrgID = i.config.IntegratorConfig.OrgID
-	rule.FolderUID = i.config.IntegratorConfig.FolderID
-	rule.RuleGroup = getC(config.RuleGroup, i.config.ConversionDefaults.RuleGroup, "Default")
-	rule.NoDataState = definitions.OK
-	rule.ExecErrState = definitions.OkErrState
-	rule.Updated = time.Now()
-	rule.Title = titles
-
-	rule.Data = []definitions.AlertQuery{}
+	queryData := make([]definitions.AlertQuery, 0, len(queries)+2)
 	refIds := make([]string, len(queries))
 	for index, query := range queries {
 		if getC(config.Target, i.config.ConversionDefaults.Target, "loki") == "loki" {
@@ -264,7 +256,7 @@ func (i *Integrator) ConvertToAlert(rule *definitions.ProvisionedAlertRule, quer
 			return fmt.Errorf("could not escape provided query: %s", query)
 		}
 		refIds[index] = fmt.Sprintf("A%d", index)
-		rule.Data = append(rule.Data,
+		queryData = append(queryData,
 			definitions.AlertQuery{
 				RefID:             refIds[index],
 				QueryType:         "instant",
@@ -278,7 +270,7 @@ func (i *Integrator) ConvertToAlert(rule *definitions.ProvisionedAlertRule, quer
 			strings.Join(refIds, "||")))
 	threshold := json.RawMessage(`{"refId":"C","hide":false,"type":"threshold","datasource":{"uid":"__expr__","type":"__expr__"},"conditions":[{"type":"query","evaluator":{"params":[1],"type":"gt"},"operator":{"type":"and"},"query":{"params":["C"]},"reducer":{"params":[],"type":"last"}}],"expression":"B"}`)
 
-	rule.Data = append(rule.Data,
+	queryData = append(queryData,
 		definitions.AlertQuery{
 			RefID:             "B",
 			DatasourceUID:     "__expr__",
@@ -294,6 +286,28 @@ func (i *Integrator) ConvertToAlert(rule *definitions.ProvisionedAlertRule, quer
 			Model:             threshold,
 		},
 	)
+
+	if len(queryData) == len(rule.Data) {
+		for qIdx, query := range queryData {
+			if !bytes.Equal(query.Model, rule.Data[qIdx].Model) {
+				break
+			}
+			if qIdx == len(queryData)-1 {
+				// if we get here, all the queries are the same, no need to update the rule
+				return nil
+			}
+		}
+	}
+	rule.Data = queryData
+
+	// alerting rule metadata
+	rule.OrgID = i.config.IntegratorConfig.OrgID
+	rule.FolderUID = i.config.IntegratorConfig.FolderID
+	rule.RuleGroup = getC(config.RuleGroup, i.config.ConversionDefaults.RuleGroup, "Default")
+	rule.NoDataState = definitions.OK
+	rule.ExecErrState = definitions.OkErrState
+	rule.Updated = time.Now()
+	rule.Title = titles
 	rule.Condition = "C"
 
 	return nil
