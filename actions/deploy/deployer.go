@@ -25,15 +25,16 @@ var requestTimeOut = 10 * time.Second
 
 // Structure to store the deployment config
 type deploymentConfig struct {
-	endpoint       string
-	alertPath      string
-	saToken        string
-	freshDeploy    bool
-	folderUid      string
-	orgId          int64
-	alertsToAdd    []string
-	alertsToRemove []string
-	alertsToUpdate []string
+	endpoint        string
+	alertPath       string
+	saToken         string
+	freshDeploy     bool
+	folderUid       string
+	orgId           int64
+	alertsToAdd     []string
+	alertsToRemove  []string
+	alertsToUpdate  []string
+	groupsIntervals map[string]int64
 }
 
 // Structures to unmarshal the YAML config file
@@ -43,10 +44,16 @@ type FoldersConfig struct {
 type DeploymentConfig struct {
 	GrafanaInstance string `yaml:"grafana_instance"`
 }
+type ConversionConfig struct {
+	RuleGroup  string `yaml:"rule_group"`
+	TimeWindow string `yaml:"time_window"`
+}
 type Configuration struct {
-	Folders          FoldersConfig     `yaml:"folders"`
-	DeployerConfig   DeploymentConfig  `yaml:"deployment"`
-	IntegratorConfig IntegrationConfig `yaml:"integration"`
+	Folders          FoldersConfig      `yaml:"folders"`
+	DefaultConfig    ConversionConfig   `yaml:"conversion_defaults"`
+	ConversionConfig []ConversionConfig `yaml:"conversion"`
+	DeployerConfig   DeploymentConfig   `yaml:"deployment"`
+	IntegratorConfig IntegrationConfig  `yaml:"integration"`
 }
 type IntegrationConfig struct {
 	FolderID string `yaml:"folder_id"`
@@ -54,7 +61,9 @@ type IntegrationConfig struct {
 }
 
 type Deployer struct {
-	config deploymentConfig
+	config         deploymentConfig
+	client         *http.Client
+	groupsToUpdate map[string]bool
 }
 
 // Non exhaustive list of alert fields
@@ -62,7 +71,15 @@ type Alert struct {
 	Uid       string `json:"uid"`
 	Title     string `json:"title"`
 	FolderUid string `json:"folderUID"`
+	RuleGroup string `json:"ruleGroup"`
 	OrgID     int64  `json:"orgID"`
+}
+
+type AlertRuleGroup struct {
+	FolderUID string `json:"folderUID"`
+	Interval  int64  `json:"interval"`
+	Rules     any    `json:"rules"`
+	Title     string `json:"title"`
 }
 
 func main() {
@@ -93,7 +110,12 @@ func main() {
 }
 
 func NewDeployer() *Deployer {
-	return &Deployer{}
+	return &Deployer{
+		client: &http.Client{
+			Timeout: requestTimeOut,
+		},
+		groupsToUpdate: map[string]bool{},
+	}
 }
 
 func (d *Deployer) Deploy(ctx context.Context) ([]string, []string, []string, error) {
@@ -148,6 +170,15 @@ func (d *Deployer) Deploy(ctx context.Context) ([]string, []string, []string, er
 		alertsUpdated = append(alertsUpdated, uid)
 	}
 
+	// Process alert group interval updates
+	if len(d.groupsToUpdate) > 0 {
+		for group := range d.groupsToUpdate {
+			if err := d.updateAlertGroupInterval(ctx, d.config.folderUid, group, d.config.groupsIntervals[group]); err != nil {
+				return alertsCreated, alertsUpdated, alertsDeleted, err
+			}
+		}
+	}
+
 	return alertsCreated, alertsUpdated, alertsDeleted, nil
 }
 
@@ -194,10 +225,11 @@ func (d *Deployer) LoadConfig(ctx context.Context) error {
 		return fmt.Errorf("error unmarshalling config file: %v", err)
 	}
 	d.config = deploymentConfig{
-		endpoint:  configYAML.DeployerConfig.GrafanaInstance,
-		alertPath: filepath.Clean(configYAML.Folders.DeploymentPath),
-		orgId:     configYAML.IntegratorConfig.OrgID,
-		folderUid: configYAML.IntegratorConfig.FolderID,
+		endpoint:        configYAML.DeployerConfig.GrafanaInstance,
+		alertPath:       filepath.Clean(configYAML.Folders.DeploymentPath),
+		orgId:           configYAML.IntegratorConfig.OrgID,
+		folderUid:       configYAML.IntegratorConfig.FolderID,
+		groupsIntervals: make(map[string]int64),
 	}
 
 	// Makes sure the endpoint URL ends with a slash
@@ -208,7 +240,28 @@ func (d *Deployer) LoadConfig(ctx context.Context) error {
 	// Get the rest of the config from the environment variables
 	d.config.saToken = os.Getenv("DEPLOYER_GRAFANA_SA_TOKEN")
 	if d.config.saToken == "" {
-		return fmt.Errorf("Grafana SA token is not set or empty")
+		return fmt.Errorf("the Grafana SA token is not set or empty")
+	}
+
+	// Extract the groups intervals from the conversion config
+	defaultInterval := "5m"
+	if configYAML.DefaultConfig.TimeWindow != "" {
+		defaultInterval = configYAML.DefaultConfig.TimeWindow
+	}
+	for _, config := range configYAML.ConversionConfig {
+		interval := defaultInterval
+		if config.TimeWindow != "" {
+			interval = config.TimeWindow
+		}
+		intervalDuration, err := time.ParseDuration(interval)
+		if err != nil {
+			return fmt.Errorf("error parsing time window: %v", err)
+		}
+		if _, ok := d.config.groupsIntervals[config.RuleGroup]; !ok {
+			d.config.groupsIntervals[config.RuleGroup] = int64(intervalDuration.Seconds())
+		} else if d.config.groupsIntervals[config.RuleGroup] != int64(intervalDuration.Seconds()) {
+			return fmt.Errorf("time window for rule group %s is different between conversion configs", config.RuleGroup)
+		}
 	}
 
 	// Retrieve the fresh deploy flag
@@ -311,6 +364,7 @@ func (d *Deployer) createAlert(ctx context.Context, content string) (string, err
 	if err != nil {
 		return "", err
 	}
+	d.groupsToUpdate[alert.RuleGroup] = true
 
 	// Prepare the request
 	url := fmt.Sprintf("%sapi/v1/provisioning/alert-rules", d.config.endpoint)
@@ -323,10 +377,7 @@ func (d *Deployer) createAlert(ctx context.Context, content string) (string, err
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", d.config.saToken))
 
-	client := &http.Client{
-		Timeout: requestTimeOut,
-	}
-	res, err := client.Do(req)
+	res, err := d.client.Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -338,7 +389,7 @@ func (d *Deployer) createAlert(ctx context.Context, content string) (string, err
 		return "", err
 	}
 
-	if res.StatusCode != 201 {
+	if res.StatusCode != http.StatusCreated {
 		log.Printf("Can't create alert. Status: %d, Message: %s", res.StatusCode, resp.Message)
 		return "", fmt.Errorf("error creating alert: returned status %s", res.Status)
 	}
@@ -354,6 +405,7 @@ func (d *Deployer) updateAlert(ctx context.Context, content string) (string, err
 	if err != nil {
 		return "", err
 	}
+	d.groupsToUpdate[alert.RuleGroup] = true
 
 	// Prepare the request
 	url := fmt.Sprintf("%sapi/v1/provisioning/alert-rules/%s", d.config.endpoint, alert.Uid)
@@ -365,17 +417,14 @@ func (d *Deployer) updateAlert(ctx context.Context, content string) (string, err
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", d.config.saToken))
 
-	client := &http.Client{
-		Timeout: requestTimeOut,
-	}
-	res, err := client.Do(req)
+	res, err := d.client.Do(req)
 	if err != nil {
 		return "", err
 	}
 	defer res.Body.Close()
 
 	// Check the response
-	if res.StatusCode != 200 {
+	if res.StatusCode != http.StatusOK {
 		log.Printf("Can't update alert. Status: %d", res.StatusCode)
 		return "", fmt.Errorf("error updating alert: returned status %s", res.Status)
 	}
@@ -383,6 +432,64 @@ func (d *Deployer) updateAlert(ctx context.Context, content string) (string, err
 	log.Printf("Alert %s (%s) updated", alert.Uid, alert.Title)
 
 	return alert.Uid, nil
+}
+
+func (d *Deployer) updateAlertGroupInterval(ctx context.Context, folderUid string, group string, interval int64) error {
+	url := fmt.Sprintf("%sapi/v1/provisioning/folder/%s/rule-groups/%s", d.config.endpoint, folderUid, group)
+
+	// Get the current alert group content
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", d.config.saToken))
+
+	res, err := d.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+
+	// Check the response
+	if res.StatusCode != http.StatusOK {
+		log.Printf("Can't find alert group. Status: %d", res.StatusCode)
+		return fmt.Errorf("error finding alert group %s/%s: returned status %s", folderUid, group, res.Status)
+	}
+	resp := AlertRuleGroup{}
+	if err := json.NewDecoder(res.Body).Decode(&resp); err != nil {
+		return err
+	}
+
+	if resp.Interval != interval {
+		resp.Interval = interval
+		content, err := json.Marshal(resp)
+		if err != nil {
+			log.Printf("Can't update alert group interval. Error: %s", err.Error())
+			return fmt.Errorf("error updating alert group interval %s/%s: returned error %s", folderUid, group, err.Error())
+		}
+
+		// Note the implicit race condition - if a rule is added to the group between these two requests,
+		// they will be overwritten by this request. There's nothing we can do about this; alerting
+		// would need to update their API to allow the interval to be updated independent of the alert rules
+		req, err := http.NewRequestWithContext(ctx, "PUT", url, bytes.NewBuffer([]byte(content)))
+		if err != nil {
+			return err
+		}
+		req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", d.config.saToken))
+
+		res, err := d.client.Do(req)
+		if err != nil {
+			return err
+		}
+		defer res.Body.Close()
+
+		if res.StatusCode != http.StatusOK {
+			log.Printf("Can't update alert group interval. Status: %d", res.StatusCode)
+			return fmt.Errorf("error updating alert group interval %s/%s: returned status %s", folderUid, group, res.Status)
+		}
+	}
+
+	return nil
 }
 
 func (d *Deployer) deleteAlert(ctx context.Context, uid string) (string, error) {
@@ -396,17 +503,14 @@ func (d *Deployer) deleteAlert(ctx context.Context, uid string) (string, error) 
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", d.config.saToken))
 
-	client := &http.Client{
-		Timeout: requestTimeOut,
-	}
-	res, err := client.Do(req)
+	res, err := d.client.Do(req)
 	if err != nil {
 		return "", err
 	}
 	defer res.Body.Close()
 
 	// Check the response
-	if res.StatusCode != 204 {
+	if res.StatusCode != http.StatusNoContent {
 		log.Printf("Can't delete alert. Status: %d", res.StatusCode)
 		return "", fmt.Errorf("error deleting alert: returned status %s", res.Status)
 	}
@@ -432,17 +536,14 @@ func (d *Deployer) listAlerts(ctx context.Context) ([]string, error) {
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", d.config.saToken))
 
-	client := &http.Client{
-		Timeout: requestTimeOut,
-	}
-	res, err := client.Do(req)
+	res, err := d.client.Do(req)
 	if err != nil {
 		return []string{}, err
 	}
 	defer res.Body.Close()
 
 	// Check the response code
-	if res.StatusCode != 200 {
+	if res.StatusCode != http.StatusOK {
 		log.Printf("Can't list alerts. Status: %d", res.StatusCode)
 		return []string{}, fmt.Errorf("error listing alert: returned status %s", res.Status)
 	}
