@@ -26,14 +26,14 @@ type ConversionConfig struct {
 }
 
 type IntegrationConfig struct {
-	FolderID string `yaml:"folder_id"`
-	OrgID    int64  `yaml:"org_id"`
+	FolderID    string `yaml:"folder_id"`
+	OrgID       int64  `yaml:"org_id"`
+	TestQueries bool   `yaml:"test_queries"`
 }
 
 type DeploymentConfig struct {
 	GrafanaInstance string `yaml:"grafana_instance"`
 	Timeout         string `yaml:"timeout"`
-	TestQueries     bool   `yaml:"test_queries"`
 }
 
 type Configuration struct {

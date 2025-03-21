@@ -175,7 +175,7 @@ func (i *Integrator) Run() error {
 		}
 	}
 
-	if i.config.DeployerConfig.TestQueries {
+	if i.config.IntegratorConfig.TestQueries {
 		fmt.Println("Testing queries against the datasource")
 	}
 
@@ -229,7 +229,7 @@ func (i *Integrator) Run() error {
 				return err
 			}
 
-			if i.config.DeployerConfig.TestQueries {
+			if i.config.IntegratorConfig.TestQueries {
 				// Test all queries against the datasource
 				var queryResults []QueryTestResult
 				for _, query := range queries {

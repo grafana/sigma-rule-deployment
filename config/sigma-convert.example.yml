@@ -49,7 +49,7 @@ conversions:
 integration:
   folder_id: XXXX # Use a dedicated folder that will only contain the alerts created by these actions
   org_id: 1
+  test_queries: true # Whether to test the queries against the datasource
 deployment:
   grafana_instance: https://myinstance.grafana.com
   timeout: 10s # HTTP request timeout for testing queries
-  test_queries: true # Whether to test the queries against the datasource
