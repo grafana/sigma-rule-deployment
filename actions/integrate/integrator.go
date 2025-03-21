@@ -158,6 +158,17 @@ func (i *Integrator) LoadConfig() error {
 }
 
 func (i *Integrator) Run() error {
+	// Parse the timeout from configuration
+	timeoutDuration := 10 * time.Second // Default timeout
+	if i.config.DeployerConfig.Timeout != "" {
+		parsedTimeout, err := time.ParseDuration(i.config.DeployerConfig.Timeout)
+		if err != nil {
+			fmt.Printf("Warning: Invalid timeout format in config, using default: %v\n", err)
+		} else {
+			timeoutDuration = parsedTimeout
+		}
+	}
+
 	for _, inputFile := range i.addedFiles {
 		conversionContent, err := ReadLocalFile(inputFile)
 		if err != nil {
