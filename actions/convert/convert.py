@@ -72,10 +72,20 @@ def convert_rules(
     # Get top-level default values
     default_target = config.get("conversion_defaults.target", "loki")
     default_format = config.get("conversion_defaults.format", "default")
-    default_skip_unsupported = config.get(
-        "conversion_defaults.skip-unsupported", "true"
+    default_skip_unsupported = config.get("conversion_defaults.skip_unsupported", True)
+    default_fail_unsupported = config.get("conversion_defaults.fail_unsupported", False)
+    default_encoding = config.get("conversion_defaults.encoding", "utf-8")
+    default_pipeline_check = config.get("conversion_defaults.pipeline_check", True)
+    default_file_pattern = config.get("conversion_defaults.file_pattern", "*.yml")
+    default_correlation_method = config.get(
+        "conversion_defaults.correlation_method", []
     )
-    default_file_pattern = config.get("conversion_defaults.file-pattern", "*.yml")
+    default_filters = config.get("conversion_defaults.filters", [])
+    default_backend_options = config.get("conversion_defaults.backend_options", {})
+    default_without_pipeline = config.get("conversion_defaults.without_pipeline", False)
+    default_pipelines = config.get("conversion_defaults.pipelines", [])
+    default_json_indent = config.get("conversion_defaults.json_indent", "0")
+    verbose = config.get("verbose", False)
 
     # Convert Sigma rules to the target format per each conversion object in the config
     for conversion in config.get("conversions", []):
@@ -130,7 +140,7 @@ def convert_rules(
         print(f"Target backend: {conversion.get('target', default_target)}")
 
         # Verify that all pipeline files are relative to the repository root (GITHUB_WORKSPACE)
-        for pipeline in conversion.get("pipelines", []):
+        for pipeline in conversion.get("pipelines", default_pipelines):
             if Path(pipeline).is_absolute():
                 raise ValueError(
                     "Pipeline file path must be relative to the project root"
@@ -139,10 +149,10 @@ def convert_rules(
         # Output file path
         output_file = path_prefix / conversions_output_dir / Path(f"{name}.json")
 
-        encoding = conversion.get("encoding", "utf-8")
+        encoding = conversion.get("encoding", default_encoding)
 
         pipelines = []
-        for pipeline in conversion.get("pipelines", []):
+        for pipeline in conversion.get("pipelines", default_pipelines):
             if is_path(pipeline, file_pattern):
                 pipelines.append(f"--pipeline={path_prefix / Path(pipeline)}")
             else:
@@ -158,39 +168,59 @@ def convert_rules(
                 "--format",
                 conversion.get("format", default_format),
                 *(
-                    ["--correlation-method", conversion["correlation-method"]]
-                    if "correlation-method" in conversion
-                    and conversion["correlation-method"]
-                    else []
+                    ["--correlation-method", conversion["correlation_method"]]
+                    if "correlation_method" in conversion
+                    and conversion["correlation_method"]
+                    else (
+                        ["--correlation-method", default_correlation_method]
+                        if default_correlation_method
+                        else []
+                    )
                 ),
-                *[f"--filter={f}" for f in conversion.get("filter", [])],
+                *[f"--filter={f}" for f in conversion.get("filters", default_filters)],
                 "--file-pattern",
                 file_pattern,
                 "--output",
                 "-",  # Output to stdout, so we can write to a file later
                 "--encoding",
                 encoding,
-                "--json-indent",
-                str(conversion.get("json-indent", "0")),
                 *[
                     f"--backend-option={k}={v}"
-                    for k, v in conversion.get("backend-option", {}).items()
+                    for k, v in conversion.get(
+                        "backend_options", default_backend_options
+                    ).items()
                 ],
                 *(
                     ["--without-pipeline"]
-                    if conversion.get("without_pipelines", False)
+                    if conversion.get("without_pipeline", default_without_pipeline)
                     else []
                 ),
                 *(
                     ["--disable-pipeline-check"]
-                    if not conversion.get("pipeline-check", True)
-                    else []
+                    if not conversion.get("pipeline_check", default_pipeline_check)
+                    else ["--pipeline-check"]
                 ),
                 *(
                     ["--skip-unsupported"]
-                    if conversion.get("skip-unsupported", default_skip_unsupported)
-                    else ["--fail-unsupported"]
+                    if conversion.get("skip_unsupported", default_skip_unsupported)
+                    else (
+                        ["--fail-unsupported"]
+                        if conversion.get("fail_unsupported", default_fail_unsupported)
+                        else []
+                    )
                 ),
+                *(
+                    [
+                        "--json-indent",
+                        str(conversion.get("json_indent")),
+                    ]
+                    if conversion.get("json_indent")
+                    else [
+                        "--json-indent",
+                        str(default_json_indent),
+                    ]
+                ),
+                *(["--verbose"] if conversion.get("verbose", verbose) else []),
                 input_file,
             ]
 
