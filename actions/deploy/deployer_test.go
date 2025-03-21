@@ -405,7 +405,7 @@ func TestFakeAlertFilename(t *testing.T) {
 			alertPath: "deployments",
 		},
 		client: &http.Client{
-			Timeout: requestTimeOut,
+			Timeout: defaultRequestTimeout,
 		},
 	}
 	assert.Equal(t, "abcd123", getAlertUidFromFilename(d.fakeAlertFilename("abcd123")))
@@ -419,7 +419,7 @@ func TestListAlertsInDeploymentFolder(t *testing.T) {
 			orgId:     1,
 		},
 		client: &http.Client{
-			Timeout: requestTimeOut,
+			Timeout: defaultRequestTimeout,
 		},
 	}
 	alerts, err := d.listAlertsInDeploymentFolder()
