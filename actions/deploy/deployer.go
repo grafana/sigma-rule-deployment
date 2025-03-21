@@ -55,6 +55,7 @@ type IntegrationConfig struct {
 
 type Deployer struct {
 	config deploymentConfig
+	client *http.Client
 }
 
 // Non exhaustive list of alert fields
@@ -100,7 +101,11 @@ func main() {
 }
 
 func NewDeployer() *Deployer {
-	return &Deployer{}
+	return &Deployer{
+		client: &http.Client{
+			Timeout: requestTimeOut,
+		},
+	}
 }
 
 func (d *Deployer) Deploy(ctx context.Context) ([]string, []string, []string, error) {
@@ -330,10 +335,7 @@ func (d *Deployer) createAlert(ctx context.Context, content string) (string, err
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", d.config.saToken))
 
-	client := &http.Client{
-		Timeout: requestTimeOut,
-	}
-	res, err := client.Do(req)
+	res, err := d.client.Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -372,10 +374,7 @@ func (d *Deployer) updateAlert(ctx context.Context, content string) (string, err
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", d.config.saToken))
 
-	client := &http.Client{
-		Timeout: requestTimeOut,
-	}
-	res, err := client.Do(req)
+	res, err := d.client.Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -401,10 +400,7 @@ func (d *Deployer) updateAlertGroupInterval(ctx context.Context, folderUid strin
 	}
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", d.config.saToken))
 
-	client := &http.Client{
-		Timeout: requestTimeOut,
-	}
-	res, err := client.Do(req)
+	res, err := d.client.Do(req)
 	if err != nil {
 		return err
 	}
@@ -439,7 +435,7 @@ func (d *Deployer) updateAlertGroupInterval(ctx context.Context, folderUid strin
 		}
 		req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", d.config.saToken))
 
-		res, err := client.Do(req)
+		res, err := d.client.Do(req)
 		if err != nil {
 			return err
 		}
@@ -465,10 +461,7 @@ func (d *Deployer) deleteAlert(ctx context.Context, uid string) (string, error) 
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", d.config.saToken))
 
-	client := &http.Client{
-		Timeout: requestTimeOut,
-	}
-	res, err := client.Do(req)
+	res, err := d.client.Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -501,10 +494,7 @@ func (d *Deployer) listAlerts(ctx context.Context) ([]string, error) {
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", d.config.saToken))
 
-	client := &http.Client{
-		Timeout: requestTimeOut,
-	}
-	res, err := client.Do(req)
+	res, err := d.client.Do(req)
 	if err != nil {
 		return []string{}, err
 	}
