@@ -150,7 +150,7 @@ func (i *Integrator) LoadConfig() error {
 	fmt.Printf("Conversion path: %s\nDeployment path: %s\n", i.config.Folders.ConversionPath, i.config.Folders.DeploymentPath)
 
 	if _, err = os.Stat(i.config.Folders.DeploymentPath); err != nil {
-		err = os.MkdirAll(i.config.Folders.DeploymentPath, 0700)
+		err = os.MkdirAll(i.config.Folders.DeploymentPath, 0755)
 		if err != nil {
 			return fmt.Errorf("error creating deployment directory: %v", err)
 		}
