@@ -78,7 +78,7 @@ def parse_args() -> argparse.Namespace:
         type=str,
         nargs="*",
         help="List of changed files",
-        default=os.environ.get("CHANGED_FILES", "").split(" "),
+        default=os.environ.get("CHANGED_FILES", ""),
     )
     parser.add_argument(
         "--deleted-files",
@@ -87,7 +87,7 @@ def parse_args() -> argparse.Namespace:
         type=str,
         nargs="*",
         help="List of deleted files",
-        default=os.environ.get("DELETED_FILES", "").split(" "),
+        default=os.environ.get("DELETED_FILES", ""),
     )
     return parser.parse_args()
 

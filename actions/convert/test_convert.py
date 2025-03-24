@@ -214,7 +214,7 @@ def test_convert_rules_successful_conversion_changed_files(temp_workspace, mock_
         config=mock_config,
         path_prefix=temp_workspace,
         conversions_output_dir="conversions",
-        changed_files=set([temp_workspace / "rules" / "test.yml"]),
+        changed_files=f"{temp_workspace}/rules/test.yml",
     )
 
     output_file = temp_workspace / "conversions" / "test_conversion_test.json"
@@ -251,7 +251,7 @@ def test_convert_rules_skip_unchanged_rules(temp_workspace, mock_config):
         config=mock_config,
         path_prefix=temp_workspace,
         conversions_output_dir="conversions",
-        changed_files=set([temp_workspace / "rules" / "different.yml"]),
+        changed_files=f"{temp_workspace}/rules/different.yml",
     )
 
     output_file = temp_workspace / "conversions" / "test_conversion_test.json"

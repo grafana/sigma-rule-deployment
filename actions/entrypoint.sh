@@ -30,7 +30,7 @@ function _convert() {
         uv add --directory /app/convert "${valid_plugins[@]}"
     fi
 
-    uv run --directory /app/convert main.py --config ${CONFIG_PATH:-} --render-traceback ${RENDER_TRACEBACK:-}
+    uv run --directory /app/convert main.py --config ${CONFIG_PATH:-} --render-traceback ${RENDER_TRACEBACK:-} --pretty-print ${PRETTY_PRINT:-} --all-rules ${ALL_RULES:-} --changed-files ${CHANGED_FILES:-} --deleted-files ${DELETED_FILES:-}
 }
 
 set -euo pipefail

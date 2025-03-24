@@ -25,12 +25,8 @@ def convert_rules(
     == "true",
     pretty_print: bool = os.environ.get("PRETTY_PRINT", "false").lower() == "true",
     all_rules: bool = os.environ.get("ALL_RULES", "false").lower() == "true",
-    changed_files: set[str] = set(
-        Path(x) for x in os.environ.get("CHANGED_FILES", "").split(" ") if x
-    ),
-    deleted_files: set[str] = set(
-        Path(x) for x in os.environ.get("DELETED_FILES", "").split(" ") if x
-    ),
+    changed_files: str = os.environ.get("CHANGED_FILES", ""),
+    deleted_files: str = os.environ.get("DELETED_FILES", ""),
 ) -> None:
     """Convert Sigma rules to the target format per each conversion object in the config.
 
@@ -52,6 +48,8 @@ def convert_rules(
         ValueError: Error loading rule file {rule_file}.
     """
     print(f"{path_prefix}, {conversions_output_dir}, {render_traceback}, {pretty_print}, {all_rules}, {changed_files}, {deleted_files}")
+    changed_files_set = set(Path(x) for x in changed_files.split(" ") if x)
+    deleted_files_set = set(Path(x) for x in deleted_files.split(" ") if x)
     # Check if the path_prefix is set
     if not path_prefix or path_prefix == Path("."):
         raise ValueError(
@@ -170,7 +168,7 @@ def convert_rules(
             if is_path(pipeline, file_pattern):
                 pipeline_path = path_prefix / Path(pipeline)
                 pipelines.append(f"--pipeline={pipeline_path}")
-                if pipeline_path in changed_files:
+                if pipeline_path in changed_files_set:
                     any_pipeline_changed = True
             else:
                 pipelines.append(f"--pipeline={pipeline}")
@@ -181,7 +179,7 @@ def convert_rules(
             # - none of the pipelines have changed
             if (
                 not all_rules
-                and Path(input_file) not in changed_files
+                and Path(input_file) not in changed_files_set
                 and not any_pipeline_changed
             ):
                 print(f"Skipping conversion of {input_file} because it and it's pipelines haven't changed")
@@ -308,9 +306,9 @@ def convert_rules(
         print("-" * 80)
 
     # Remove conversions of deleted rules from the output directory
-    if len(deleted_files) > 0:
+    if len(deleted_files_set) > 0:
         print(f"Removing conversions of deleted rules from the output directory")
-        for deleted_file in deleted_files:
+        for deleted_file in deleted_files_set:
             # Create output filename based on input file path
             rel_deleted_path = Path(deleted_file).relative_to(path_prefix)
             output_filename = f"{name}_{rel_deleted_path.stem}.json"
