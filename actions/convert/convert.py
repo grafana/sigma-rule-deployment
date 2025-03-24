@@ -249,37 +249,37 @@ def convert_rules(
                     print("No output generated, skipping writing to file")
                     continue
 
-                filtered_output.append(
-                    {
-                        "queries": queries,
-                        "conversion_name": name,
-                        "input_file": str(Path(input_file).relative_to(path_prefix)),
-                        "rules": load_rules(input_file),
-                        "output_file": str(Path(output_file).relative_to(path_prefix)),
-                    }
-                )
+                # Create output filename based on input file path
+                rel_input_path = Path(input_file).relative_to(path_prefix)
+                output_filename = f"{name}_{rel_input_path.stem}.json"
+                # Replace directory separators with underscores
+                output_filename = output_filename.replace(os.sep, '_')
+                output_file = path_prefix / conversions_output_dir / output_filename
 
-                print(
-                    f"Converting {name} completed with exit code" f" {result.exit_code}"
-                )
+                # Create the output data structure
+                output_data = {
+                    "queries": queries,
+                    "conversion_name": name,
+                    "input_file": str(rel_input_path),
+                    "rules": load_rules(input_file),
+                    "output_file": str(Path(output_file).relative_to(path_prefix)),
+                }
 
-            if not filtered_output:
-                print("No output generated, skipping writing to file")
-                continue
+                # Write the output to a file
+                with open(output_file, "w", encoding=encoding) as f:
+                    options = json.OPT_NAIVE_UTC
+                    if pretty_print:
+                        options = options | json.OPT_INDENT_2
+                    f.write(
+                        json.dumps(
+                            output_data,
+                            option=options,
+                        ).decode(encoding, "blackslashreplace")
+                    )
 
-            # Write the output to a file per conversion
-            with open(output_file, "w", encoding=encoding) as f:
-                options = json.OPT_NAIVE_UTC
-                if pretty_print:
-                    options = options | json.OPT_INDENT_2
-                f.write(
-                    json.dumps(
-                        filtered_output,
-                        option=options,
-                    ).decode(encoding, "blackslashreplace")
-                )
+                print(f"Output written to {output_file}")
+                print(f"Converting {name} completed with exit code {result.exit_code}")
 
-            print(f"Output written to {path_prefix / Path(output_file)}")
         print("-" * 80)
 
 
