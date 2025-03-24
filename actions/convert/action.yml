@@ -56,7 +56,7 @@ runs:
         RENDER_TRACEBACK: ${{ inputs.render_traceback }}
         PRETTY_PRINT: ${{ inputs.pretty_print }}
         ALL_RULES: ${{ inputs.all_rules }}
-        CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_and_modified_files }}
+        CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
         DELETED_FILES: ${{ steps.changed-files.outputs.deleted_files }}
         action_ref: ${{ github.action_ref }}
       run: |
