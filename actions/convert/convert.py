@@ -25,8 +25,8 @@ def convert_rules(
     == "true",
     pretty_print: bool = os.environ.get("PRETTY_PRINT", "false").lower() == "true",
     all_rules: bool = os.environ.get("ALL_RULES", "false").lower() == "true",
-    changed_files: list[str] = os.environ.get("CHANGED_FILES", "").split(" "),
-    deleted_files: list[str] = os.environ.get("DELETED_FILES", "").split(" "),
+    changed_files: str = os.environ.get("CHANGED_FILES", ""),
+    deleted_files: str = os.environ.get("DELETED_FILES", ""),
 ) -> None:
     """Convert Sigma rules to the target format per each conversion object in the config.
 
@@ -47,9 +47,9 @@ def convert_rules(
         ValueError: Pipeline file path must be relative to the project root.
         ValueError: Error loading rule file {rule_file}.
     """
-    print(f"{path_prefix}, {conversions_output_dir}, {render_traceback}, {pretty_print}, {all_rules}, {changed_files}, {deleted_files}")
-    changed_files_set = set(Path(x) for x in changed_files if x)
-    deleted_files_set = set(Path(x) for x in deleted_files if x)
+    changed_files_set = set(path_prefix / Path(x) for x in changed_files.split(" ") if x)
+    deleted_files_set = set(path_prefix / Path(x) for x in deleted_files.split(" ") if x)
+
     # Check if the path_prefix is set
     if not path_prefix or path_prefix == Path("."):
         raise ValueError(
@@ -306,19 +306,20 @@ def convert_rules(
         print("-" * 80)
 
     # Remove conversions of deleted rules from the output directory
-    if len(deleted_files_set) > 0:
-        print(f"Removing conversions of deleted rules from the output directory")
-        for deleted_file in deleted_files_set:
-            # Create output filename based on input file path
-            rel_deleted_path = Path(deleted_file).relative_to(path_prefix)
-            output_filename = f"{name}_{rel_deleted_path.stem}.json"
-            # Replace directory separators with underscores
-            output_filename = output_filename.replace(os.sep, "_")
-            output_file = path_prefix / conversions_output_dir / output_filename
-
-            if output_file.exists():
-                print(f"Removing {output_file}")
-                os.remove(output_file)
+    # TODO: FIXME this needs to be updated to work as intended
+    # if len(deleted_files_set) > 0:
+    #     print(f"Removing conversions of deleted rules from the output directory")
+    #     for deleted_file in deleted_files_set:
+    #         # Create output filename based on input file path
+    #         rel_deleted_path = Path(deleted_file).relative_to(path_prefix)
+    #         output_filename = f"{rel_deleted_path.stem}.json"
+    #         # Replace directory separators with underscores
+    #         output_filename = output_filename.replace(os.sep, "_")
+    #         output_file = path_prefix / conversions_output_dir / output_filename
+    #
+    #         if output_file.exists():
+    #             print(f"Removing {output_file}")
+    #             os.remove(output_file)
 
 
 def is_safe_path(base_dir: str | Path, target_path: str | Path) -> bool:

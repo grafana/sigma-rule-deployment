@@ -76,7 +76,7 @@ def parse_args() -> argparse.Namespace:
         dest="changed_files",
         metavar="file1 file2",
         type=str,
-        nargs="*",
+        nargs="?",
         help="List of changed files",
         default=os.environ.get("CHANGED_FILES", ""),
     )
@@ -85,7 +85,7 @@ def parse_args() -> argparse.Namespace:
         dest="deleted_files",
         metavar="file1 file2",
         type=str,
-        nargs="*",
+        nargs="?",
         help="List of deleted files",
         default=os.environ.get("DELETED_FILES", ""),
     )
