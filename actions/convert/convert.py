@@ -19,17 +19,17 @@ def convert_rules(
     config: Dynaconf,
     path_prefix: str | Path = Path(os.environ.get("GITHUB_WORKSPACE", "")),
     conversions_output_dir: str | Path = Path(
-        os.environ.get("CONVERSIONS_OUTPUT_DIR", "conversions")
+        os.environ.get("INPUT_CONVERSIONS_OUTPUT_DIR", "conversions")
     ),
-    render_traceback: bool = os.environ.get("RENDER_TRACEBACK", "false").lower()
+    render_traceback: bool = os.environ.get("INPUT_RENDER_TRACEBACK", "false").lower()
     == "true",
-    pretty_print: bool = os.environ.get("PRETTY_PRINT", "false").lower() == "true",
-    all_rules: bool = os.environ.get("ALL_RULES", "false").lower() == "true",
+    pretty_print: bool = os.environ.get("INPUT_PRETTY_PRINT", "false").lower() == "true",
+    all_rules: bool = os.environ.get("INPUT_ALL_RULES", "false").lower() == "true",
     changed_files: set[str] = set(
-        Path(x) for x in os.environ.get("CHANGED_FILES", "").split(" ") if x
+        Path(x) for x in os.environ.get("INPUT_CHANGED_FILES", "").split(" ") if x
     ),
     deleted_files: set[str] = set(
-        Path(x) for x in os.environ.get("DELETED_FILES", "").split(" ") if x
+        Path(x) for x in os.environ.get("INPUT_DELETED_FILES", "").split(" ") if x
     ),
 ) -> None:
     """Convert Sigma rules to the target format per each conversion object in the config.
