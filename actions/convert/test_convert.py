@@ -198,9 +198,7 @@ def test_convert_rules_successful_conversion_all(temp_workspace, mock_config):
                         "filter": {"eventType": "AwsServiceEvent"},
                         "condition": "selection and not filter",
                     },
-                    "falsepositives": [
-                        "AWS Tasks That Require Root User Credentials"
-                    ],
+                    "falsepositives": ["AWS Tasks That Require Root User Credentials"],
                     "level": "medium",
                 }
             ],
@@ -237,9 +235,7 @@ def test_convert_rules_successful_conversion_changed_files(temp_workspace, mock_
                         "filter": {"eventType": "AwsServiceEvent"},
                         "condition": "selection and not filter",
                     },
-                    "falsepositives": [
-                        "AWS Tasks That Require Root User Credentials"
-                    ],
+                    "falsepositives": ["AWS Tasks That Require Root User Credentials"],
                     "level": "medium",
                 }
             ],
@@ -905,7 +901,9 @@ def test_convert_rules_command_args(
                 # Mock file I/O
                 with patch("builtins.open", MagicMock()):
                     # Run the function
-                    convert_rules(config=dynaconf_instance, path_prefix="/tmp", all_rules=True)
+                    convert_rules(
+                        config=dynaconf_instance, path_prefix="/tmp", all_rules=True
+                    )
 
                     # Verify invoke arguments
                     call_args = mock_invoke.call_args[1]["args"]
@@ -1024,7 +1022,9 @@ def test_default_correlation_method(
                 # Mock file I/O
                 with patch("builtins.open", MagicMock()):
                     # Run the function
-                    convert_rules(config=dynaconf_instance, path_prefix="/tmp", all_rules=True)
+                    convert_rules(
+                        config=dynaconf_instance, path_prefix="/tmp", all_rules=True
+                    )
 
                     # Verify the function was called with the right parameters
                     assert mock_invoke.called
