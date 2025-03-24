@@ -51,6 +51,7 @@ def convert_rules(
         ValueError: Pipeline file path must be relative to the project root.
         ValueError: Error loading rule file {rule_file}.
     """
+    print(f"{path_prefix}, {conversions_output_dir}, {render_traceback}, {pretty_print}, {all_rules}, {changed_files}, {deleted_files}")
     # Check if the path_prefix is set
     if not path_prefix or path_prefix == Path("."):
         raise ValueError(
