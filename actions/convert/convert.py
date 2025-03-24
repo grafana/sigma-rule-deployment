@@ -19,17 +19,17 @@ def convert_rules(
     config: Dynaconf,
     path_prefix: str | Path = Path(os.environ.get("GITHUB_WORKSPACE", "")),
     conversions_output_dir: str | Path = Path(
-        os.environ.get("INPUT_CONVERSIONS_OUTPUT_DIR", "conversions")
+        os.environ.get("CONVERSIONS_OUTPUT_DIR", "conversions")
     ),
-    render_traceback: bool = os.environ.get("INPUT_RENDER_TRACEBACK", "false").lower()
+    render_traceback: bool = os.environ.get("RENDER_TRACEBACK", "false").lower()
     == "true",
-    pretty_print: bool = os.environ.get("INPUT_PRETTY_PRINT", "false").lower() == "true",
-    all_rules: bool = os.environ.get("INPUT_ALL_RULES", "false").lower() == "true",
+    pretty_print: bool = os.environ.get("PRETTY_PRINT", "false").lower() == "true",
+    all_rules: bool = os.environ.get("ALL_RULES", "false").lower() == "true",
     changed_files: set[str] = set(
-        Path(x) for x in os.environ.get("INPUT_CHANGED_FILES", "").split(" ") if x
+        Path(x) for x in os.environ.get("CHANGED_FILES", "").split(" ") if x
     ),
     deleted_files: set[str] = set(
-        Path(x) for x in os.environ.get("INPUT_DELETED_FILES", "").split(" ") if x
+        Path(x) for x in os.environ.get("DELETED_FILES", "").split(" ") if x
     ),
 ) -> None:
     """Convert Sigma rules to the target format per each conversion object in the config.
@@ -64,6 +64,11 @@ def convert_rules(
     # Resolve the path_prefix to an absolute path
     if not path_prefix.is_absolute():
         path_prefix = path_prefix.resolve()
+
+    # Check whether we have any files to process
+    if not all_rules and not changed_files and not deleted_files:
+        print("No changed or deleted files identified, but all_rules is false")
+        exit(0)
 
     # Check if the conversions_output_dir stays within the project root to prevent path slip.
     conversions_output_dir = path_prefix / Path(conversions_output_dir)
@@ -146,6 +151,8 @@ def convert_rules(
 
         print(f"Total files: {len(filtered_files)}")
         print(f"Target backend: {conversion.get('target', default_target)}")
+        if all_rules:
+            print("Converting all discovered rules")
 
         # Verify that all pipeline files are relative to the repository root (GITHUB_WORKSPACE)
         for pipeline in conversion.get("pipelines", default_pipelines):
