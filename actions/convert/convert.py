@@ -154,9 +154,6 @@ def convert_rules(
                     "Pipeline file path must be relative to the project root"
                 )
 
-        # Output file path
-        output_file = path_prefix / conversions_output_dir / Path(f"{name}.json")
-
         encoding = conversion.get("encoding", default_encoding)
 
         pipelines = []
@@ -179,6 +176,7 @@ def convert_rules(
                 and Path(input_file) not in changed_files
                 and not any_pipeline_changed
             ):
+                print(f"Skipping conversion of {input_file} because it and it's pipelines haven't changed")
                 continue
 
             args = [
