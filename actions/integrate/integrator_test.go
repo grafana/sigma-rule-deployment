@@ -308,7 +308,7 @@ func TestReadWriteAlertRule(t *testing.T) {
 	rule := &definitions.ProvisionedAlertRule{}
 	err := readRuleFromFile(rule, "testdata/sample_rule.json")
 	assert.NoError(t, err)
-	err = writeRuleToFile(rule, "testdata/sample_rule.json")
+	err = writeRuleToFile(rule, "testdata/sample_rule.json", false)
 	assert.NoError(t, err)
 }
 

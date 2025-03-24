@@ -56,7 +56,8 @@ type ConversionOutput struct {
 }
 
 type Integrator struct {
-	config Configuration
+	config      Configuration
+	prettyPrint bool
 
 	addedFiles   []string
 	removedFiles []string
@@ -97,6 +98,7 @@ func (i *Integrator) LoadConfig() error {
 		return fmt.Errorf("error unmarshalling config file: %v", err)
 	}
 	i.config = config
+	i.prettyPrint = strings.ToLower(os.Getenv("PRETTY_PRINT")) == "true"
 
 	if !filepath.IsLocal(i.config.Folders.ConversionPath) {
 		return fmt.Errorf("conversion path is not local: %s", i.config.Folders.ConversionPath)
@@ -201,7 +203,7 @@ func (i *Integrator) Run() error {
 			if err != nil {
 				return err
 			}
-			err = writeRuleToFile(rule, file)
+			err = writeRuleToFile(rule, file, i.prettyPrint)
 			if err != nil {
 				return err
 			}
@@ -327,8 +329,14 @@ func readRuleFromFile(rule *definitions.ProvisionedAlertRule, inputPath string) 
 	return nil
 }
 
-func writeRuleToFile(rule *definitions.ProvisionedAlertRule, outputFile string) error {
-	ruleBytes, err := json.Marshal(rule)
+func writeRuleToFile(rule *definitions.ProvisionedAlertRule, outputFile string, prettyPrint bool) error {
+	var ruleBytes []byte
+	var err error
+	if prettyPrint {
+		ruleBytes, err = json.MarshalIndent(rule, "", "  ")
+	} else {
+		ruleBytes, err = json.Marshal(rule)
+	}
 	if err != nil {
 		return fmt.Errorf("error marshalling alert rule: %v", err)
 	}

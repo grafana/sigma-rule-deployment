@@ -23,6 +23,7 @@ def convert_rules(
     ),
     render_traceback: bool = os.environ.get("RENDER_TRACEBACK", "false").lower()
     == "true",
+    pretty_print: bool = os.environ.get("PRETTY_PRINT", "false").lower() == "true",
 ) -> None:
     """Convert Sigma rules to the target format per each conversion object in the config.
 
@@ -268,10 +269,13 @@ def convert_rules(
 
             # Write the output to a file per conversion
             with open(output_file, "w", encoding=encoding) as f:
+                options = json.OPT_NAIVE_UTC
+                if pretty_print:
+                    options = options | json.OPT_INDENT_2
                 f.write(
                     json.dumps(
                         filtered_output,
-                        option=json.OPT_NAIVE_UTC,
+                        option=options,
                     ).decode(encoding, "blackslashreplace")
                 )
 
