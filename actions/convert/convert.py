@@ -48,8 +48,8 @@ def convert_rules(
         ValueError: Error loading rule file {rule_file}.
     """
     print(f"{path_prefix}, {conversions_output_dir}, {render_traceback}, {pretty_print}, {all_rules}, {changed_files}, {deleted_files}")
-    changed_files_set = set(Path(x) for x in changed_files.split(" ") if x)
-    deleted_files_set = set(Path(x) for x in deleted_files.split(" ") if x)
+    changed_files_set = set(Path(x) for x in changed_files if x)
+    deleted_files_set = set(Path(x) for x in deleted_files if x)
     # Check if the path_prefix is set
     if not path_prefix or path_prefix == Path("."):
         raise ValueError(
