@@ -61,4 +61,4 @@ runs:
         action_ref: ${{ github.action_ref }}
       run: |
         docker pull ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${{ env.action_ref }}
-        docker run --rm -v "$(pwd):/sigma-rules" -w /sigma-rules -e GITHUB_WORKSPACE=/sigma-rules -e CONFIG_PATH="${CONFIG_PATH}" -e PLUGIN_PACKAGES="${PLUGIN_PACKAGES}" -e RENDER_TRACEBACK="${RENDER_TRACEBACK}" -e PRETTY_PRINT="${PRETTY_PRINT}" ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${action_ref} convert
+        docker run --rm -v "$(pwd):/sigma-rules" -w /sigma-rules -e GITHUB_WORKSPACE=/sigma-rules -e CONFIG_PATH="${CONFIG_PATH}" -e PLUGIN_PACKAGES="${PLUGIN_PACKAGES}" -e RENDER_TRACEBACK="${RENDER_TRACEBACK}" -e PRETTY_PRINT="${PRETTY_PRINT}" -e ALL_RULES="${ALL_RULES}" -e CHANGED_FILES="${CHANGED_FILES}" -e DELETED_FILES="${DELETED_FILES}" ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${action_ref} convert

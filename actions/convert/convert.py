@@ -25,8 +25,8 @@ def convert_rules(
     == "true",
     pretty_print: bool = os.environ.get("PRETTY_PRINT", "false").lower() == "true",
     all_rules: bool = os.environ.get("ALL_RULES", "false").lower() == "true",
-    changed_files: list[str] = os.environ.get("CHANGED_FILES", ""),
-    deleted_files: list[str] = os.environ.get("DELETED_FILES", ""),
+    changed_files: list[str] = os.environ.get("CHANGED_FILES", "").split(" "),
+    deleted_files: list[str] = os.environ.get("DELETED_FILES", "").split(" "),
 ) -> None:
     """Convert Sigma rules to the target format per each conversion object in the config.
 
