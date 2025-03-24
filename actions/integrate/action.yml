@@ -19,11 +19,18 @@ inputs:
     description: "Pretty print the JSON output"
     required: false
     default: "false"
+  output_log_lines:
+    description: "Output log lines to the outputs of the test_query_results"
+    required: false
+    default: "false"
 
 outputs:
   rules_integrated:
     description: "The repository file names changed (added/updated or removed) by this Action"
     value: ${{ steps.integrate.outputs.rules_integrated }}
+  test_query_results:
+    description: "The results of testing the queries against the datasource for the past hour"
+    value: ${{ steps.integrate.outputs.test_query_results }}
 
 runs:
   using: "composite"

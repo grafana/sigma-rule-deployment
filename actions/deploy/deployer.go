@@ -21,7 +21,7 @@ import (
 var regexAlertFilename = regexp.MustCompile(`alert_rule_(?:.*)_([^\.]+)\.json`)
 
 // Timeout for the HTTP requests
-var requestTimeOut = 10 * time.Second
+var defaultRequestTimeout = 10 * time.Second
 
 // Structure to store the deployment config
 type deploymentConfig struct {
@@ -35,6 +35,7 @@ type deploymentConfig struct {
 	alertsToRemove  []string
 	alertsToUpdate  []string
 	groupsIntervals map[string]int64
+	timeout         time.Duration
 }
 
 // Structures to unmarshal the YAML config file
@@ -43,6 +44,7 @@ type FoldersConfig struct {
 }
 type DeploymentConfig struct {
 	GrafanaInstance string `yaml:"grafana_instance"`
+	Timeout         string `yaml:"timeout"`
 }
 type ConversionConfig struct {
 	RuleGroup  string `yaml:"rule_group"`
@@ -56,8 +58,12 @@ type Configuration struct {
 	IntegratorConfig IntegrationConfig  `yaml:"integration"`
 }
 type IntegrationConfig struct {
-	FolderID string `yaml:"folder_id"`
-	OrgID    int64  `yaml:"org_id"`
+	FolderID     string `yaml:"folder_id"`
+	OrgID        int64  `yaml:"org_id"`
+	TestQueries  bool   `yaml:"test_queries"`
+	From         string `yaml:"from"`
+	To           string `yaml:"to"`
+	ShowLogLines bool   `yaml:"show_log_lines"`
 }
 
 type Deployer struct {
@@ -91,6 +97,9 @@ func main() {
 		fmt.Printf("Error loading config: %v\n", err)
 		os.Exit(1)
 	}
+	deployer.client = &http.Client{
+		Timeout: deployer.config.timeout,
+	}
 
 	// Deploy alerts
 	alertsCreated, alertsUpdated, alertsDeleted, errDeploy := deployer.Deploy(ctx)
@@ -111,9 +120,6 @@ func main() {
 
 func NewDeployer() *Deployer {
 	return &Deployer{
-		client: &http.Client{
-			Timeout: requestTimeOut,
-		},
 		groupsToUpdate: map[string]bool{},
 	}
 }
@@ -230,6 +236,17 @@ func (d *Deployer) LoadConfig(ctx context.Context) error {
 		orgId:           configYAML.IntegratorConfig.OrgID,
 		folderUid:       configYAML.IntegratorConfig.FolderID,
 		groupsIntervals: make(map[string]int64),
+		timeout:         defaultRequestTimeout,
+	}
+
+	// Parse timeout if provided
+	if configYAML.DeployerConfig.Timeout != "" {
+		parsedTimeout, err := time.ParseDuration(configYAML.DeployerConfig.Timeout)
+		if err != nil {
+			log.Printf("Warning: Invalid timeout format in config, using default: %v\n", err)
+		} else {
+			d.config.timeout = parsedTimeout
+		}
 	}
 
 	// Makes sure the endpoint URL ends with a slash

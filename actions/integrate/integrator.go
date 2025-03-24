@@ -63,6 +63,45 @@ type Integrator struct {
 	removedFiles []string
 }
 
+type Stats struct {
+	Count  int               `json:"count"`
+	Fields map[string]string `json:"fields"`
+	Errors []string          `json:"errors"`
+}
+
+type QueryTestResult struct {
+	Query      string `json:"query"`
+	Datasource string `json:"datasource"`
+	Stats      Stats  `json:"stats"`
+}
+
+// Frame represents a single frame from a Grafana datasource query response
+type Frame struct {
+	Schema struct {
+		Fields []struct {
+			Name string `json:"name"`
+			Type string `json:"type"`
+		} `json:"fields"`
+	} `json:"schema"`
+	Data struct {
+		Values [][]interface{} `json:"values"`
+	} `json:"data"`
+}
+
+// ResultFrame represents a single result frame in the query response
+type ResultFrame struct {
+	Frames []Frame `json:"frames"`
+}
+
+// QueryResponse represents the structure of a Grafana datasource query response
+type QueryResponse struct {
+	Results map[string]ResultFrame `json:"results"`
+	Errors  []struct {
+		Type    string `json:"type"`
+		Message string `json:"message"`
+	} `json:"errors"`
+}
+
 func main() {
 	integrator := NewIntegrator()
 	if err := integrator.LoadConfig(); err != nil {
@@ -114,6 +153,15 @@ func (i *Integrator) LoadConfig() error {
 		}
 	}
 
+	// If from and to are not provided, use the default values
+	// to query for the last hour.
+	if i.config.IntegratorConfig.From == "" {
+		i.config.IntegratorConfig.From = "now-1h"
+	}
+	if i.config.IntegratorConfig.To == "" {
+		i.config.IntegratorConfig.To = "now"
+	}
+
 	addedFiles := strings.Split(os.Getenv("ADDED_FILES"), " ")
 	deletedFiles := strings.Split(os.Getenv("DELETED_FILES"), " ")
 	modifiedFiles := strings.Split(os.Getenv("MODIFIED_FILES"), " ")
@@ -158,6 +206,21 @@ func (i *Integrator) LoadConfig() error {
 }
 
 func (i *Integrator) Run() error {
+	// Parse the timeout from configuration
+	timeoutDuration := 10 * time.Second // Default timeout
+	if i.config.DeployerConfig.Timeout != "" {
+		parsedTimeout, err := time.ParseDuration(i.config.DeployerConfig.Timeout)
+		if err != nil {
+			fmt.Printf("Warning: Invalid timeout format in config, using default: %v\n", err)
+		} else {
+			timeoutDuration = parsedTimeout
+		}
+	}
+
+	if i.config.IntegratorConfig.TestQueries {
+		fmt.Println("Testing queries against the datasource")
+	}
+
 	for _, inputFile := range i.addedFiles {
 		conversionContent, err := ReadLocalFile(inputFile)
 		if err != nil {
@@ -206,6 +269,23 @@ func (i *Integrator) Run() error {
 		err = writeRuleToFile(rule, file, i.prettyPrint)
 		if err != nil {
 			return err
+		}
+
+		if i.config.IntegratorConfig.TestQueries {
+			// Test all queries against the datasource
+			queryResults, err := i.TestQueries(queries, config, timeoutDuration)
+			if err != nil {
+				return err
+			}
+
+			// Marshal all query results into a single JSON object
+			resultsJSON, err := json.Marshal(queryResults)
+			if err != nil {
+				return fmt.Errorf("error marshalling query results: %v", err)
+			}
+
+			// Set a single output with all results
+			SetOutput("test_query_results", string(resultsJSON))
 		}
 	}
 
@@ -405,4 +485,116 @@ func summariseSigmaRules(rules []SigmaRule) (id uuid.UUID, title string, err err
 		title = title[:190]
 	}
 	return conversionID, title, nil
+}
+
+// processFrame processes a single frame from the query response and updates the result stats
+func (i *Integrator) processFrame(frame Frame, result *QueryTestResult) error {
+	// Map field names to their indices
+	fieldIndices := make(map[string]int)
+	for i, field := range frame.Schema.Fields {
+		fieldIndices[field.Name] = i
+	}
+
+	// Skip if no values
+	if len(frame.Data.Values) == 0 {
+		return nil
+	}
+
+	// Get the number of rows from the first field's values
+	numRows := 0
+	for _, values := range frame.Data.Values {
+		if len(values) > numRows {
+			numRows = len(values)
+		}
+	}
+
+	// Process each row of values
+	for rowIndex := 0; rowIndex < numRows; rowIndex++ {
+		// Process labels if present
+		if labelIndex, ok := fieldIndices["labels"]; ok {
+			if labelIndex < len(frame.Data.Values) {
+				if rowIndex < len(frame.Data.Values[labelIndex]) {
+					if labelValues, ok := frame.Data.Values[labelIndex][rowIndex].(map[string]interface{}); ok {
+						for label, value := range labelValues {
+							if _, exists := result.Stats.Fields[label]; !exists {
+								result.Stats.Fields[label] = fmt.Sprintf("%v", value)
+							}
+						}
+					}
+				}
+			}
+		}
+
+		// Process Line field if present
+		if lineIndex, ok := fieldIndices["Line"]; ok {
+			if lineIndex < len(frame.Data.Values) {
+				if rowIndex < len(frame.Data.Values[lineIndex]) {
+					if lineValue, ok := frame.Data.Values[lineIndex][rowIndex].(string); ok {
+						result.Stats.Count++
+						// Only store the line value if show_log_lines is enabled
+						if i.config.IntegratorConfig.ShowLogLines {
+							if _, exists := result.Stats.Fields["Line"]; !exists {
+								result.Stats.Fields["Line"] = lineValue
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (i *Integrator) TestQueries(queries []string, config ConversionConfig, timeoutDuration time.Duration) ([]QueryTestResult, error) {
+	var queryResults []QueryTestResult
+	for _, query := range queries {
+		resp, err := TestQuery(
+			query,
+			config.DataSource,
+			i.config.DeployerConfig.GrafanaInstance,
+			os.Getenv("INTEGRATOR_GRAFANA_SA_TOKEN"),
+			i.config.IntegratorConfig.From,
+			i.config.IntegratorConfig.To,
+			timeoutDuration,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("error testing query %s: %v", query, err)
+		}
+
+		// Parse the response to extract statistics
+		result := QueryTestResult{
+			Query:      query,
+			Datasource: config.DataSource,
+			Stats: Stats{
+				Fields: make(map[string]string),
+				Errors: make([]string, 0),
+			},
+		}
+
+		// Parse the response to extract statistics
+		var responseData QueryResponse
+		if err := json.Unmarshal(resp, &responseData); err != nil {
+			return nil, fmt.Errorf("error unmarshalling query response: %v", err)
+		}
+
+		// Process errors
+		for _, err := range responseData.Errors {
+			if err.Type != "cancelled" && err.Message != "" {
+				result.Stats.Errors = append(result.Stats.Errors, err.Message)
+			}
+		}
+
+		// Process data frames from all results
+		for _, resultFrame := range responseData.Results {
+			for _, frame := range resultFrame.Frames {
+				if err := i.processFrame(frame, &result); err != nil {
+					return nil, fmt.Errorf("error processing frame: %v", err)
+				}
+			}
+		}
+
+		queryResults = append(queryResults, result)
+	}
+
+	return queryResults, nil
 }
