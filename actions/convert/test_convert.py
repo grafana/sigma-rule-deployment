@@ -170,47 +170,94 @@ def test_is_path(path_string, file_pattern, expected):
         assert result == expected
 
 
-def test_convert_rules_successful_conversion(temp_workspace, mock_config):
+def test_convert_rules_successful_conversion_all(temp_workspace, mock_config):
     """Test that convert_rules successfully converts Sigma rules."""
     convert_rules(
         config=mock_config,
         path_prefix=temp_workspace,
         conversions_output_dir="conversions",
+        all_rules=True,
     )
 
-    output_file = temp_workspace / "conversions" / "test_conversion.json"
+    output_file = temp_workspace / "conversions" / "test_conversion_test.json"
     assert output_file.exists()
     assert output_file.read_text() == json.dumps(
-        [
-            {
-                "queries": [
-                    '{job=~".+"} | logfmt | userIdentity_type=~`(?i)^Root$` and eventType!~`(?i)^AwsServiceEvent$`'
-                ],
-                "conversion_name": "test_conversion",
-                "input_file": "rules/test.yml",
-                "rules": [
-                    {
-                        "title": "AWS Root Credentials",
-                        "description": "Detects AWS root account usage",
-                        "logsource": {"product": "aws", "service": "cloudtrail"},
-                        "detection": {
-                            "selection": {"userIdentity.type": "Root"},
-                            "filter": {"eventType": "AwsServiceEvent"},
-                            "condition": "selection and not filter",
-                        },
-                        "falsepositives": [
-                            "AWS Tasks That Require Root User Credentials"
-                        ],
-                        "level": "medium",
-                    }
-                ],
-                "output_file": "conversions/test_conversion.json",
-            }
-        ]
+        {
+            "queries": [
+                '{job=~".+"} | logfmt | userIdentity_type=~`(?i)^Root$` and eventType!~`(?i)^AwsServiceEvent$`'
+            ],
+            "conversion_name": "test_conversion",
+            "input_file": "rules/test.yml",
+            "rules": [
+                {
+                    "title": "AWS Root Credentials",
+                    "description": "Detects AWS root account usage",
+                    "logsource": {"product": "aws", "service": "cloudtrail"},
+                    "detection": {
+                        "selection": {"userIdentity.type": "Root"},
+                        "filter": {"eventType": "AwsServiceEvent"},
+                        "condition": "selection and not filter",
+                    },
+                    "falsepositives": ["AWS Tasks That Require Root User Credentials"],
+                    "level": "medium",
+                }
+            ],
+            "output_file": "conversions/test_conversion_test.json",
+        }
     ).decode("utf-8", "replace")
 
 
-def test_convert_rules_successful_conversion_with_correlation_rule(
+def test_convert_rules_successful_conversion_changed_files(temp_workspace, mock_config):
+    """Test that convert_rules successfully converts changed Sigma rules."""
+    convert_rules(
+        config=mock_config,
+        path_prefix=temp_workspace,
+        conversions_output_dir="conversions",
+        changed_files=set([temp_workspace / "rules" / "test.yml"]),
+    )
+
+    output_file = temp_workspace / "conversions" / "test_conversion_test.json"
+    assert output_file.exists()
+    assert output_file.read_text() == json.dumps(
+        {
+            "queries": [
+                '{job=~".+"} | logfmt | userIdentity_type=~`(?i)^Root$` and eventType!~`(?i)^AwsServiceEvent$`'
+            ],
+            "conversion_name": "test_conversion",
+            "input_file": "rules/test.yml",
+            "rules": [
+                {
+                    "title": "AWS Root Credentials",
+                    "description": "Detects AWS root account usage",
+                    "logsource": {"product": "aws", "service": "cloudtrail"},
+                    "detection": {
+                        "selection": {"userIdentity.type": "Root"},
+                        "filter": {"eventType": "AwsServiceEvent"},
+                        "condition": "selection and not filter",
+                    },
+                    "falsepositives": ["AWS Tasks That Require Root User Credentials"],
+                    "level": "medium",
+                }
+            ],
+            "output_file": "conversions/test_conversion_test.json",
+        }
+    ).decode("utf-8", "replace")
+
+
+def test_convert_rules_skip_unchanged_rules(temp_workspace, mock_config):
+    """Test that convert_rules successfully skips converting unchanged Sigma rules."""
+    convert_rules(
+        config=mock_config,
+        path_prefix=temp_workspace,
+        conversions_output_dir="conversions",
+        changed_files=set([temp_workspace / "rules" / "different.yml"]),
+    )
+
+    output_file = temp_workspace / "conversions" / "test_conversion_test.json"
+    assert not output_file.exists()
+
+
+def test_convert_rules_successful_conversion_with_correlation_rule_all(
     temp_workspace_with_correlation_rule, mock_config_with_correlation_rule
 ):
     """Test that convert_rules successfully converts a Sigma correlation rule."""
@@ -218,76 +265,75 @@ def test_convert_rules_successful_conversion_with_correlation_rule(
         config=mock_config_with_correlation_rule,
         path_prefix=temp_workspace_with_correlation_rule,
         conversions_output_dir="conversions",
+        all_rules=True,
     )
 
     output_file = (
         temp_workspace_with_correlation_rule
         / "conversions"
-        / "test_conversion_with_correlation_rule.json"
+        / "test_conversion_with_correlation_rule_correlation.json"
     )
     assert output_file.exists()
     assert output_file.read_text() == json.dumps(
-        [
-            {
-                "queries": [
-                    'sum by (userIdentity_arn) (count_over_time({job=~".+"} | logfmt | eventSource=~`(?i)^s3\\.amazonaws\\.com$` and eventName=~`(?i)^ListBuckets$` and userIdentity_type!~`(?i)^AssumedRole$` [1h])) >= 100'
-                ],
-                "conversion_name": "test_conversion_with_correlation_rule",
-                "input_file": "rules/correlation.yml",
-                "rules": [
-                    {
-                        "title": "Potential Bucket Enumeration on AWS",
-                        "id": "f305fd62-beca-47da-ad95-7690a0620084",
-                        "related": [
-                            {
-                                "id": "4723218f-2048-41f6-bcb0-417f2d784f61",
-                                "type": "similar",
-                            }
-                        ],
-                        "status": "test",
-                        "description": "Looks for potential enumeration of AWS buckets via ListBuckets.",
-                        "references": [
-                            "https://github.com/Lifka/hacking-resources/blob/c2ae355d381bd0c9f0b32c4ead049f44e5b1573f/cloud-hacking-cheat-sheets.md",
-                            "https://jamesonhacking.blogspot.com/2020/12/pivoting-to-private-aws-s3-buckets.html",
-                            "https://securitycafe.ro/2022/12/14/aws-enumeration-part-ii-practical-enumeration/",
-                        ],
-                        "author": "Christopher Peacock @securepeacock, SCYTHE @scythe_io",
-                        "date": "2023-01-06",
-                        "modified": "2024-07-10",
-                        "tags": ["attack.discovery", "attack.t1580"],
-                        "logsource": {"product": "aws", "service": "cloudtrail"},
-                        "detection": {
-                            "selection": {
-                                "eventSource": "s3.amazonaws.com",
-                                "eventName": "ListBuckets",
-                            },
-                            "filter": {"userIdentity.type": "AssumedRole"},
-                            "condition": "selection and not filter",
+        {
+            "queries": [
+                'sum by (userIdentity_arn) (count_over_time({job=~".+"} | logfmt | eventSource=~`(?i)^s3\\.amazonaws\\.com$` and eventName=~`(?i)^ListBuckets$` and userIdentity_type!~`(?i)^AssumedRole$` [1h])) >= 100'
+            ],
+            "conversion_name": "test_conversion_with_correlation_rule",
+            "input_file": "rules/correlation.yml",
+            "rules": [
+                {
+                    "title": "Potential Bucket Enumeration on AWS",
+                    "id": "f305fd62-beca-47da-ad95-7690a0620084",
+                    "related": [
+                        {
+                            "id": "4723218f-2048-41f6-bcb0-417f2d784f61",
+                            "type": "similar",
+                        }
+                    ],
+                    "status": "test",
+                    "description": "Looks for potential enumeration of AWS buckets via ListBuckets.",
+                    "references": [
+                        "https://github.com/Lifka/hacking-resources/blob/c2ae355d381bd0c9f0b32c4ead049f44e5b1573f/cloud-hacking-cheat-sheets.md",
+                        "https://jamesonhacking.blogspot.com/2020/12/pivoting-to-private-aws-s3-buckets.html",
+                        "https://securitycafe.ro/2022/12/14/aws-enumeration-part-ii-practical-enumeration/",
+                    ],
+                    "author": "Christopher Peacock @securepeacock, SCYTHE @scythe_io",
+                    "date": "2023-01-06",
+                    "modified": "2024-07-10",
+                    "tags": ["attack.discovery", "attack.t1580"],
+                    "logsource": {"product": "aws", "service": "cloudtrail"},
+                    "detection": {
+                        "selection": {
+                            "eventSource": "s3.amazonaws.com",
+                            "eventName": "ListBuckets",
                         },
-                        "falsepositives": [
-                            "Administrators listing buckets, it may be necessary to filter out users who commonly conduct this activity."
-                        ],
-                        "level": "low",
+                        "filter": {"userIdentity.type": "AssumedRole"},
+                        "condition": "selection and not filter",
                     },
-                    {
-                        "title": "Multiple AWS bucket enumerations by a single user",
-                        "id": "be246094-01d3-4bba-88de-69e582eba0cc",
-                        "author": "kelnage",
-                        "date": "2024-07-29",
-                        "status": "experimental",
-                        "correlation": {
-                            "type": "event_count",
-                            "rules": ["f305fd62-beca-47da-ad95-7690a0620084"],
-                            "group-by": ["userIdentity.arn"],
-                            "timespan": "1h",
-                            "condition": {"gte": 100},
-                        },
-                        "level": "high",
+                    "falsepositives": [
+                        "Administrators listing buckets, it may be necessary to filter out users who commonly conduct this activity."
+                    ],
+                    "level": "low",
+                },
+                {
+                    "title": "Multiple AWS bucket enumerations by a single user",
+                    "id": "be246094-01d3-4bba-88de-69e582eba0cc",
+                    "author": "kelnage",
+                    "date": "2024-07-29",
+                    "status": "experimental",
+                    "correlation": {
+                        "type": "event_count",
+                        "rules": ["f305fd62-beca-47da-ad95-7690a0620084"],
+                        "group-by": ["userIdentity.arn"],
+                        "timespan": "1h",
+                        "condition": {"gte": 100},
                     },
-                ],
-                "output_file": "conversions/test_conversion_with_correlation_rule.json",
-            }
-        ]
+                    "level": "high",
+                },
+            ],
+            "output_file": "conversions/test_conversion_with_correlation_rule_correlation.json",
+        }
     ).decode("utf-8", "replace")
 
 
@@ -855,7 +901,9 @@ def test_convert_rules_command_args(
                 # Mock file I/O
                 with patch("builtins.open", MagicMock()):
                     # Run the function
-                    convert_rules(config=dynaconf_instance, path_prefix="/tmp")
+                    convert_rules(
+                        config=dynaconf_instance, path_prefix="/tmp", all_rules=True
+                    )
 
                     # Verify invoke arguments
                     call_args = mock_invoke.call_args[1]["args"]
@@ -974,7 +1022,9 @@ def test_default_correlation_method(
                 # Mock file I/O
                 with patch("builtins.open", MagicMock()):
                     # Run the function
-                    convert_rules(config=dynaconf_instance, path_prefix="/tmp")
+                    convert_rules(
+                        config=dynaconf_instance, path_prefix="/tmp", all_rules=True
+                    )
 
                     # Verify the function was called with the right parameters
                     assert mock_invoke.called

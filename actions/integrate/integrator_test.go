@@ -369,47 +369,45 @@ func TestIntegratorRun(t *testing.T) {
 	tests := []struct {
 		name           string
 		conversionName string
-		convOutput     []ConversionOutput
+		convOutput     ConversionOutput
 		wantQueries    []string
-		wantTitles     []string
+		wantTitles     string
 		wantError      bool
 	}{
 		{
 			name:           "single rule single query",
 			conversionName: "test_conv1",
-			convOutput: []ConversionOutput{
-				{
-					Queries: []string{"{job=`test`} | json"},
-					Rules: []SigmaRule{
-						{
-							ID:    "996f8884-9144-40e7-ac63-29090ccde9a0",
-							Title: "Test Rule",
-						},
+			convOutput: ConversionOutput{
+				ConversionName: "test_conv1",
+				Queries:        []string{"{job=`test`} | json"},
+				Rules: []SigmaRule{
+					{
+						ID:    "996f8884-9144-40e7-ac63-29090ccde9a0",
+						Title: "Test Rule",
 					},
 				},
 			},
 			wantQueries: []string{"sum(count_over_time({job=`test`} | json[$__auto]))"},
-			wantTitles:  []string{"Test Rule"},
+			wantTitles:  "Test Rule",
 			wantError:   false,
 		},
 		{
 			name:           "multiple rules multiple queries",
 			conversionName: "test_conv2",
-			convOutput: []ConversionOutput{
-				{
-					Queries: []string{
-						"{job=`test1`} | json",
-						"{job=`test2`} | json",
+			convOutput: ConversionOutput{
+				ConversionName: "test_conv2",
+				Queries: []string{
+					"{job=`test1`} | json",
+					"{job=`test2`} | json",
+				},
+				Rules: []SigmaRule{
+					{
+						ID:    "a6b097fd-44d2-413f-b5cd-0916e22e6d5c",
+						Title: "Test Rule 1",
 					},
-					Rules: []SigmaRule{
-						{
-							ID:    "a6b097fd-44d2-413f-b5cd-0916e22e6d5c",
-							Title: "Test Rule 1",
-						},
-						{
-							ID:    "37f6f301-ddba-496f-9a84-853886ffff6b",
-							Title: "Test Rule 2",
-						},
+					{
+						ID:    "37f6f301-ddba-496f-9a84-853886ffff6b",
+						Title: "Test Rule 2",
 					},
 				},
 			},
@@ -417,50 +415,19 @@ func TestIntegratorRun(t *testing.T) {
 				"sum(count_over_time({job=`test1`} | json[$__auto]))",
 				"sum(count_over_time({job=`test2`} | json[$__auto]))",
 			},
-			wantTitles: []string{"Test Rule 1 & Test Rule 2"},
-			wantError:  false,
-		},
-		{
-			name:           "multiple conversion objects",
-			conversionName: "test_conv3",
-			convOutput: []ConversionOutput{
-				{
-					Queries: []string{"{job=`test1`} | json"},
-					Rules: []SigmaRule{
-						{
-							ID:    "996f8884-9144-40e7-ac63-29090ccde9a0",
-							Title: "Test Rule 1",
-						},
-					},
-				},
-				{
-					Queries: []string{"{job=`test2`} | json"},
-					Rules: []SigmaRule{
-						{
-							ID:    "37f6f301-ddba-496f-9a84-853886ffff6b",
-							Title: "Test Rule 2",
-						},
-					},
-				},
-			},
-			wantQueries: []string{
-				"sum(count_over_time({job=`test1`} | json[$__auto]))",
-				"sum(count_over_time({job=`test2`} | json[$__auto]))",
-			},
-			wantTitles: []string{"Test Rule 1", "Test Rule 2"},
+			wantTitles: "Test Rule 1 & Test Rule 2",
 			wantError:  false,
 		},
 		{
 			name:           "no queries",
 			conversionName: "test_conv4",
-			convOutput: []ConversionOutput{
-				{
-					Queries: []string{},
-					Rules: []SigmaRule{
-						{
-							ID:    "996f8884-9144-40e7-ac63-29090ccde9a0",
-							Title: "Test Rule",
-						},
+			convOutput: ConversionOutput{
+				ConversionName: "test_conv4",
+				Queries:        []string{},
+				Rules: []SigmaRule{
+					{
+						ID:    "996f8884-9144-40e7-ac63-29090ccde9a0",
+						Title: "Test Rule",
 					},
 				},
 			},
@@ -537,34 +504,28 @@ func TestIntegratorRun(t *testing.T) {
 				return
 			}
 
-			// Verify output files for each conversion object
-			for idx, convObj := range tt.convOutput {
-				if len(convObj.Queries) == 0 {
-					continue
-				}
+			// Verify output file
+			convID, _, err := summariseSigmaRules(tt.convOutput.Rules)
+			assert.NoError(t, err)
 
-				convID, _, err := summariseSigmaRules(convObj.Rules)
-				assert.NoError(t, err)
+			expectedFile := filepath.Join(deployPath, fmt.Sprintf("alert_rule_%s_%s.json", tt.conversionName, convID.String()))
+			_, err = os.Stat(expectedFile)
+			assert.NoError(t, err)
 
-				expectedFile := filepath.Join(deployPath, fmt.Sprintf("alert_rule_%s_%s.json", tt.conversionName, convID.String()))
-				_, err = os.Stat(expectedFile)
-				assert.NoError(t, err)
+			// Verify file contents
+			rule := &definitions.ProvisionedAlertRule{}
+			err = readRuleFromFile(rule, expectedFile)
+			assert.NoError(t, err)
 
-				// Verify file contents
-				rule := &definitions.ProvisionedAlertRule{}
-				err = readRuleFromFile(rule, expectedFile)
-				assert.NoError(t, err)
+			// Verify rule properties
+			assert.Equal(t, convID.String(), rule.UID)
+			assert.Equal(t, tt.wantTitles, rule.Title)
+			assert.Equal(t, "Test Rules", rule.RuleGroup)
+			assert.Equal(t, "test-datasource", rule.Data[0].DatasourceUID)
 
-				// Verify rule properties
-				assert.Equal(t, convID.String(), rule.UID)
-				assert.Equal(t, tt.wantTitles[idx], rule.Title)
-				assert.Equal(t, "Test Rules", rule.RuleGroup)
-				assert.Equal(t, "test-datasource", rule.Data[0].DatasourceUID)
-
-				// Verify queries
-				for qIdx, query := range convObj.Queries {
-					assert.Contains(t, string(rule.Data[qIdx].Model), query)
-				}
+			// Verify queries
+			for qIdx, query := range tt.convOutput.Queries {
+				assert.Contains(t, string(rule.Data[qIdx].Model), query)
 			}
 		})
 	}
@@ -654,14 +615,13 @@ func TestIntegratorWithQueryTesting(t *testing.T) {
 			assert.NoError(t, err)
 
 			// Create test conversion output
-			convOutput := []ConversionOutput{
-				{
-					Queries: testQueries,
-					Rules: []SigmaRule{
-						{
-							ID:    "996f8884-9144-40e7-ac63-29090ccde9a0",
-							Title: "Test Loki Rule",
-						},
+			convOutput := ConversionOutput{
+				Queries:        testQueries,
+				ConversionName: "test_loki",
+				Rules: []SigmaRule{
+					{
+						ID:    "996f8884-9144-40e7-ac63-29090ccde9a0",
+						Title: "Test Loki Rule",
 					},
 				},
 			}
@@ -787,7 +747,7 @@ func TestIntegratorWithQueryTesting(t *testing.T) {
 			assert.NoError(t, err)
 
 			// Verify alert rule file was created
-			convID, _, err := summariseSigmaRules(convOutput[0].Rules)
+			convID, _, err := summariseSigmaRules(convOutput.Rules)
 			assert.NoError(t, err)
 			expectedFile := filepath.Join(deployPath, fmt.Sprintf("alert_rule_test_loki_%s.json", convID.String()))
 			_, err = os.Stat(expectedFile)

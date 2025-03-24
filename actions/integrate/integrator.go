@@ -227,66 +227,65 @@ func (i *Integrator) Run() error {
 			return err
 		}
 
-		config := ConversionConfig{}
+		var conversionObject ConversionOutput
+		err = json.Unmarshal([]byte(conversionContent), &conversionObject)
+		if err != nil {
+			return fmt.Errorf("error unmarshalling conversion output: %v", err)
+		}
+
+		// Find matching configuration using ConversionName
+		var config ConversionConfig
 		for _, conf := range i.config.Conversions {
-			if conf.Name+".json" == filepath.Base(inputFile) {
+			if conf.Name == conversionObject.ConversionName {
 				config = conf
 				break
 			}
 		}
 		if config.Name == "" {
-			return fmt.Errorf("no conversion configuration found for file: %s", inputFile)
+			return fmt.Errorf("no conversion configuration found for conversion name: %s", conversionObject.ConversionName)
 		}
 
-		var conversionObjects []ConversionOutput
-		err = json.Unmarshal([]byte(conversionContent), &conversionObjects)
+		queries := conversionObject.Queries
+		if len(queries) == 0 {
+			fmt.Printf("no queries found in conversion object")
+			continue
+		}
+
+		conversionID, titles, err := summariseSigmaRules(conversionObject.Rules)
 		if err != nil {
-			return fmt.Errorf("error unmarshalling conversion output: %v", err)
+			return fmt.Errorf("error summarising sigma rules: %v", err)
 		}
 
-		for conversionIndex, conversionObject := range conversionObjects {
-			queries := conversionObject.Queries
-			if len(queries) == 0 {
-				fmt.Printf("no queries found in conversion object: %d", conversionIndex)
-				continue
-			}
+		file := fmt.Sprintf("%s%salert_rule_%s_%s.json", i.config.Folders.DeploymentPath, string(filepath.Separator), config.Name, conversionID.String())
+		rule := &definitions.ProvisionedAlertRule{UID: conversionID.String()}
+		err = readRuleFromFile(rule, file)
+		if err != nil {
+			return err
+		}
+		err = i.ConvertToAlert(rule, queries, titles, config)
+		if err != nil {
+			return err
+		}
+		err = writeRuleToFile(rule, file, i.prettyPrint)
+		if err != nil {
+			return err
+		}
 
-			conversionID, titles, err := summariseSigmaRules(conversionObject.Rules)
-			if err != nil {
-				return fmt.Errorf("error summarising sigma rules: %v", err)
-			}
-
-			file := fmt.Sprintf("%s%salert_rule_%s_%s.json", i.config.Folders.DeploymentPath, string(filepath.Separator), config.Name, conversionID.String())
-			rule := &definitions.ProvisionedAlertRule{UID: conversionID.String()}
-			err = readRuleFromFile(rule, file)
-			if err != nil {
-				return err
-			}
-			err = i.ConvertToAlert(rule, queries, titles, config)
-			if err != nil {
-				return err
-			}
-			err = writeRuleToFile(rule, file, i.prettyPrint)
+		if i.config.IntegratorConfig.TestQueries {
+			// Test all queries against the datasource
+			queryResults, err := i.TestQueries(queries, config, timeoutDuration)
 			if err != nil {
 				return err
 			}
 
-			if i.config.IntegratorConfig.TestQueries {
-				// Test all queries against the datasource
-				queryResults, err := i.TestQueries(queries, config, timeoutDuration)
-				if err != nil {
-					return err
-				}
-
-				// Marshal all query results into a single JSON object
-				resultsJSON, err := json.Marshal(queryResults)
-				if err != nil {
-					return fmt.Errorf("error marshalling query results: %v", err)
-				}
-
-				// Set a single output with all results
-				SetOutput("test_query_results", string(resultsJSON))
+			// Marshal all query results into a single JSON object
+			resultsJSON, err := json.Marshal(queryResults)
+			if err != nil {
+				return fmt.Errorf("error marshalling query results: %v", err)
 			}
+
+			// Set a single output with all results
+			SetOutput("test_query_results", string(resultsJSON))
 		}
 	}
 
