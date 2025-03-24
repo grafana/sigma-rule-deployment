@@ -170,12 +170,13 @@ def test_is_path(path_string, file_pattern, expected):
         assert result == expected
 
 
-def test_convert_rules_successful_conversion(temp_workspace, mock_config):
+def test_convert_rules_successful_conversion_all(temp_workspace, mock_config):
     """Test that convert_rules successfully converts Sigma rules."""
     convert_rules(
         config=mock_config,
         path_prefix=temp_workspace,
         conversions_output_dir="conversions",
+        all_rules=True,
     )
 
     output_file = temp_workspace / "conversions" / "test_conversion_test.json"
@@ -208,7 +209,59 @@ def test_convert_rules_successful_conversion(temp_workspace, mock_config):
     ).decode("utf-8", "replace")
 
 
-def test_convert_rules_successful_conversion_with_correlation_rule(
+def test_convert_rules_successful_conversion_changed_files(temp_workspace, mock_config):
+    """Test that convert_rules successfully converts changed Sigma rules."""
+    convert_rules(
+        config=mock_config,
+        path_prefix=temp_workspace,
+        conversions_output_dir="conversions",
+        changed_files=set([temp_workspace / "rules" / "test.yml"]),
+    )
+
+    output_file = temp_workspace / "conversions" / "test_conversion_test.json"
+    assert output_file.exists()
+    assert output_file.read_text() == json.dumps(
+        {
+            "queries": [
+                '{job=~".+"} | logfmt | userIdentity_type=~`(?i)^Root$` and eventType!~`(?i)^AwsServiceEvent$`'
+            ],
+            "conversion_name": "test_conversion",
+            "input_file": "rules/test.yml",
+            "rules": [
+                {
+                    "title": "AWS Root Credentials",
+                    "description": "Detects AWS root account usage",
+                    "logsource": {"product": "aws", "service": "cloudtrail"},
+                    "detection": {
+                        "selection": {"userIdentity.type": "Root"},
+                        "filter": {"eventType": "AwsServiceEvent"},
+                        "condition": "selection and not filter",
+                    },
+                    "falsepositives": [
+                        "AWS Tasks That Require Root User Credentials"
+                    ],
+                    "level": "medium",
+                }
+            ],
+            "output_file": "conversions/test_conversion_test.json",
+        }
+    ).decode("utf-8", "replace")
+
+
+def test_convert_rules_skip_unchanged_rules(temp_workspace, mock_config):
+    """Test that convert_rules successfully skips converting unchanged Sigma rules."""
+    convert_rules(
+        config=mock_config,
+        path_prefix=temp_workspace,
+        conversions_output_dir="conversions",
+        changed_files=set([temp_workspace / "rules" / "different.yml"]),
+    )
+
+    output_file = temp_workspace / "conversions" / "test_conversion_test.json"
+    assert not output_file.exists()
+
+
+def test_convert_rules_successful_conversion_with_correlation_rule_all(
     temp_workspace_with_correlation_rule, mock_config_with_correlation_rule
 ):
     """Test that convert_rules successfully converts a Sigma correlation rule."""
@@ -216,6 +269,7 @@ def test_convert_rules_successful_conversion_with_correlation_rule(
         config=mock_config_with_correlation_rule,
         path_prefix=temp_workspace_with_correlation_rule,
         conversions_output_dir="conversions",
+        all_rules=True,
     )
 
     output_file = (
@@ -851,7 +905,7 @@ def test_convert_rules_command_args(
                 # Mock file I/O
                 with patch("builtins.open", MagicMock()):
                     # Run the function
-                    convert_rules(config=dynaconf_instance, path_prefix="/tmp")
+                    convert_rules(config=dynaconf_instance, path_prefix="/tmp", all_rules=True)
 
                     # Verify invoke arguments
                     call_args = mock_invoke.call_args[1]["args"]
@@ -970,7 +1024,7 @@ def test_default_correlation_method(
                 # Mock file I/O
                 with patch("builtins.open", MagicMock()):
                     # Run the function
-                    convert_rules(config=dynaconf_instance, path_prefix="/tmp")
+                    convert_rules(config=dynaconf_instance, path_prefix="/tmp", all_rules=True)
 
                     # Verify the function was called with the right parameters
                     assert mock_invoke.called

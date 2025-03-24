@@ -24,6 +24,11 @@ def convert_rules(
     render_traceback: bool = os.environ.get("RENDER_TRACEBACK", "false").lower()
     == "true",
     pretty_print: bool = os.environ.get("PRETTY_PRINT", "false").lower() == "true",
+        all_rules: bool = os.environ.get("ALL_RULES", "false").lower() == "true",
+        changed_files: set[str] = set(
+            Path(x) for x in os.environ.get("CHANGED_FILES", "").split(" ") if x),
+        deleted_files: set[str] = set(
+            Path(x) for x in os.environ.get("DELETED_FILES", "").split(" ") if x),
 ) -> None:
     """Convert Sigma rules to the target format per each conversion object in the config.
 
@@ -153,15 +158,23 @@ def convert_rules(
         encoding = conversion.get("encoding", default_encoding)
 
         pipelines = []
+        any_pipeline_changed = False
         for pipeline in conversion.get("pipelines", default_pipelines):
             if is_path(pipeline, file_pattern):
-                pipelines.append(f"--pipeline={path_prefix / Path(pipeline)}")
+                pipeline_path = path_prefix / Path(pipeline)
+                pipelines.append(f"--pipeline={pipeline_path}")
+                if pipeline_path in changed_files:
+                    any_pipeline_changed = True
             else:
                 pipelines.append(f"--pipeline={pipeline}")
 
-        filtered_output = []
-
         for input_file in filtered_files:
+            # If we're not converting all rules, skip the conversion if:
+            # - the file is not in the list of changed files
+            # - none of the pipelines have changed
+            if not all_rules and Path(input_file) not in changed_files and not any_pipeline_changed:
+                continue
+
             args = [
                 "--target",
                 conversion.get("target", default_target),
@@ -281,6 +294,21 @@ def convert_rules(
                 print(f"Converting {name} completed with exit code {result.exit_code}")
 
         print("-" * 80)
+
+    # Remove conversions of deleted rules from the output directory
+    if len(deleted_files) > 0:
+        print(f"Removing conversions of deleted rules from the output directory")
+        for deleted_file in deleted_files:
+            # Create output filename based on input file path
+            rel_deleted_path = Path(deleted_file).relative_to(path_prefix)
+            output_filename = f"{name}_{rel_deleted_path.stem}.json"
+            # Replace directory separators with underscores
+            output_filename = output_filename.replace(os.sep, '_')
+            output_file = path_prefix / conversions_output_dir / output_filename
+
+            if output_file.exists():
+                print(f"Removing {output_file}")
+                os.remove(output_file)
 
 
 def is_safe_path(base_dir: str | Path, target_path: str | Path) -> bool:

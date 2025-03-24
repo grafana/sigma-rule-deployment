@@ -23,6 +23,10 @@ inputs:
     description: "Pretty print the JSON output"
     required: false
     default: "false"
+  all_rules:
+    description: "Convert all rules specified in the config file."
+    required: false
+    default: "false"
 
 runs:
   using: "composite"
@@ -33,6 +37,16 @@ runs:
         registry: ghcr.io
         username: ${{ github.actor }}
         password: ${{ github.token }}
+    - name: "Checkout repository (fetch-depth: 0)"
+      id: checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0 # Important to ensure we'll have all the commits when a merge includes multiple
+    - name: Check for changed files
+      id: changed-files
+      uses: step-security/changed-files@3dbe17c78367e7d60f00d78ae6781a35be47b4a1 # v45.0.1
+      with:
+        output_renamed_files_as_deleted_and_added: "true"
     - name: Run Sigma Rule Converter
       id: convert
       shell: bash
@@ -41,6 +55,9 @@ runs:
         PLUGIN_PACKAGES: ${{ inputs.plugin_packages }}
         RENDER_TRACEBACK: ${{ inputs.render_traceback }}
         PRETTY_PRINT: ${{ inputs.pretty_print }}
+        ALL_RULES: ${{ inputs.all_rules }}
+        CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_and_modified_files }}
+        DELETED_FILES: ${{ steps.changed-files.outputs.deleted_files }}
         action_ref: ${{ github.action_ref }}
       run: |
         docker pull ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${{ env.action_ref }}
