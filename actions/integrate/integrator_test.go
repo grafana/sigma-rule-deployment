@@ -614,209 +614,257 @@ func (t *testDatasourceQuery) ExecuteQuery(query, dsName, baseURL, apiKey, from,
 }
 
 func TestIntegratorWithQueryTesting(t *testing.T) {
-	// Create test queries
-	testQueries := []string{
-		"{job=\"loki\"} |= \"error\"",
-		"{job=\"loki\"} |= \"warning\"",
-	}
-
-	// Create temporary test directory
-	testDir := filepath.Join("testdata", "test_query")
-	err := os.MkdirAll(testDir, 0755)
-	assert.NoError(t, err)
-	defer os.RemoveAll(testDir)
-
-	// Create conversion and deployment subdirectories
-	convPath := filepath.Join(testDir, "conv")
-	deployPath := filepath.Join(testDir, "deploy")
-	err = os.MkdirAll(convPath, 0755)
-	assert.NoError(t, err)
-	err = os.MkdirAll(deployPath, 0755)
-	assert.NoError(t, err)
-
-	// Create test conversion output
-	convOutput := []ConversionOutput{
+	tests := []struct {
+		name         string
+		showLogLines bool
+		wantLine     bool
+	}{
 		{
-			Queries: testQueries,
-			Rules: []SigmaRule{
+			name:         "with log lines",
+			showLogLines: true,
+			wantLine:     true,
+		},
+		{
+			name:         "without log lines",
+			showLogLines: false,
+			wantLine:     false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create test queries
+			testQueries := []string{
+				"{job=\"loki\"} |= \"error\"",
+				"{job=\"loki\"} |= \"warning\"",
+			}
+
+			// Create temporary test directory
+			testDir := filepath.Join("testdata", "test_query", tt.name)
+			err := os.MkdirAll(testDir, 0755)
+			assert.NoError(t, err)
+			defer os.RemoveAll(testDir)
+
+			// Create conversion and deployment subdirectories
+			convPath := filepath.Join(testDir, "conv")
+			deployPath := filepath.Join(testDir, "deploy")
+			err = os.MkdirAll(convPath, 0755)
+			assert.NoError(t, err)
+			err = os.MkdirAll(deployPath, 0755)
+			assert.NoError(t, err)
+
+			// Create test conversion output
+			convOutput := []ConversionOutput{
 				{
-					ID:    "996f8884-9144-40e7-ac63-29090ccde9a0",
-					Title: "Test Loki Rule",
+					Queries: testQueries,
+					Rules: []SigmaRule{
+						{
+							ID:    "996f8884-9144-40e7-ac63-29090ccde9a0",
+							Title: "Test Loki Rule",
+						},
+					},
 				},
-			},
-		},
-	}
-
-	// Create test configuration with query testing enabled
-	config := Configuration{
-		Folders: FoldersConfig{
-			ConversionPath: convPath,
-			DeploymentPath: deployPath,
-		},
-		ConversionDefaults: ConversionConfig{
-			Target:     "loki",
-			DataSource: "test-loki-datasource",
-		},
-		Conversions: []ConversionConfig{
-			{
-				Name:       "test_loki",
-				RuleGroup:  "Loki Test Rules",
-				TimeWindow: "5m",
-				DataSource: "test-loki-datasource",
-			},
-		},
-		IntegratorConfig: IntegrationConfig{
-			FolderID:    "test-folder",
-			OrgID:       1,
-			TestQueries: true,
-			From:        "now-1h",
-			To:          "now",
-		},
-		DeployerConfig: DeploymentConfig{
-			GrafanaInstance: "https://test.grafana.com",
-			Timeout:         "5s",
-		},
-	}
-
-	// Create test conversion output file
-	convBytes, err := json.Marshal(convOutput)
-	assert.NoError(t, err)
-	convFile := filepath.Join(convPath, "test_loki.json")
-	err = os.WriteFile(convFile, convBytes, 0644)
-	assert.NoError(t, err)
-
-	// Create mock query executor
-	mockDatasourceQuery := newTestDatasourceQuery()
-
-	// Add mock responses for our test queries
-	mockDatasourceQuery.AddMockResponse("{job=\"loki\"} |= \"error\"", []byte(`{
-		"results": {
-			"A": {
-				"frames": [{
-					"schema": {
-						"fields": [
-							{"name": "Time", "type": "time"},
-							{"name": "Line", "type": "string"}
-						]
-					},
-					"data": {
-						"values": [
-							[1625126400000, 1625126460000],
-							["error log line", "another error log"]
-						]
-					}
-				}]
 			}
-		}
-	}`))
 
-	mockDatasourceQuery.AddMockResponse("{job=\"loki\"} |= \"warning\"", []byte(`{
-		"results": {
-			"A": {
-				"frames": [{
-					"schema": {
-						"fields": [
-							{"name": "Time", "type": "time"},
-							{"name": "Line", "type": "string"}
-						]
+			// Create test configuration with query testing enabled
+			config := Configuration{
+				Folders: FoldersConfig{
+					ConversionPath: convPath,
+					DeploymentPath: deployPath,
+				},
+				ConversionDefaults: ConversionConfig{
+					Target:     "loki",
+					DataSource: "test-loki-datasource",
+				},
+				Conversions: []ConversionConfig{
+					{
+						Name:       "test_loki",
+						RuleGroup:  "Loki Test Rules",
+						TimeWindow: "5m",
+						DataSource: "test-loki-datasource",
 					},
-					"data": {
-						"values": [
-							[1625126400000, 1625126460000],
-							["warning log line", "another warning log"]
-						]
-					}
-				}]
+				},
+				IntegratorConfig: IntegrationConfig{
+					FolderID:     "test-folder",
+					OrgID:        1,
+					TestQueries:  true,
+					From:         "now-1h",
+					To:           "now",
+					ShowLogLines: tt.showLogLines,
+				},
+				DeployerConfig: DeploymentConfig{
+					GrafanaInstance: "https://test.grafana.com",
+					Timeout:         "5s",
+				},
 			}
-		}
-	}`))
 
-	// Create a temporary output file for capturing outputs
-	outputFile, err := os.CreateTemp("", "github-output")
-	assert.NoError(t, err)
-	defer os.Remove(outputFile.Name())
+			// Create test conversion output file
+			convBytes, err := json.Marshal(convOutput)
+			assert.NoError(t, err)
+			convFile := filepath.Join(convPath, "test_loki.json")
+			err = os.WriteFile(convFile, convBytes, 0644)
+			assert.NoError(t, err)
 
-	// Setup environment for the test
-	os.Setenv("GITHUB_OUTPUT", outputFile.Name())
-	defer os.Unsetenv("GITHUB_OUTPUT")
+			// Create mock query executor
+			mockDatasourceQuery := newTestDatasourceQuery()
 
-	// Set up integrator
-	integrator := &Integrator{
-		config:       config,
-		addedFiles:   []string{convFile},
-		removedFiles: []string{},
-	}
+			// Add mock responses for our test queries
+			mockDatasourceQuery.AddMockResponse("{job=\"loki\"} |= \"error\"", []byte(`{
+				"results": {
+					"A": {
+						"frames": [{
+							"schema": {
+								"fields": [
+									{"name": "Time", "type": "time"},
+									{"name": "Line", "type": "string"},
+									{"name": "labels", "type": "other"}
+								]
+							},
+							"data": {
+								"values": [
+									[1625126400000, 1625126460000],
+									["error log line", "another error log"],
+									[{"job": "loki", "level": "error"}]
+								]
+							}
+						}]
+					}
+				}
+			}`))
 
-	// Save original executor and restore after test
-	originalDatasourceQuery := DefaultDatasourceQuery
-	DefaultDatasourceQuery = mockDatasourceQuery
-	defer func() {
-		DefaultDatasourceQuery = originalDatasourceQuery
-	}()
+			mockDatasourceQuery.AddMockResponse("{job=\"loki\"} |= \"warning\"", []byte(`{
+				"results": {
+					"A": {
+						"frames": [{
+							"schema": {
+								"fields": [
+									{"name": "Time", "type": "time"},
+									{"name": "Line", "type": "string"},
+									{"name": "labels", "type": "other"}
+								]
+							},
+							"data": {
+								"values": [
+									[1625126400000, 1625126460000],
+									["warning log line", "another warning log"],
+									[{"job": "loki", "level": "warning"}]
+								]
+							}
+						}]
+					}
+				}
+			}`))
 
-	// Set environment variable for API token
-	os.Setenv("INTEGRATOR_GRAFANA_SA_TOKEN", "test-api-token")
-	defer os.Unsetenv("INTEGRATOR_GRAFANA_SA_TOKEN")
+			// Create a temporary output file for capturing outputs
+			outputFile, err := os.CreateTemp("", "github-output")
+			assert.NoError(t, err)
+			defer os.Remove(outputFile.Name())
 
-	// Run integration
-	err = integrator.Run()
-	assert.NoError(t, err)
+			// Setup environment for the test
+			os.Setenv("GITHUB_OUTPUT", outputFile.Name())
+			defer os.Unsetenv("GITHUB_OUTPUT")
 
-	// Verify alert rule file was created
-	convID, _, err := summariseSigmaRules(convOutput[0].Rules)
-	assert.NoError(t, err)
-	expectedFile := filepath.Join(deployPath, fmt.Sprintf("alert_rule_test_loki_%s.json", convID.String()))
-	_, err = os.Stat(expectedFile)
-	assert.NoError(t, err)
+			// Set up integrator
+			integrator := &Integrator{
+				config:       config,
+				addedFiles:   []string{convFile},
+				removedFiles: []string{},
+			}
 
-	// Read the output file to get the captured outputs
-	outputBytes, err := os.ReadFile(outputFile.Name())
-	assert.NoError(t, err)
-	outputContent := string(outputBytes)
+			// Save original executor and restore after test
+			originalDatasourceQuery := DefaultDatasourceQuery
+			DefaultDatasourceQuery = mockDatasourceQuery
+			defer func() {
+				DefaultDatasourceQuery = originalDatasourceQuery
+			}()
 
-	// Verify test_query_results was captured
-	assert.Contains(t, outputContent, "test_query_results=")
+			// Set environment variable for API token
+			os.Setenv("INTEGRATOR_GRAFANA_SA_TOKEN", "test-api-token")
+			defer os.Unsetenv("INTEGRATOR_GRAFANA_SA_TOKEN")
 
-	// Extract the test_query_results value
-	lines := strings.Split(outputContent, "\n")
-	var testQueryResults string
-	for _, line := range lines {
-		if strings.HasPrefix(line, "test_query_results=") {
-			testQueryResults = strings.TrimPrefix(line, "test_query_results=")
-			break
-		}
-	}
-	assert.NotEmpty(t, testQueryResults)
+			// Run integration
+			err = integrator.Run()
+			assert.NoError(t, err)
 
-	// Parse and validate the query test results
-	var queryResults []QueryTestResult
-	err = json.Unmarshal([]byte(testQueryResults), &queryResults)
-	assert.NoError(t, err)
-	assert.Equal(t, len(testQueries), len(queryResults))
+			// Verify alert rule file was created
+			convID, _, err := summariseSigmaRules(convOutput[0].Rules)
+			assert.NoError(t, err)
+			expectedFile := filepath.Join(deployPath, fmt.Sprintf("alert_rule_test_loki_%s.json", convID.String()))
+			_, err = os.Stat(expectedFile)
+			assert.NoError(t, err)
 
-	// Verify both queries were executed
-	assert.Equal(t, len(testQueries), len(mockDatasourceQuery.queryLog))
+			// Read the output file to get the captured outputs
+			outputBytes, err := os.ReadFile(outputFile.Name())
+			assert.NoError(t, err)
+			outputContent := string(outputBytes)
 
-	// Verify each query was submitted correctly
-	for _, query := range testQueries {
-		assert.Contains(t, mockDatasourceQuery.queryLog, query)
-	}
+			// Verify test_query_results was captured
+			assert.Contains(t, outputContent, "test_query_results=")
 
-	// Verify datasource was used correctly
-	assert.Contains(t, mockDatasourceQuery.datasourceLog, "test-loki-datasource")
+			// Extract the test_query_results value
+			lines := strings.Split(outputContent, "\n")
+			var testQueryResults string
+			for _, line := range lines {
+				if strings.HasPrefix(line, "test_query_results=") {
+					testQueryResults = strings.TrimPrefix(line, "test_query_results=")
+					break
+				}
+			}
+			assert.NotEmpty(t, testQueryResults)
 
-	// Verify the query results contain expected data
-	for i, query := range testQueries {
-		assert.Equal(t, query, queryResults[i].Query)
-		assert.Equal(t, "test-loki-datasource", queryResults[i].Datasource)
+			// Parse and validate the query test results
+			var queryResults []QueryTestResult
+			err = json.Unmarshal([]byte(testQueryResults), &queryResults)
+			assert.NoError(t, err)
+			assert.Equal(t, len(testQueries), len(queryResults))
 
-		// Verify the results match our mock responses
-		var result map[string]interface{}
-		err = json.Unmarshal(queryResults[i].Result, &result)
-		assert.NoError(t, err)
+			// Verify both queries were executed
+			assert.Equal(t, len(testQueries), len(mockDatasourceQuery.queryLog))
 
-		// Check that results structure is present
-		_, ok := result["results"]
-		assert.True(t, ok, "Results should contain a 'results' field")
+			// Verify each query was submitted correctly
+			for _, query := range testQueries {
+				assert.Contains(t, mockDatasourceQuery.queryLog, query)
+			}
+
+			// Verify datasource was used correctly
+			assert.Contains(t, mockDatasourceQuery.datasourceLog, "test-loki-datasource")
+
+			// Verify the query results contain expected data
+			for i, query := range testQueries {
+				assert.Equal(t, query, queryResults[i].Query)
+				assert.Equal(t, "test-loki-datasource", queryResults[i].Datasource)
+
+				// Verify the stats contain expected data
+				stats := queryResults[i].Stats
+				assert.Equal(t, 2, stats.Count) // Each mock response has 2 log lines
+				assert.NotEmpty(t, stats.Fields)
+				assert.Empty(t, stats.Errors)
+
+				// Verify specific fields from our mock responses
+				if query == "{job=\"loki\"} |= \"error\"" {
+					if tt.wantLine {
+						assert.Contains(t, stats.Fields, "Line")
+						assert.Equal(t, "error log line", stats.Fields["Line"])
+					} else {
+						assert.NotContains(t, stats.Fields, "Line")
+					}
+					assert.Contains(t, stats.Fields, "job")
+					assert.Equal(t, "loki", stats.Fields["job"])
+					assert.Contains(t, stats.Fields, "level")
+					assert.Equal(t, "error", stats.Fields["level"])
+				} else if query == "{job=\"loki\"} |= \"warning\"" {
+					if tt.wantLine {
+						assert.Contains(t, stats.Fields, "Line")
+						assert.Equal(t, "warning log line", stats.Fields["Line"])
+					} else {
+						assert.NotContains(t, stats.Fields, "Line")
+					}
+					assert.Contains(t, stats.Fields, "job")
+					assert.Equal(t, "loki", stats.Fields["job"])
+					assert.Contains(t, stats.Fields, "level")
+					assert.Equal(t, "warning", stats.Fields["level"])
+				}
+			}
+		})
 	}
 }

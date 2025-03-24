@@ -26,11 +26,12 @@ type ConversionConfig struct {
 }
 
 type IntegrationConfig struct {
-	FolderID    string `yaml:"folder_id"`
-	OrgID       int64  `yaml:"org_id"`
-	TestQueries bool   `yaml:"test_queries"`
-	From        string `yaml:"from"`
-	To          string `yaml:"to"`
+	FolderID     string `yaml:"folder_id"`
+	OrgID        int64  `yaml:"org_id"`
+	TestQueries  bool   `yaml:"test_queries"`
+	From         string `yaml:"from"`
+	To           string `yaml:"to"`
+	ShowLogLines bool   `yaml:"show_log_lines"`
 }
 
 type DeploymentConfig struct {
