@@ -297,6 +297,8 @@ func (d *Deployer) LoadConfig(ctx context.Context) error {
 	// Retrieve the fresh deploy flag
 	freshDeploy := strings.ToLower(os.Getenv("DEPLOYER_FRESH_DEPLOY")) == "true"
 	d.config.freshDeploy = freshDeploy
+
+	return nil
 }
 
 func (d *Deployer) configNormalMode() error {
