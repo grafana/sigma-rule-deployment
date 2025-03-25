@@ -53,7 +53,7 @@ type ConversionConfig struct {
 type Configuration struct {
 	Folders          FoldersConfig      `yaml:"folders"`
 	DefaultConfig    ConversionConfig   `yaml:"conversion_defaults"`
-	ConversionConfig []ConversionConfig `yaml:"conversion"`
+	ConversionConfig []ConversionConfig `yaml:"conversions"`
 	DeployerConfig   DeploymentConfig   `yaml:"deployment"`
 	IntegratorConfig IntegrationConfig  `yaml:"integration"`
 }
