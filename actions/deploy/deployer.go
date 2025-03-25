@@ -284,11 +284,12 @@ func (d *Deployer) LoadConfig(ctx context.Context) error {
 			interval = config.TimeWindow
 		}
 		intervalDuration, err := time.ParseDuration(interval)
-		if err != nil {
-			return fmt.Errorf("error parsing time window: %v", err)
+		if err != nil || int64(intervalDuration.Seconds()) == 0 {
+			return fmt.Errorf("error parsing time window %s: %v", interval, err)
 		}
 		if _, ok := d.config.groupsIntervals[config.RuleGroup]; !ok {
 			d.config.groupsIntervals[config.RuleGroup] = int64(intervalDuration.Seconds())
+			log.Printf("Setting interval for rule group %s to %d", config.RuleGroup, d.config.groupsIntervals[config.RuleGroup])
 		} else if d.config.groupsIntervals[config.RuleGroup] != int64(intervalDuration.Seconds()) {
 			return fmt.Errorf("time window for rule group %s is different between conversion configs", config.RuleGroup)
 		}
