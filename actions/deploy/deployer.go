@@ -498,8 +498,6 @@ func (d *Deployer) updateAlertGroupInterval(ctx context.Context, folderUid strin
 			return fmt.Errorf("error updating alert group interval %s/%s: returned error %s", folderUid, group, err.Error())
 		}
 
-		log.Printf("Sending alert group: %s", string(content))
-
 		// Note the implicit race condition - if a rule is added to the group between these two requests,
 		// they will be overwritten by this request. There's nothing we can do about this; alerting
 		// would need to update their API to allow the interval to be updated independent of the alert rules
