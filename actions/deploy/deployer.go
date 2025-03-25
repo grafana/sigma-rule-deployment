@@ -114,6 +114,9 @@ func main() {
 		os.Exit(1)
 	}
 
+	log.Printf("Groups to update: %v", deployer.groupsToUpdate)
+	log.Printf("Groups intervals: %v", deployer.config.groupsIntervals)
+
 	// Deploy alerts
 	alertsCreated, alertsUpdated, alertsDeleted, errDeploy := deployer.Deploy(ctx)
 
@@ -285,7 +288,7 @@ func (d *Deployer) LoadConfig(ctx context.Context) error {
 		}
 		intervalDuration, err := time.ParseDuration(interval)
 		log.Printf("Interval duration from %s: %d", interval, int64(intervalDuration.Seconds()))
-		if err != nil || int64(intervalDuration.Seconds()) == 0 {
+		if err != nil || int64(intervalDuration.Seconds()) <= 0 {
 			return fmt.Errorf("error parsing time window %s: %v", interval, err)
 		}
 		if _, ok := d.config.groupsIntervals[config.RuleGroup]; !ok {
