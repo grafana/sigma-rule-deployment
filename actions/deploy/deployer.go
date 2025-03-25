@@ -93,12 +93,24 @@ func main() {
 
 	// Load the deployment config
 	deployer := NewDeployer()
+
+	if err := deployer.LoadConfig(ctx); err != nil {
+		fmt.Printf("Error loading config: %v\n", err)
+		os.Exit(1)
+	}
+
 	deployer.client = &http.Client{
 		Timeout: deployer.config.timeout,
 	}
 
-	if err := deployer.LoadConfig(ctx); err != nil {
-		fmt.Printf("Error loading config: %v\n", err)
+	var err error
+	if deployer.config.freshDeploy {
+		err = deployer.configFreshDeployment(ctx)
+	} else {
+		err = deployer.configNormalMode()
+	}
+	if err != nil {
+		fmt.Printf("Error configuring deployment: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -285,12 +297,6 @@ func (d *Deployer) LoadConfig(ctx context.Context) error {
 	// Retrieve the fresh deploy flag
 	freshDeploy := strings.ToLower(os.Getenv("DEPLOYER_FRESH_DEPLOY")) == "true"
 	d.config.freshDeploy = freshDeploy
-
-	if d.config.freshDeploy {
-		return d.configFreshDeployment(ctx)
-	} else {
-		return d.configNormalMode()
-	}
 }
 
 func (d *Deployer) configNormalMode() error {
