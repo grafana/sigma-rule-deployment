@@ -106,6 +106,7 @@ def test_convert_rules_invalid_output_dir(temp_workspace, mock_config):
             config=mock_config,
             path_prefix=temp_workspace,
             conversions_output_dir="../outside",
+            all_rules=True,
         )
 
 
@@ -121,7 +122,7 @@ def test_convert_rules_missing_conversion_name():
             " across all conversion objects in the config"
         ),
     ):
-        convert_rules(config=invalid_config, path_prefix="/tmp")
+        convert_rules(config=invalid_config, path_prefix="/tmp", all_rules=True)
 
 
 def test_convert_rules_absolute_input_path():
@@ -134,7 +135,7 @@ def test_convert_rules_absolute_input_path():
         }
     )
     with pytest.raises(ValueError, match="must be relative"):
-        convert_rules(config=invalid_config, path_prefix="/tmp")
+        convert_rules(config=invalid_config, path_prefix="/tmp", all_rules=True)
 
 
 @pytest.mark.parametrize(
@@ -213,7 +214,7 @@ def test_convert_rules_successful_conversion_changed_files(temp_workspace, mock_
         config=mock_config,
         path_prefix=temp_workspace,
         conversions_output_dir="conversions",
-        changed_files=set([temp_workspace / "rules" / "test.yml"]),
+        changed_files="rules/test.yml",
     )
 
     output_file = temp_workspace / "conversions" / "test_conversion_test.json"
@@ -250,7 +251,7 @@ def test_convert_rules_skip_unchanged_rules(temp_workspace, mock_config):
         config=mock_config,
         path_prefix=temp_workspace,
         conversions_output_dir="conversions",
-        changed_files=set([temp_workspace / "rules" / "different.yml"]),
+        changed_files="rules/different.yml",
     )
 
     output_file = temp_workspace / "conversions" / "test_conversion_test.json"
@@ -351,6 +352,7 @@ def test_convert_rules_handles_empty_output(mock_invoke, temp_workspace, mock_co
         config=mock_config,
         path_prefix=temp_workspace,
         conversions_output_dir="conversions",
+        all_rules=True,
     )
 
     output_file = temp_workspace / "conversions" / "test_conversion.json"
@@ -368,6 +370,7 @@ def test_convert_rules_handles_empty_output_on_rule(temp_workspace, mock_config)
         config=mock_config,
         path_prefix=temp_workspace,
         conversions_output_dir="conversions",
+        all_rules=True,
     )
 
     output_file = temp_workspace / "conversions" / "test_conversion.json"

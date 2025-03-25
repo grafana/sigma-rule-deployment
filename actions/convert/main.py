@@ -19,4 +19,8 @@ if __name__ == "__main__":
         path_prefix=args.path_prefix,
         conversions_output_dir=conversions_output_dir,
         render_traceback=args.render_traceback,
+        pretty_print=args.pretty_print,
+        all_rules=args.all_rules,
+        changed_files=args.changed_files,
+        deleted_files=args.deleted_files,
     )

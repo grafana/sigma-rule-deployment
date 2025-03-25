@@ -25,12 +25,8 @@ def convert_rules(
     == "true",
     pretty_print: bool = os.environ.get("PRETTY_PRINT", "false").lower() == "true",
     all_rules: bool = os.environ.get("ALL_RULES", "false").lower() == "true",
-    changed_files: set[str] = set(
-        Path(x) for x in os.environ.get("CHANGED_FILES", "").split(" ") if x
-    ),
-    deleted_files: set[str] = set(
-        Path(x) for x in os.environ.get("DELETED_FILES", "").split(" ") if x
-    ),
+    changed_files: str = os.environ.get("CHANGED_FILES", ""),
+    deleted_files: str = os.environ.get("DELETED_FILES", ""),
 ) -> None:
     """Convert Sigma rules to the target format per each conversion object in the config.
 
@@ -51,6 +47,9 @@ def convert_rules(
         ValueError: Pipeline file path must be relative to the project root.
         ValueError: Error loading rule file {rule_file}.
     """
+    changed_files_set = set(path_prefix / Path(x) for x in changed_files.split(" ") if x)
+    deleted_files_set = set(path_prefix / Path(x) for x in deleted_files.split(" ") if x)
+
     # Check if the path_prefix is set
     if not path_prefix or path_prefix == Path("."):
         raise ValueError(
@@ -64,6 +63,11 @@ def convert_rules(
     # Resolve the path_prefix to an absolute path
     if not path_prefix.is_absolute():
         path_prefix = path_prefix.resolve()
+
+    # Check whether we have any files to process
+    if not all_rules and not changed_files and not deleted_files:
+        print("No changed or deleted files identified, but all_rules is false")
+        exit(0)
 
     # Check if the conversions_output_dir stays within the project root to prevent path slip.
     conversions_output_dir = path_prefix / Path(conversions_output_dir)
@@ -146,6 +150,8 @@ def convert_rules(
 
         print(f"Total files: {len(filtered_files)}")
         print(f"Target backend: {conversion.get('target', default_target)}")
+        if all_rules:
+            print("Converting all discovered rules")
 
         # Verify that all pipeline files are relative to the repository root (GITHUB_WORKSPACE)
         for pipeline in conversion.get("pipelines", default_pipelines):
@@ -153,9 +159,6 @@ def convert_rules(
                 raise ValueError(
                     "Pipeline file path must be relative to the project root"
                 )
-
-        # Output file path
-        output_file = path_prefix / conversions_output_dir / Path(f"{name}.json")
 
         encoding = conversion.get("encoding", default_encoding)
 
@@ -165,7 +168,7 @@ def convert_rules(
             if is_path(pipeline, file_pattern):
                 pipeline_path = path_prefix / Path(pipeline)
                 pipelines.append(f"--pipeline={pipeline_path}")
-                if pipeline_path in changed_files:
+                if pipeline_path in changed_files_set:
                     any_pipeline_changed = True
             else:
                 pipelines.append(f"--pipeline={pipeline}")
@@ -176,9 +179,10 @@ def convert_rules(
             # - none of the pipelines have changed
             if (
                 not all_rules
-                and Path(input_file) not in changed_files
+                and Path(input_file) not in changed_files_set
                 and not any_pipeline_changed
             ):
+                print(f"Skipping conversion of {input_file} because it and it's pipelines haven't changed")
                 continue
 
             args = [
@@ -302,19 +306,20 @@ def convert_rules(
         print("-" * 80)
 
     # Remove conversions of deleted rules from the output directory
-    if len(deleted_files) > 0:
-        print(f"Removing conversions of deleted rules from the output directory")
-        for deleted_file in deleted_files:
-            # Create output filename based on input file path
-            rel_deleted_path = Path(deleted_file).relative_to(path_prefix)
-            output_filename = f"{name}_{rel_deleted_path.stem}.json"
-            # Replace directory separators with underscores
-            output_filename = output_filename.replace(os.sep, "_")
-            output_file = path_prefix / conversions_output_dir / output_filename
-
-            if output_file.exists():
-                print(f"Removing {output_file}")
-                os.remove(output_file)
+    # TODO: FIXME this needs to be updated to work as intended
+    # if len(deleted_files_set) > 0:
+    #     print(f"Removing conversions of deleted rules from the output directory")
+    #     for deleted_file in deleted_files_set:
+    #         # Create output filename based on input file path
+    #         rel_deleted_path = Path(deleted_file).relative_to(path_prefix)
+    #         output_filename = f"{rel_deleted_path.stem}.json"
+    #         # Replace directory separators with underscores
+    #         output_filename = output_filename.replace(os.sep, "_")
+    #         output_file = path_prefix / conversions_output_dir / output_filename
+    #
+    #         if output_file.exists():
+    #             print(f"Removing {output_file}")
+    #             os.remove(output_file)
 
 
 def is_safe_path(base_dir: str | Path, target_path: str | Path) -> bool:

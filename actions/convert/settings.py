@@ -51,6 +51,44 @@ def parse_args() -> argparse.Namespace:
         default=os.environ.get("RENDER_TRACEBACK", "false") == "true",
         const="true",
     )
+    parser.add_argument(
+        "--pretty-print",
+        dest="pretty_print",
+        metavar="true",
+        type=str,
+        nargs="?",
+        help="Pretty print the converted files",
+        default=os.environ.get("PRETTY_PRINT", "false") == "true",
+        const="true",
+    )
+    parser.add_argument(
+        "--all-rules",
+        dest="all_rules",
+        metavar="true",
+        type=str,
+        nargs="?",
+        help="Convert all rules",
+        default=os.environ.get("ALL_RULES", "false") == "true",
+        const="true",
+    )
+    parser.add_argument(
+        "--changed-files",
+        dest="changed_files",
+        metavar="file1 file2",
+        type=str,
+        nargs="?",
+        help="List of changed files",
+        default=os.environ.get("CHANGED_FILES", ""),
+    )
+    parser.add_argument(
+        "--deleted-files",
+        dest="deleted_files",
+        metavar="file1 file2",
+        type=str,
+        nargs="?",
+        help="List of deleted files",
+        default=os.environ.get("DELETED_FILES", ""),
+    )
     return parser.parse_args()
 
 

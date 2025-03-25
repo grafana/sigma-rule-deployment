@@ -125,6 +125,7 @@ func (i *Integrator) LoadConfig() error {
 	if configFile == "" {
 		return fmt.Errorf("Integrator config file is not set or empty")
 	}
+	fmt.Printf("Loading config from %s\n", configFile)
 
 	// Read the YAML config file
 	cfg, err := ReadLocalFile(configFile)
@@ -146,8 +147,10 @@ func (i *Integrator) LoadConfig() error {
 		return fmt.Errorf("deployment path is not local: %s", i.config.Folders.DeploymentPath)
 	}
 
+	fmt.Printf("Conversion path: %s\nDeployment path: %s\n", i.config.Folders.ConversionPath, i.config.Folders.DeploymentPath)
+
 	if _, err = os.Stat(i.config.Folders.DeploymentPath); err != nil {
-		err = os.MkdirAll(i.config.Folders.DeploymentPath, 0700)
+		err = os.MkdirAll(i.config.Folders.DeploymentPath, 0755)
 		if err != nil {
 			return fmt.Errorf("error creating deployment directory: %v", err)
 		}
@@ -199,6 +202,7 @@ func (i *Integrator) LoadConfig() error {
 		}
 	}
 
+	fmt.Printf("Changed files: %d\nRemoved files: %d\n", len(newUpdatedFiles), len(removedFiles))
 	i.addedFiles = newUpdatedFiles
 	i.removedFiles = removedFiles
 
@@ -222,6 +226,7 @@ func (i *Integrator) Run() error {
 	}
 
 	for _, inputFile := range i.addedFiles {
+		fmt.Printf("Integrating file: %s\n", inputFile)
 		conversionContent, err := ReadLocalFile(inputFile)
 		if err != nil {
 			return err
@@ -257,6 +262,7 @@ func (i *Integrator) Run() error {
 		}
 
 		file := fmt.Sprintf("%s%salert_rule_%s_%s.json", i.config.Folders.DeploymentPath, string(filepath.Separator), config.Name, conversionID.String())
+		fmt.Printf("Working on alert rule file: %s\n", file)
 		rule := &definitions.ProvisionedAlertRule{UID: conversionID.String()}
 		err = readRuleFromFile(rule, file)
 		if err != nil {
@@ -272,6 +278,7 @@ func (i *Integrator) Run() error {
 		}
 
 		if i.config.IntegratorConfig.TestQueries {
+			fmt.Println("Testing queries against the datasource")
 			// Test all queries against the datasource
 			queryResults, err := i.TestQueries(queries, config, timeoutDuration)
 			if err != nil {
@@ -290,6 +297,7 @@ func (i *Integrator) Run() error {
 	}
 
 	for _, deletedFile := range i.removedFiles {
+		fmt.Printf("Deleting alert rule file: %s\n", deletedFile)
 		deploymentGlob := fmt.Sprintf("alert_rule_%s_*.json", strings.TrimSuffix(filepath.Base(deletedFile), ".json"))
 		deploymentFiles, err := fs.Glob(os.DirFS(i.config.Folders.DeploymentPath), deploymentGlob)
 		if err != nil {
@@ -375,6 +383,7 @@ func (i *Integrator) ConvertToAlert(rule *definitions.ProvisionedAlertRule, quer
 			}
 			if qIdx == len(queryData)-1 {
 				// if we get here, all the queries are the same, no need to update the rule
+				fmt.Printf("No changes to the relevant alert rule, skipping\n")
 				return nil
 			}
 		}
