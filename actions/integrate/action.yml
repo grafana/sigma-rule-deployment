@@ -23,6 +23,14 @@ inputs:
     description: "Output log lines to the outputs of the test_query_results"
     required: false
     default: "false"
+  changed_files:
+    description: "The changed files to integrate"
+    required: false
+    default: ""
+  deleted_files:
+    description: "The deleted files to integrate"
+    required: false
+    default: ""
 
 outputs:
   rules_integrated:
@@ -41,11 +49,12 @@ runs:
     #   uses: actions/checkout@v4
     #   with:
     #     fetch-depth: 0 # Important to ensure we'll have all the commits when a merge includes multiple
-    - name: "Detect changed files"
-      id: changed-files
-      uses: step-security/changed-files@3dbe17c78367e7d60f00d78ae6781a35be47b4a1 # v45.0.1
-      with:
-        output_renamed_files_as_deleted_and_added: "true"
+    # - name: "Detect changed files"
+    #   id: changed-files
+    #   uses: step-security/changed-files@3dbe17c78367e7d60f00d78ae6781a35be47b4a1 # v45.0.1
+    #   with:
+    #     output_renamed_files_as_deleted_and_added: "true"
+    #     sha: ${{ github.head_ref }}
     - name: Login to GitHub Container Registry
       uses: docker/login-action@v3
       with:
@@ -59,10 +68,8 @@ runs:
         CONFIG_PATH: ${{ inputs.config_path }}
         GRAFANA_SA_TOKEN: ${{ inputs.grafana_sa_token }}
         PRETTY_PRINT: ${{ inputs.pretty_print }}
-        ADDED_FILES: ${{ steps.changed-files.outputs.added_files }}
-        MODIFIED_FILES: ${{ steps.changed-files.outputs.modified_files }}
-        DELETED_FILES: ${{ steps.changed-files.outputs.deleted_files }}
-        COPIED_FILES: ${{ steps.changed-files.outputs.copied_files }}
+        CHANGED_FILES: ${{ inputs.changed_files }}
+        DELETED_FILES: ${{ inputs.deleted_files }}
         action_ref: ${{ github.action_ref }}
       run: |
         docker pull ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${{ env.action_ref }}

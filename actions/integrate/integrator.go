@@ -165,25 +165,15 @@ func (i *Integrator) LoadConfig() error {
 		i.config.IntegratorConfig.To = "now"
 	}
 
-	addedFiles := strings.Split(os.Getenv("ADDED_FILES"), " ")
+	changedFiles := strings.Split(os.Getenv("CHANGED_FILES"), " ")
 	deletedFiles := strings.Split(os.Getenv("DELETED_FILES"), " ")
-	modifiedFiles := strings.Split(os.Getenv("MODIFIED_FILES"), " ")
 	// copiedFiles := strings.Split(os.Getenv("COPIED_FILES"), " ") // TODO
 
-	newUpdatedFiles := make([]string, 0, len(addedFiles)+len(modifiedFiles))
+	newUpdatedFiles := make([]string, 0, len(changedFiles))
 	removedFiles := make([]string, 0, len(deletedFiles))
 
-	for _, path := range addedFiles {
+	for _, path := range changedFiles {
 		// Ensure paths appear within specified conversion path
-		relpath, err := filepath.Rel(i.config.Folders.ConversionPath, path)
-		if err != nil {
-			return fmt.Errorf("error checking file path %s: %v", path, err)
-		}
-		if relpath == filepath.Base(path) {
-			newUpdatedFiles = append(newUpdatedFiles, path)
-		}
-	}
-	for _, path := range modifiedFiles {
 		relpath, err := filepath.Rel(i.config.Folders.ConversionPath, path)
 		if err != nil {
 			return fmt.Errorf("error checking file path %s: %v", path, err)

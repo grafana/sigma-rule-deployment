@@ -158,9 +158,8 @@ func TestLoadConfig(t *testing.T) {
 		name       string
 		configPath string
 		token      string
-		added      string
+		changed    string
 		deleted    string
-		modified   string
 		expConfig  Configuration
 		expAdd     []string
 		expDel     []string
@@ -170,9 +169,8 @@ func TestLoadConfig(t *testing.T) {
 			name:       "valid loki config, single added file",
 			configPath: "testdata/config.yml",
 			token:      "my-test-token",
-			added:      "testdata/conv.json",
+			changed:    "testdata/conv.json",
 			deleted:    "",
-			modified:   "",
 			expConfig: Configuration{
 				Folders: FoldersConfig{
 					ConversionPath: "./testdata",
@@ -207,9 +205,8 @@ func TestLoadConfig(t *testing.T) {
 			name:       "valid es config, multiple files added, changed and removed",
 			configPath: "testdata/es-config.yml",
 			token:      "my-test-token",
-			added:      "testdata/conv1.json",
+			changed:    "testdata/conv1.json testdata/conv3.json",
 			deleted:    "testdata/conv2.json testdata/conv4.json",
-			modified:   "testdata/conv3.json",
 			expConfig: Configuration{
 				Folders: FoldersConfig{
 					ConversionPath: "./testdata",
@@ -285,9 +282,8 @@ func TestLoadConfig(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			os.Setenv("INTEGRATOR_CONFIG_PATH", tt.configPath)
 			os.Setenv("INTEGRATOR_GRAFANA_SA_TOKEN", tt.token)
-			os.Setenv("ADDED_FILES", tt.added)
+			os.Setenv("CHANGED_FILES", tt.changed)
 			os.Setenv("DELETED_FILES", tt.deleted)
-			os.Setenv("MODIFIED_FILES", tt.modified)
 
 			i := NewIntegrator()
 			err := i.LoadConfig()
@@ -303,9 +299,8 @@ func TestLoadConfig(t *testing.T) {
 	}
 	defer os.Unsetenv("INTEGRATOR_CONFIG_PATH")
 	defer os.Unsetenv("INTEGRATOR_GRAFANA_SA_TOKEN")
-	defer os.Unsetenv("ADDED_FILES")
+	defer os.Unsetenv("CHANGED_FILES")
 	defer os.Unsetenv("DELETED_FILES")
-	defer os.Unsetenv("MODIFIED_FILES")
 }
 
 func TestReadWriteAlertRule(t *testing.T) {
