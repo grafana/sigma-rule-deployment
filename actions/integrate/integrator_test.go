@@ -158,9 +158,9 @@ func TestLoadConfig(t *testing.T) {
 		name       string
 		configPath string
 		token      string
-		added      string
+		changed    string
 		deleted    string
-		modified   string
+		allRules   bool
 		expConfig  Configuration
 		expAdd     []string
 		expDel     []string
@@ -170,9 +170,9 @@ func TestLoadConfig(t *testing.T) {
 			name:       "valid loki config, single added file",
 			configPath: "testdata/config.yml",
 			token:      "my-test-token",
-			added:      "testdata/conv.json",
+			changed:    "testdata/conv.json",
 			deleted:    "",
-			modified:   "",
+			allRules:   false,
 			expConfig: Configuration{
 				Folders: FoldersConfig{
 					ConversionPath: "./testdata",
@@ -207,9 +207,9 @@ func TestLoadConfig(t *testing.T) {
 			name:       "valid es config, multiple files added, changed and removed",
 			configPath: "testdata/es-config.yml",
 			token:      "my-test-token",
-			added:      "testdata/conv1.json",
+			changed:    "testdata/conv1.json testdata/conv3.json",
 			deleted:    "testdata/conv2.json testdata/conv4.json",
-			modified:   "testdata/conv3.json",
+			allRules:   false,
 			expConfig: Configuration{
 				Folders: FoldersConfig{
 					ConversionPath: "./testdata",
@@ -256,28 +256,70 @@ func TestLoadConfig(t *testing.T) {
 			wantError: false,
 		},
 		{
+			name:       "load all files when ALL_RULES is true",
+			configPath: "testdata/config.yml",
+			token:      "my-test-token",
+			changed:    "",
+			deleted:    "",
+			allRules:   true,
+			expConfig: Configuration{
+				Folders: FoldersConfig{
+					ConversionPath: "./testdata",
+					DeploymentPath: "./testdata",
+				},
+				ConversionDefaults: ConversionConfig{
+					Target:          "loki",
+					Format:          "default",
+					SkipUnsupported: "true",
+					FilePattern:     "*.yml",
+					DataSource:      "grafanacloud-logs",
+				},
+				Conversions: []ConversionConfig{
+					{
+						Name:       "conv",
+						RuleGroup:  "Every 5 Minutes",
+						TimeWindow: "5m",
+					},
+				},
+				IntegratorConfig: IntegrationConfig{
+					FolderID: "XXXX",
+					OrgID:    1,
+					From:     "now-1h",
+					To:       "now",
+				},
+			},
+			expAdd:    []string{"testdata/config.yml", "testdata/es-config.yml", "testdata/non-local-conv-config.yml", "testdata/non-local-deploy-config.yml", "testdata/sample_rule.json"},
+			expDel:    []string{},
+			wantError: false,
+		},
+		{
 			name:       "missing config file",
 			configPath: "testdata/missing_config.yml",
+			allRules:   false,
 			wantError:  true,
 		},
 		{
 			name:       "no path",
 			configPath: "",
+			allRules:   false,
 			wantError:  true,
 		},
 		{
 			name:       "non-local config file",
 			configPath: "../testdata/missing_config.yml",
+			allRules:   false,
 			wantError:  true,
 		},
 		{
 			name:       "conversion path is not local",
 			configPath: "testdata/non-local-conv-config.yml",
+			allRules:   false,
 			wantError:  true,
 		},
 		{
 			name:       "deployment path is not local",
 			configPath: "testdata/non-local-deploy-config.yml",
+			allRules:   false,
 			wantError:  true,
 		},
 	}
@@ -285,9 +327,13 @@ func TestLoadConfig(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			os.Setenv("INTEGRATOR_CONFIG_PATH", tt.configPath)
 			os.Setenv("INTEGRATOR_GRAFANA_SA_TOKEN", tt.token)
-			os.Setenv("ADDED_FILES", tt.added)
+			os.Setenv("CHANGED_FILES", tt.changed)
 			os.Setenv("DELETED_FILES", tt.deleted)
-			os.Setenv("MODIFIED_FILES", tt.modified)
+			if tt.allRules {
+				os.Setenv("ALL_RULES", "true")
+			} else {
+				os.Setenv("ALL_RULES", "false")
+			}
 
 			i := NewIntegrator()
 			err := i.LoadConfig()
@@ -303,9 +349,9 @@ func TestLoadConfig(t *testing.T) {
 	}
 	defer os.Unsetenv("INTEGRATOR_CONFIG_PATH")
 	defer os.Unsetenv("INTEGRATOR_GRAFANA_SA_TOKEN")
-	defer os.Unsetenv("ADDED_FILES")
+	defer os.Unsetenv("CHANGED_FILES")
 	defer os.Unsetenv("DELETED_FILES")
-	defer os.Unsetenv("MODIFIED_FILES")
+	defer os.Unsetenv("ALL_RULES")
 }
 
 func TestReadWriteAlertRule(t *testing.T) {
@@ -508,7 +554,8 @@ func TestIntegratorRun(t *testing.T) {
 			convID, _, err := summariseSigmaRules(tt.convOutput.Rules)
 			assert.NoError(t, err)
 
-			expectedFile := filepath.Join(deployPath, fmt.Sprintf("alert_rule_%s_%s.json", tt.conversionName, convID.String()))
+			ruleUid := getRuleUid(tt.conversionName, convID)
+			expectedFile := filepath.Join(deployPath, fmt.Sprintf("alert_rule_%s_%s.json", tt.conversionName, ruleUid))
 			_, err = os.Stat(expectedFile)
 			assert.NoError(t, err)
 
@@ -518,7 +565,7 @@ func TestIntegratorRun(t *testing.T) {
 			assert.NoError(t, err)
 
 			// Verify rule properties
-			assert.Equal(t, convID.String(), rule.UID)
+			assert.Equal(t, ruleUid, rule.UID)
 			assert.Equal(t, tt.wantTitles, rule.Title)
 			assert.Equal(t, "Test Rules", rule.RuleGroup)
 			assert.Equal(t, "test-datasource", rule.Data[0].DatasourceUID)
@@ -749,7 +796,8 @@ func TestIntegratorWithQueryTesting(t *testing.T) {
 			// Verify alert rule file was created
 			convID, _, err := summariseSigmaRules(convOutput.Rules)
 			assert.NoError(t, err)
-			expectedFile := filepath.Join(deployPath, fmt.Sprintf("alert_rule_test_loki_%s.json", convID.String()))
+			ruleUid := getRuleUid("test_loki", convID)
+			expectedFile := filepath.Join(deployPath, fmt.Sprintf("alert_rule_test_loki_%s.json", ruleUid))
 			_, err = os.Stat(expectedFile)
 			assert.NoError(t, err)
 

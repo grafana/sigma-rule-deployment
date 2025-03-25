@@ -2,7 +2,7 @@ folders:
   deployment_path: "./deployments"
 conversion_defaults:
   time_window: "6h"
-conversion:
+conversions:
   - rule_group: "group1"
     time_window: "10m"
   - rule_group: "group2"

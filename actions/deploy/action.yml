@@ -37,12 +37,12 @@ runs:
       id: checkout
       uses: actions/checkout@v4
       with:
-        fetch-depth: 0  # Important to ensure we'll have all the commits when a merge includes multiple
+        fetch-depth: 0 # Important to ensure we'll have all the commits when a merge includes multiple
     - name: "Detect changed files"
       id: changed-files
       uses: step-security/changed-files@3dbe17c78367e7d60f00d78ae6781a35be47b4a1 # v45.0.1
       with:
-        output_renamed_files_as_deleted_and_added: 'true'
+        output_renamed_files_as_deleted_and_added: "true"
     - name: Login to GitHub Container Registry
       uses: docker/login-action@v3
       with:
@@ -63,4 +63,8 @@ runs:
         action_ref: ${{ github.action_ref }}
       run: |
         docker pull ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${{ env.action_ref }}
-        docker run --rm -v "$(pwd):/sigma-rules" -w /sigma-rules -e CONFIG_PATH="${CONFIG_PATH}" -e DEPLOYER_GRAFANA_SA_TOKEN="${GRAFANA_SA_TOKEN}" -e DEPLOYER_FRESH_DEPLOY="${FRESH_DEPLOY}" -e ADDED_FILES="${ADDED_FILES}" -e MODIFIED_FILES="${MODIFIED_FILES}" -e DELETED_FILES="${DELETED_FILES}" -e COPIED_FILES="${COPIED_FILES}" ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${action_ref} deploy
+        docker run --rm -v "$(pwd):/sigma-rules" -w /sigma-rules -e GITHUB_OUTPUT="/sigma-rules/github-output" -e CONFIG_PATH="${CONFIG_PATH}" -e DEPLOYER_GRAFANA_SA_TOKEN="${GRAFANA_SA_TOKEN}" -e DEPLOYER_FRESH_DEPLOY="${FRESH_DEPLOY}" -e ADDED_FILES="${ADDED_FILES}" -e MODIFIED_FILES="${MODIFIED_FILES}" -e DELETED_FILES="${DELETED_FILES}" -e COPIED_FILES="${COPIED_FILES}" ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${action_ref} deploy
+    - name: Move Output
+      shell: bash
+      run: |
+        mv github-output $GITHUB_OUTPUT

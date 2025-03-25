@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/grafana/sigma-rule-deployment/actions/integrate/definitions"
+	"github.com/spaolacci/murmur3"
 	"gopkg.in/yaml.v3"
 )
 
@@ -59,6 +60,7 @@ type Integrator struct {
 	config      Configuration
 	prettyPrint bool
 
+	allRules     bool
 	addedFiles   []string
 	removedFiles []string
 }
@@ -139,6 +141,7 @@ func (i *Integrator) LoadConfig() error {
 	}
 	i.config = config
 	i.prettyPrint = strings.ToLower(os.Getenv("PRETTY_PRINT")) == "true"
+	i.allRules = strings.ToLower(os.Getenv("ALL_RULES")) == "true"
 
 	if !filepath.IsLocal(i.config.Folders.ConversionPath) {
 		return fmt.Errorf("conversion path is not local: %s", i.config.Folders.ConversionPath)
@@ -165,31 +168,33 @@ func (i *Integrator) LoadConfig() error {
 		i.config.IntegratorConfig.To = "now"
 	}
 
-	addedFiles := strings.Split(os.Getenv("ADDED_FILES"), " ")
+	changedFiles := strings.Split(os.Getenv("CHANGED_FILES"), " ")
 	deletedFiles := strings.Split(os.Getenv("DELETED_FILES"), " ")
-	modifiedFiles := strings.Split(os.Getenv("MODIFIED_FILES"), " ")
 	// copiedFiles := strings.Split(os.Getenv("COPIED_FILES"), " ") // TODO
 
-	newUpdatedFiles := make([]string, 0, len(addedFiles)+len(modifiedFiles))
+	newUpdatedFiles := make([]string, 0, len(changedFiles))
 	removedFiles := make([]string, 0, len(deletedFiles))
 
-	for _, path := range addedFiles {
-		// Ensure paths appear within specified conversion path
-		relpath, err := filepath.Rel(i.config.Folders.ConversionPath, path)
-		if err != nil {
-			return fmt.Errorf("error checking file path %s: %v", path, err)
-		}
-		if relpath == filepath.Base(path) {
-			newUpdatedFiles = append(newUpdatedFiles, path)
-		}
-	}
-	for _, path := range modifiedFiles {
-		relpath, err := filepath.Rel(i.config.Folders.ConversionPath, path)
-		if err != nil {
-			return fmt.Errorf("error checking file path %s: %v", path, err)
-		}
-		if relpath == filepath.Base(path) {
-			newUpdatedFiles = append(newUpdatedFiles, path)
+	if i.allRules {
+		filepath.Walk(i.config.Folders.ConversionPath, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if !info.IsDir() {
+				newUpdatedFiles = append(newUpdatedFiles, path)
+			}
+			return nil
+		})
+	} else {
+		for _, path := range changedFiles {
+			// Ensure paths appear within specified conversion path
+			relpath, err := filepath.Rel(i.config.Folders.ConversionPath, path)
+			if err != nil {
+				return fmt.Errorf("error checking file path %s: %v", path, err)
+			}
+			if relpath == filepath.Base(path) {
+				newUpdatedFiles = append(newUpdatedFiles, path)
+			}
 		}
 	}
 	for _, path := range deletedFiles {
@@ -261,9 +266,11 @@ func (i *Integrator) Run() error {
 			return fmt.Errorf("error summarising sigma rules: %v", err)
 		}
 
-		file := fmt.Sprintf("%s%salert_rule_%s_%s.json", i.config.Folders.DeploymentPath, string(filepath.Separator), config.Name, conversionID.String())
+		ruleUid := getRuleUid(conversionObject.ConversionName, conversionID)
+		file := fmt.Sprintf("%s%salert_rule_%s_%s.json", i.config.Folders.DeploymentPath, string(filepath.Separator), config.Name, ruleUid)
 		fmt.Printf("Working on alert rule file: %s\n", file)
-		rule := &definitions.ProvisionedAlertRule{UID: conversionID.String()}
+		rule := &definitions.ProvisionedAlertRule{UID: ruleUid}
+
 		err = readRuleFromFile(rule, file)
 		if err != nil {
 			return err
@@ -606,4 +613,9 @@ func (i *Integrator) TestQueries(queries []string, config ConversionConfig, time
 	}
 
 	return queryResults, nil
+}
+
+func getRuleUid(conversionName string, conversionID uuid.UUID) string {
+	hash := int64(murmur3.Sum32([]byte(conversionName + "_" + conversionID.String())))
+	return fmt.Sprintf("%x", hash)
 }

@@ -53,7 +53,7 @@ type ConversionConfig struct {
 type Configuration struct {
 	Folders          FoldersConfig      `yaml:"folders"`
 	DefaultConfig    ConversionConfig   `yaml:"conversion_defaults"`
-	ConversionConfig []ConversionConfig `yaml:"conversion"`
+	ConversionConfig []ConversionConfig `yaml:"conversions"`
 	DeployerConfig   DeploymentConfig   `yaml:"deployment"`
 	IntegratorConfig IntegrationConfig  `yaml:"integration"`
 }
@@ -93,13 +93,29 @@ func main() {
 
 	// Load the deployment config
 	deployer := NewDeployer()
+
 	if err := deployer.LoadConfig(ctx); err != nil {
 		fmt.Printf("Error loading config: %v\n", err)
 		os.Exit(1)
 	}
+
 	deployer.client = &http.Client{
 		Timeout: deployer.config.timeout,
 	}
+
+	var err error
+	if deployer.config.freshDeploy {
+		err = deployer.configFreshDeployment(ctx)
+	} else {
+		err = deployer.configNormalMode()
+	}
+	if err != nil {
+		fmt.Printf("Error configuring deployment: %v\n", err)
+		os.Exit(1)
+	}
+
+	log.Printf("Groups to update: %v", deployer.groupsToUpdate)
+	log.Printf("Groups intervals: %v", deployer.config.groupsIntervals)
 
 	// Deploy alerts
 	alertsCreated, alertsUpdated, alertsDeleted, errDeploy := deployer.Deploy(ctx)
@@ -271,11 +287,13 @@ func (d *Deployer) LoadConfig(ctx context.Context) error {
 			interval = config.TimeWindow
 		}
 		intervalDuration, err := time.ParseDuration(interval)
-		if err != nil {
-			return fmt.Errorf("error parsing time window: %v", err)
+		log.Printf("Interval duration from %s: %d", interval, int64(intervalDuration.Seconds()))
+		if err != nil || int64(intervalDuration.Seconds()) <= 0 {
+			return fmt.Errorf("error parsing time window %s: %v", interval, err)
 		}
 		if _, ok := d.config.groupsIntervals[config.RuleGroup]; !ok {
 			d.config.groupsIntervals[config.RuleGroup] = int64(intervalDuration.Seconds())
+			log.Printf("Setting interval for rule group %s to %d", config.RuleGroup, d.config.groupsIntervals[config.RuleGroup])
 		} else if d.config.groupsIntervals[config.RuleGroup] != int64(intervalDuration.Seconds()) {
 			return fmt.Errorf("time window for rule group %s is different between conversion configs", config.RuleGroup)
 		}
@@ -285,11 +303,7 @@ func (d *Deployer) LoadConfig(ctx context.Context) error {
 	freshDeploy := strings.ToLower(os.Getenv("DEPLOYER_FRESH_DEPLOY")) == "true"
 	d.config.freshDeploy = freshDeploy
 
-	if d.config.freshDeploy {
-		return d.configFreshDeployment(ctx)
-	} else {
-		return d.configNormalMode()
-	}
+	return nil
 }
 
 func (d *Deployer) configNormalMode() error {
@@ -452,6 +466,7 @@ func (d *Deployer) updateAlert(ctx context.Context, content string) (string, err
 }
 
 func (d *Deployer) updateAlertGroupInterval(ctx context.Context, folderUid string, group string, interval int64) error {
+	log.Printf("Checking alert group interval for %s/%s to %d", folderUid, group, interval)
 	url := fmt.Sprintf("%sapi/v1/provisioning/folder/%s/rule-groups/%s", d.config.endpoint, folderUid, group)
 
 	// Get the current alert group content
@@ -478,6 +493,7 @@ func (d *Deployer) updateAlertGroupInterval(ctx context.Context, folderUid strin
 	}
 
 	if resp.Interval != interval {
+		log.Printf("Updating alert group interval for %s/%s to %d", folderUid, group, interval)
 		resp.Interval = interval
 		content, err := json.Marshal(resp)
 		if err != nil {
@@ -493,7 +509,7 @@ func (d *Deployer) updateAlertGroupInterval(ctx context.Context, folderUid strin
 			return err
 		}
 		req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", d.config.saToken))
-
+		req.Header.Add("Content-Type", "application/json")
 		res, err := d.client.Do(req)
 		if err != nil {
 			return err
