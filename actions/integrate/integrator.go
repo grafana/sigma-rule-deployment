@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/grafana/sigma-rule-deployment/actions/integrate/definitions"
+	"github.com/spaolacci/murmur3"
 	"gopkg.in/yaml.v3"
 )
 
@@ -253,7 +254,9 @@ func (i *Integrator) Run() error {
 
 		file := fmt.Sprintf("%s%salert_rule_%s_%s.json", i.config.Folders.DeploymentPath, string(filepath.Separator), config.Name, conversionID.String())
 		fmt.Printf("Working on alert rule file: %s\n", file)
-		rule := &definitions.ProvisionedAlertRule{UID: conversionID.String()}
+		hash := int64(murmur3.Sum32([]byte(conversionObject.ConversionName + "_" + conversionID.String())))
+		ruleUid := fmt.Sprintf("%x", hash)
+		rule := &definitions.ProvisionedAlertRule{UID: ruleUid}
 		err = readRuleFromFile(rule, file)
 		if err != nil {
 			return err
