@@ -461,6 +461,7 @@ func (d *Deployer) updateAlert(ctx context.Context, content string) (string, err
 }
 
 func (d *Deployer) updateAlertGroupInterval(ctx context.Context, folderUid string, group string, interval int64) error {
+	log.Printf("Checking alert group interval for %s/%s to %d", folderUid, group, interval)
 	url := fmt.Sprintf("%sapi/v1/provisioning/folder/%s/rule-groups/%s", d.config.endpoint, folderUid, group)
 
 	// Get the current alert group content
@@ -487,12 +488,15 @@ func (d *Deployer) updateAlertGroupInterval(ctx context.Context, folderUid strin
 	}
 
 	if resp.Interval != interval {
+		log.Printf("Updating alert group interval for %s/%s to %d", folderUid, group, interval)
 		resp.Interval = interval
 		content, err := json.Marshal(resp)
 		if err != nil {
 			log.Printf("Can't update alert group interval. Error: %s", err.Error())
 			return fmt.Errorf("error updating alert group interval %s/%s: returned error %s", folderUid, group, err.Error())
 		}
+
+		log.Printf("Sending alert group: %s", string(content))
 
 		// Note the implicit race condition - if a rule is added to the group between these two requests,
 		// they will be overwritten by this request. There's nothing we can do about this; alerting
