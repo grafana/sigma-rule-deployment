@@ -364,6 +364,12 @@ func TestLoadConfig(t *testing.T) {
 	d := NewDeployer()
 	err := d.LoadConfig(ctx)
 	assert.NoError(t, err)
+	if d.config.freshDeploy {
+		err = d.configFreshDeployment(ctx)
+	} else {
+		err = d.configNormalMode()
+	}
+	assert.NoError(t, err)
 
 	// Test basic config values
 	assert.Equal(t, "my-test-token", d.config.saToken)
