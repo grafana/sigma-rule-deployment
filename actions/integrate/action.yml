@@ -35,11 +35,12 @@ outputs:
 runs:
   using: "composite"
   steps:
-    - name: "Checkout repository (fetch-depth: 0)"
-      id: checkout
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0 # Important to ensure we'll have all the commits when a merge includes multiple
+    # Remove checkout as unnecessary in unified workflow
+    # - name: "Checkout repository (fetch-depth: 0)"
+    #   id: checkout
+    #   uses: actions/checkout@v4
+    #   with:
+    #     fetch-depth: 0 # Important to ensure we'll have all the commits when a merge includes multiple
     - name: "Detect changed files"
       id: changed-files
       uses: step-security/changed-files@3dbe17c78367e7d60f00d78ae6781a35be47b4a1 # v45.0.1
