@@ -284,6 +284,7 @@ func (d *Deployer) LoadConfig(ctx context.Context) error {
 			interval = config.TimeWindow
 		}
 		intervalDuration, err := time.ParseDuration(interval)
+		log.Printf("Interval duration from %s: %s", interval, intervalDuration)
 		if err != nil || int64(intervalDuration.Seconds()) == 0 {
 			return fmt.Errorf("error parsing time window %s: %v", interval, err)
 		}
