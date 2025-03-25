@@ -93,12 +93,13 @@ func main() {
 
 	// Load the deployment config
 	deployer := NewDeployer()
+	deployer.client = &http.Client{
+		Timeout: deployer.config.timeout,
+	}
+
 	if err := deployer.LoadConfig(ctx); err != nil {
 		fmt.Printf("Error loading config: %v\n", err)
 		os.Exit(1)
-	}
-	deployer.client = &http.Client{
-		Timeout: deployer.config.timeout,
 	}
 
 	// Deploy alerts
