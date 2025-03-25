@@ -513,7 +513,8 @@ func TestIntegratorRun(t *testing.T) {
 			assert.NoError(t, err)
 
 			// Verify rule properties
-			assert.Equal(t, convID.String(), rule.UID)
+			ruleUid := getRuleUid(tt.conversionName, convID)
+			assert.Equal(t, ruleUid, rule.UID)
 			assert.Equal(t, tt.wantTitles, rule.Title)
 			assert.Equal(t, "Test Rules", rule.RuleGroup)
 			assert.Equal(t, "test-datasource", rule.Data[0].DatasourceUID)

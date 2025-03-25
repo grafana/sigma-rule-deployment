@@ -254,8 +254,7 @@ func (i *Integrator) Run() error {
 
 		file := fmt.Sprintf("%s%salert_rule_%s_%s.json", i.config.Folders.DeploymentPath, string(filepath.Separator), config.Name, conversionID.String())
 		fmt.Printf("Working on alert rule file: %s\n", file)
-		hash := int64(murmur3.Sum32([]byte(conversionObject.ConversionName + "_" + conversionID.String())))
-		ruleUid := fmt.Sprintf("%x", hash)
+		ruleUid := getRuleUid(conversionObject.ConversionName, conversionID)
 		rule := &definitions.ProvisionedAlertRule{UID: ruleUid}
 		err = readRuleFromFile(rule, file)
 		if err != nil {
@@ -599,4 +598,9 @@ func (i *Integrator) TestQueries(queries []string, config ConversionConfig, time
 	}
 
 	return queryResults, nil
+}
+
+func getRuleUid(conversionName string, conversionID uuid.UUID) string {
+	hash := int64(murmur3.Sum32([]byte(conversionName + "_" + conversionID.String())))
+	return fmt.Sprintf("%x", hash)
 }
