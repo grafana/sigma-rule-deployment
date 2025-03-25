@@ -17,7 +17,7 @@ function _convert() {
 
     shopt -s nocasematch
     for plugin in $(echo $plugin_packages | tr ',' ' '); do
-        if [[ "$plugin" == pysigma-backend-* ]]; then
+        if [[ "$plugin" == pysigma-* ]]; then
             valid_plugins+=("$plugin")
         else
             echo "Error: Invalid plugin name: $plugin"
