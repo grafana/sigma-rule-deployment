@@ -160,6 +160,7 @@ func TestLoadConfig(t *testing.T) {
 		token      string
 		changed    string
 		deleted    string
+		allRules   bool
 		expConfig  Configuration
 		expAdd     []string
 		expDel     []string
@@ -171,6 +172,7 @@ func TestLoadConfig(t *testing.T) {
 			token:      "my-test-token",
 			changed:    "testdata/conv.json",
 			deleted:    "",
+			allRules:   false,
 			expConfig: Configuration{
 				Folders: FoldersConfig{
 					ConversionPath: "./testdata",
@@ -207,6 +209,7 @@ func TestLoadConfig(t *testing.T) {
 			token:      "my-test-token",
 			changed:    "testdata/conv1.json testdata/conv3.json",
 			deleted:    "testdata/conv2.json testdata/conv4.json",
+			allRules:   false,
 			expConfig: Configuration{
 				Folders: FoldersConfig{
 					ConversionPath: "./testdata",
@@ -253,28 +256,70 @@ func TestLoadConfig(t *testing.T) {
 			wantError: false,
 		},
 		{
+			name:       "load all files when ALL_RULES is true",
+			configPath: "testdata/config.yml",
+			token:      "my-test-token",
+			changed:    "",
+			deleted:    "",
+			allRules:   true,
+			expConfig: Configuration{
+				Folders: FoldersConfig{
+					ConversionPath: "./testdata",
+					DeploymentPath: "./testdata",
+				},
+				ConversionDefaults: ConversionConfig{
+					Target:          "loki",
+					Format:          "default",
+					SkipUnsupported: "true",
+					FilePattern:     "*.yml",
+					DataSource:      "grafanacloud-logs",
+				},
+				Conversions: []ConversionConfig{
+					{
+						Name:       "conv",
+						RuleGroup:  "Every 5 Minutes",
+						TimeWindow: "5m",
+					},
+				},
+				IntegratorConfig: IntegrationConfig{
+					FolderID: "XXXX",
+					OrgID:    1,
+					From:     "now-1h",
+					To:       "now",
+				},
+			},
+			expAdd:    []string{"testdata/config.yml", "testdata/es-config.yml", "testdata/non-local-conv-config.yml", "testdata/non-local-deploy-config.yml", "testdata/sample_rule.json"},
+			expDel:    []string{},
+			wantError: false,
+		},
+		{
 			name:       "missing config file",
 			configPath: "testdata/missing_config.yml",
+			allRules:   false,
 			wantError:  true,
 		},
 		{
 			name:       "no path",
 			configPath: "",
+			allRules:   false,
 			wantError:  true,
 		},
 		{
 			name:       "non-local config file",
 			configPath: "../testdata/missing_config.yml",
+			allRules:   false,
 			wantError:  true,
 		},
 		{
 			name:       "conversion path is not local",
 			configPath: "testdata/non-local-conv-config.yml",
+			allRules:   false,
 			wantError:  true,
 		},
 		{
 			name:       "deployment path is not local",
 			configPath: "testdata/non-local-deploy-config.yml",
+			allRules:   false,
 			wantError:  true,
 		},
 	}
@@ -284,6 +329,11 @@ func TestLoadConfig(t *testing.T) {
 			os.Setenv("INTEGRATOR_GRAFANA_SA_TOKEN", tt.token)
 			os.Setenv("CHANGED_FILES", tt.changed)
 			os.Setenv("DELETED_FILES", tt.deleted)
+			if tt.allRules {
+				os.Setenv("ALL_RULES", "true")
+			} else {
+				os.Setenv("ALL_RULES", "false")
+			}
 
 			i := NewIntegrator()
 			err := i.LoadConfig()
@@ -301,6 +351,7 @@ func TestLoadConfig(t *testing.T) {
 	defer os.Unsetenv("INTEGRATOR_GRAFANA_SA_TOKEN")
 	defer os.Unsetenv("CHANGED_FILES")
 	defer os.Unsetenv("DELETED_FILES")
+	defer os.Unsetenv("ALL_RULES")
 }
 
 func TestReadWriteAlertRule(t *testing.T) {

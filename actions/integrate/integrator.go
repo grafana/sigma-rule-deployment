@@ -60,6 +60,7 @@ type Integrator struct {
 	config      Configuration
 	prettyPrint bool
 
+	allRules     bool
 	addedFiles   []string
 	removedFiles []string
 }
@@ -140,6 +141,7 @@ func (i *Integrator) LoadConfig() error {
 	}
 	i.config = config
 	i.prettyPrint = strings.ToLower(os.Getenv("PRETTY_PRINT")) == "true"
+	i.allRules = strings.ToLower(os.Getenv("ALL_RULES")) == "true"
 
 	if !filepath.IsLocal(i.config.Folders.ConversionPath) {
 		return fmt.Errorf("conversion path is not local: %s", i.config.Folders.ConversionPath)
@@ -173,14 +175,26 @@ func (i *Integrator) LoadConfig() error {
 	newUpdatedFiles := make([]string, 0, len(changedFiles))
 	removedFiles := make([]string, 0, len(deletedFiles))
 
-	for _, path := range changedFiles {
-		// Ensure paths appear within specified conversion path
-		relpath, err := filepath.Rel(i.config.Folders.ConversionPath, path)
-		if err != nil {
-			return fmt.Errorf("error checking file path %s: %v", path, err)
-		}
-		if relpath == filepath.Base(path) {
-			newUpdatedFiles = append(newUpdatedFiles, path)
+	if i.allRules {
+		filepath.Walk(i.config.Folders.ConversionPath, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if !info.IsDir() {
+				newUpdatedFiles = append(newUpdatedFiles, path)
+			}
+			return nil
+		})
+	} else {
+		for _, path := range changedFiles {
+			// Ensure paths appear within specified conversion path
+			relpath, err := filepath.Rel(i.config.Folders.ConversionPath, path)
+			if err != nil {
+				return fmt.Errorf("error checking file path %s: %v", path, err)
+			}
+			if relpath == filepath.Base(path) {
+				newUpdatedFiles = append(newUpdatedFiles, path)
+			}
 		}
 	}
 	for _, path := range deletedFiles {
