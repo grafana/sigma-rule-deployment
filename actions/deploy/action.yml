@@ -63,4 +63,8 @@ runs:
         action_ref: ${{ github.action_ref }}
       run: |
         docker pull ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${{ env.action_ref }}
-        docker run --rm -v "$(pwd):/sigma-rules" -w /sigma-rules -e GITHUB_OUTPUT="${GITHUB_OUTPUT}" -e CONFIG_PATH="${CONFIG_PATH}" -e DEPLOYER_GRAFANA_SA_TOKEN="${GRAFANA_SA_TOKEN}" -e DEPLOYER_FRESH_DEPLOY="${FRESH_DEPLOY}" -e ADDED_FILES="${ADDED_FILES}" -e MODIFIED_FILES="${MODIFIED_FILES}" -e DELETED_FILES="${DELETED_FILES}" -e COPIED_FILES="${COPIED_FILES}" ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${action_ref} deploy
+        docker run --rm -v "$(pwd):/sigma-rules" -w /sigma-rules -e GITHUB_OUTPUT="/sigma-rules/github-output" -e CONFIG_PATH="${CONFIG_PATH}" -e DEPLOYER_GRAFANA_SA_TOKEN="${GRAFANA_SA_TOKEN}" -e DEPLOYER_FRESH_DEPLOY="${FRESH_DEPLOY}" -e ADDED_FILES="${ADDED_FILES}" -e MODIFIED_FILES="${MODIFIED_FILES}" -e DELETED_FILES="${DELETED_FILES}" -e COPIED_FILES="${COPIED_FILES}" ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${action_ref} deploy
+    - name: Move Output
+      shell: bash
+      run: |
+        mv github-output $GITHUB_OUTPUT
