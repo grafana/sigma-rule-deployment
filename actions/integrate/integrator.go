@@ -252,10 +252,11 @@ func (i *Integrator) Run() error {
 			return fmt.Errorf("error summarising sigma rules: %v", err)
 		}
 
-		file := fmt.Sprintf("%s%salert_rule_%s_%s.json", i.config.Folders.DeploymentPath, string(filepath.Separator), config.Name, conversionID.String())
-		fmt.Printf("Working on alert rule file: %s\n", file)
 		ruleUid := getRuleUid(conversionObject.ConversionName, conversionID)
+		file := fmt.Sprintf("%s%salert_rule_%s_%s.json", i.config.Folders.DeploymentPath, string(filepath.Separator), config.Name, ruleUid)
+		fmt.Printf("Working on alert rule file: %s\n", file)
 		rule := &definitions.ProvisionedAlertRule{UID: ruleUid}
+
 		err = readRuleFromFile(rule, file)
 		if err != nil {
 			return err

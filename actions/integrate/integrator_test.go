@@ -503,7 +503,8 @@ func TestIntegratorRun(t *testing.T) {
 			convID, _, err := summariseSigmaRules(tt.convOutput.Rules)
 			assert.NoError(t, err)
 
-			expectedFile := filepath.Join(deployPath, fmt.Sprintf("alert_rule_%s_%s.json", tt.conversionName, convID.String()))
+			ruleUid := getRuleUid(tt.conversionName, convID)
+			expectedFile := filepath.Join(deployPath, fmt.Sprintf("alert_rule_%s_%s.json", tt.conversionName, ruleUid))
 			_, err = os.Stat(expectedFile)
 			assert.NoError(t, err)
 
@@ -513,7 +514,6 @@ func TestIntegratorRun(t *testing.T) {
 			assert.NoError(t, err)
 
 			// Verify rule properties
-			ruleUid := getRuleUid(tt.conversionName, convID)
 			assert.Equal(t, ruleUid, rule.UID)
 			assert.Equal(t, tt.wantTitles, rule.Title)
 			assert.Equal(t, "Test Rules", rule.RuleGroup)
@@ -745,7 +745,8 @@ func TestIntegratorWithQueryTesting(t *testing.T) {
 			// Verify alert rule file was created
 			convID, _, err := summariseSigmaRules(convOutput.Rules)
 			assert.NoError(t, err)
-			expectedFile := filepath.Join(deployPath, fmt.Sprintf("alert_rule_test_loki_%s.json", convID.String()))
+			ruleUid := getRuleUid("test_loki", convID)
+			expectedFile := filepath.Join(deployPath, fmt.Sprintf("alert_rule_test_loki_%s.json", ruleUid))
 			_, err = os.Stat(expectedFile)
 			assert.NoError(t, err)
 
