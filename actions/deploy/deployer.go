@@ -509,7 +509,7 @@ func (d *Deployer) updateAlertGroupInterval(ctx context.Context, folderUid strin
 			return err
 		}
 		req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", d.config.saToken))
-
+		req.Header.Add("Content-Type", "application/json")
 		res, err := d.client.Do(req)
 		if err != nil {
 			return err
