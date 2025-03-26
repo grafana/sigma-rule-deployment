@@ -3,10 +3,9 @@
 This script is used to convert Sigma rules to the target format per
 each conversion object in the config.
 ---
-usage: main.py [-h] [--config CONFIG] [--conversions-output-dir CONVERSIONS_OUTPUT_DIR]
-               [--path-prefix PATH_PREFIX] [--render-traceback | --no-render-traceback]
-               [--render-traceback | --no-render-traceback] [--pretty-print | --no-pretty-print]
-               [--all-rules | --no-all-rules]
+usage: main.py [-h] [--config CONFIG] [--path-prefix PATH_PREFIX]
+               [--render-traceback | --no-render-traceback]
+               [--pretty-print | --no-pretty-print] [--all-rules | --no-all-rules]
                [--changed-files CHANGED_FILES] [--deleted-files DELETED_FILES]
 
 Sigma CLI Conversion
