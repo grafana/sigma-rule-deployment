@@ -12,11 +12,11 @@ Automate the conversion, testing, and deployment of Sigma Rules to Grafana with 
 
 ### Q: What backends/data sources do you support?
 
-The Actions can convert rules using **any** Sigma backend and produce valid alert rules for **any** data source, however, so far we have only thoroughly tested this functionality with Loki. In particular, converting log queries into metric queries so they can be used correctly with Grafana Managed Alerting is dependent on the backend supporting that option or by modifying the generated queries.
+These Actions can convert rules using **any** Sigma backend and produce valid alert rules for **any** data source, however, to date they have only been thoroughly tested with Loki. In particular, converting log queries into metric queries so they can be used correctly with Grafana Managed Alerting is dependent on the backend supporting that option or by modifying the generated queries.
 
 Relevent conversion backends and data sources that can be used in Grafana include:
 
-- [Grafana Loki](https://github.com/grafana/pySigma-backend-loki) and [Loki data source](https://grafana.com/docs/loki/latest/)
+- [Grafana Loki](https://github.com/grafana/pySigma-backend-loki) and the [Loki data source](https://grafana.com/docs/loki/latest/)
 - [Azure KQL](https://github.com/AttackIQ/pySigma-backend-kusto) and the [Azure Monitor data source](https://grafana.com/docs/grafana/latest/datasources/azure-monitor/)
 - [Datadog](https://github.com/DataDog/pysigma-backend-datadog) and the [Datadog data source](https://grafana.com/grafana/plugins/grafana-datadog-datasource/)
 - [Elasticsearch](https://github.com/SigmaHQ/pySigma-backend-elasticsearch) and the [Elasticsearch data source](https://grafana.com/docs/grafana/latest/datasources/elasticsearch/)
@@ -28,4 +28,4 @@ Relevent conversion backends and data sources that can be used in Grafana includ
 
 ### Q: Are there any restrictions on the Sigma rule files?
 
-The only restrictions are they need to be valid Sigma rules, and if you are using Correlation rules, each Correlation rule must contain all the referenced rules within the rule file (using [YAML's multiple document feature](https://gettaurus.org/docs/YAMLTutorial/#YAML-Multi-Documents), i.e., combined with `---`).
+The main restriction are they need to be valid Sigma rules. If you are using [Correlation rules](https://github.com/SigmaHQ/sigma-specification/blob/main/specification/sigma-correlation-rules-specification.md), the rule files must contain **all** the referenced rules within the rule file (using [YAML's multiple document feature](https://gettaurus.org/docs/YAMLTutorial/#YAML-Multi-Documents), i.e., combined with `---`).
