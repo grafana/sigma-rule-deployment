@@ -23,6 +23,10 @@ inputs:
     description: "Output log lines to the outputs of the test_query_results"
     required: false
     default: "false"
+  all_rules:
+    description: "Whether to integrate all rules"
+    required: false
+    default: "false"
   changed_files:
     description: "The changed files to integrate"
     required: false

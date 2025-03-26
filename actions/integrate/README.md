@@ -8,14 +8,19 @@
 | ------------------ | ----------------------------------------------------------------------- | -------- | ------- |
 | `config_path`      | Path to the Sigma Integrator config file.                               | Yes      | `""`    |
 | `grafana_sa_token` | Grafana Service Account token to use for the testing of the alert rules | No       | `""`    |
-
-Note: The token provided in `grafana_sa_token` is not currently being used.
+| `github_token`     | GitHub token to use for the fetching of the repo and commiting          | No       | `""`    |
+| `pretty_print`     | Whether the alert rule files produced should be pretty printed          | No       | `false` |
+| `output_log_lines` | Whether the query testing log line results should be output             | No       | `false` |
+| `all_rules`        | Whether to integrate all rules in the conversion folder                 | No       | `false` |
+| `changed_files`    | A space-separated list of file paths to integrate                       | No       | `""`    |
+| `deleted_files`    | A space-separated list of file paths to remove                          | No       | `""`    |
 
 ## Outputs
 
-| Name               | Description                                                                                                |
-| ------------------ | ---------------------------------------------------------------------------------------------------------- |
-| `rules_integrated` | List of the filenames of alert rule files created, updated or deleted during integration (space-separated) |
+| Name                 | Description                                                                                                |
+| -------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `rules_integrated`   | List of the filenames of alert rule files created, updated or deleted during integration (space-separated) |
+| `test_query_results` | The results of testing the queries against the datasource for the past hour                                |
 
 ## Usage
 
