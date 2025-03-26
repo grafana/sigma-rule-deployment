@@ -10,6 +10,11 @@ def parse_args() -> argparse.Namespace:
     """
     Parse command line arguments to get config file.
 
+    Order of precedence for configuration values:
+    1. Command line arguments (highest priority)
+    2. Environment variables
+    3. Default values (lowest priority)
+
     Returns:
         argparse.Namespace: Parsed command line arguments containing:
             - config: Path to config YAML file (Path)
@@ -53,8 +58,6 @@ def parse_args() -> argparse.Namespace:
         help="Convert all rules",
         default=os.environ.get("ALL_RULES", "false").lower() == "true",
     )
-
-    # File list arguments
     parser.add_argument(
         "--changed-files",
         help="List of changed files",
