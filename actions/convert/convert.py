@@ -19,11 +19,11 @@ from yaml import FullLoader, load_all
 def convert_rules(
     config: Dynaconf,
     path_prefix: str | Path,
-    render_traceback: bool,
-    pretty_print: bool,
-    all_rules: bool,
-    changed_files: str,
-    deleted_files: str,
+    render_traceback: bool = False,
+    pretty_print: bool = False,
+    all_rules: bool = False,
+    changed_files: str = "",
+    deleted_files: str = "",
 ) -> None:
     """Convert Sigma rules to the target format per each file in the conversions object
     in the config. The converted files will be saved in the PATH_PREFIX/conversions
@@ -98,10 +98,13 @@ def convert_rules(
         print("No changed or deleted files identified, but all_rules is false")
         exit(0)
 
+    # Get the conversion path from the config
+    conversion_path = "conversions"  # Default conversion path if none is set
+    if folders := config.get("folders"):
+        conversion_path = folders.get("conversion_path", conversion_path)
+    conversions_output_dir = path_prefix / Path(conversion_path)
+
     # Check if the conversions_output_dir stays within the project root to prevent path slip.
-    conversions_output_dir = path_prefix / Path(
-        config.get("folders.conversion_path", "conversions")
-    )
     if not is_safe_path(path_prefix, conversions_output_dir):
         raise ValueError("Conversion output directory is outside the project root")
 
