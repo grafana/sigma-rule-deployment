@@ -8,6 +8,10 @@ Automate the conversion, testing, and deployment of Sigma Rules to Grafana with 
 - [Query Integrator](./actions/integrate/README.md): Given a folder of input query files (as produced by the converter), each file containing a list of queries and relevant metadata, convert each into a Grafana Managed Alerting alert rule, optionally testing the queries against a configured Grafana instance to validate that it works as expected.
 - [Rule Deployer](./actions/deploy/README.md): Given a folder of Grafana Managed Alerting alert rules (as produced by the integrator), deploy them to the configured Grafana instance, using Alerting's provisioning API.
 
+## Usage
+
+We include two sample workflow configurations ([convert-integrate-sigma.yml](config/convert-integrate-sigma.yml) and [deploy.yml](config/deploy.yml)) to show how these Actions can be combined together to achieve a full end-to-end Sigma rule to deployed Grafana Alert, and a sample [configuration file](config/sigma-convert.example.yml) for the conversions.
+
 ## FAQ
 
 ### Q: What backends/data sources do you support?
