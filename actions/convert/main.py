@@ -44,13 +44,21 @@ from settings import load_config, parse_args
 if __name__ == "__main__":
     # Parse command line arguments and load config file.
 
+    # Parse command line arguments
     args = parse_args()
+
+    # Construct config file path and check if it exists
     config_file = Path(args.path_prefix) / Path(args.config)
-    if not config_file.exists():
-        raise FileNotFoundError(f"Config file not found: {config_file.resolve()}")
+    if not config_file.exists() or not config_file.is_file():
+        raise FileNotFoundError(
+            f"Config file not found or is not a file: {config_file.resolve()}"
+        )
+
+    # Load config file and parse it using Dynaconf
     config = load_config(str(config_file))
 
-    # Convert Sigma rules to the target format per each conversion object in the config
+    # Convert Sigma rules to the target format per each file in the conversions object
+    # in the config
     convert_rules(
         config=config,
         path_prefix=args.path_prefix,
