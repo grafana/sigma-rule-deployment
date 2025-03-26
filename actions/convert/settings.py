@@ -6,6 +6,9 @@ import os
 from dynaconf import Dynaconf
 
 
+TRUE_VALUES = ("true", "1", "t", "yes", "y", "on", "enabled")
+
+
 def parse_args() -> argparse.Namespace:
     """
     Parse command line arguments to get config file.
@@ -44,19 +47,19 @@ def parse_args() -> argparse.Namespace:
         "--render-traceback",
         action=argparse.BooleanOptionalAction,
         help="Render traceback on error",
-        default=os.environ.get("RENDER_TRACEBACK", "false").lower() == "true",
+        default=os.environ.get("RENDER_TRACEBACK", "false").lower() in TRUE_VALUES,
     )
     parser.add_argument(
         "--pretty-print",
         action=argparse.BooleanOptionalAction,
         help="Pretty print the converted files",
-        default=os.environ.get("PRETTY_PRINT", "false").lower() == "true",
+        default=os.environ.get("PRETTY_PRINT", "false").lower() in TRUE_VALUES,
     )
     parser.add_argument(
         "--all-rules",
         action=argparse.BooleanOptionalAction,
         help="Convert all rules",
-        default=os.environ.get("ALL_RULES", "false").lower() == "true",
+        default=os.environ.get("ALL_RULES", "false").lower() in TRUE_VALUES,
     )
     parser.add_argument(
         "--changed-files",
