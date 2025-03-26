@@ -6,89 +6,72 @@ import os
 from dynaconf import Dynaconf
 
 
+TRUE_VALUES = ("true", "1", "t", "yes", "y", "on", "enabled")
+
+
 def parse_args() -> argparse.Namespace:
     """
     Parse command line arguments to get config file.
+
+    Order of precedence for configuration values:
+    1. Command line arguments (highest priority)
+    2. Environment variables
+    3. Default values (lowest priority)
+
+    Returns:
+        argparse.Namespace: Parsed command line arguments containing:
+            - config: Path to config YAML file (Path)
+            - path_prefix: Path prefix for input files (Path)
+            - render_traceback: Whether to render traceback on error (boolean)
+            - pretty_print: Whether to pretty print converted files (boolean)
+            - all_rules: Whether to convert all rules (boolean)
+            - changed_files: List of changed files (space separated)
+            - deleted_files: List of deleted files (space separated)
     """
-    parser = argparse.ArgumentParser(description="Sigma CLI Conversion")
+    parser = argparse.ArgumentParser(
+        description="Sigma CLI Conversion",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+
     parser.add_argument(
         "--config",
-        dest="config",
-        metavar="./config.yaml",
-        type=str,
-        nargs="?",
         help="Path to config YAML file",
         default=os.environ.get("CONFIG", "./config.yaml"),
-        const="./config.yaml",
-    )
-    parser.add_argument(
-        "--conversions-output-dir",
-        dest="conversions_output_dir",
-        metavar="conversions",
-        type=str,
-        nargs="?",
-        help="Path to output directory for converted files",
-        default=os.environ.get("CONVERSIONS_OUTPUT_DIR", "conversions"),
-        const="conversions",
     )
     parser.add_argument(
         "--path-prefix",
-        dest="path_prefix",
-        metavar=".",
-        type=str,
-        nargs="?",
         help="The path prefix to use for input files",
-        default=os.environ.get("GITHUB_WORKSPACE", ""),
-        const=".",
+        default=os.environ.get("PATH_PREFIX", os.environ.get("GITHUB_WORKSPACE", ".")),
     )
     parser.add_argument(
         "--render-traceback",
-        dest="render_traceback",
-        metavar="true",
-        type=str,
-        nargs="?",
+        action=argparse.BooleanOptionalAction,
         help="Render traceback on error",
-        default=os.environ.get("RENDER_TRACEBACK", "false") == "true",
-        const="true",
+        default=os.environ.get("RENDER_TRACEBACK", "false").lower() in TRUE_VALUES,
     )
     parser.add_argument(
         "--pretty-print",
-        dest="pretty_print",
-        metavar="true",
-        type=str,
-        nargs="?",
+        action=argparse.BooleanOptionalAction,
         help="Pretty print the converted files",
-        default=os.environ.get("PRETTY_PRINT", "false") == "true",
-        const="true",
+        default=os.environ.get("PRETTY_PRINT", "false").lower() in TRUE_VALUES,
     )
     parser.add_argument(
         "--all-rules",
-        dest="all_rules",
-        metavar="true",
-        type=str,
-        nargs="?",
+        action=argparse.BooleanOptionalAction,
         help="Convert all rules",
-        default=os.environ.get("ALL_RULES", "false") == "true",
-        const="true",
+        default=os.environ.get("ALL_RULES", "false").lower() in TRUE_VALUES,
     )
     parser.add_argument(
         "--changed-files",
-        dest="changed_files",
-        metavar="file1 file2",
-        type=str,
-        nargs="?",
         help="List of changed files",
         default=os.environ.get("CHANGED_FILES", ""),
     )
     parser.add_argument(
         "--deleted-files",
-        dest="deleted_files",
-        metavar="file1 file2",
-        type=str,
-        nargs="?",
         help="List of deleted files",
         default=os.environ.get("DELETED_FILES", ""),
     )
+
     return parser.parse_args()
 
 

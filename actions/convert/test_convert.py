@@ -101,11 +101,11 @@ def test_convert_rules_missing_path_prefix():
 
 def test_convert_rules_invalid_output_dir(temp_workspace, mock_config):
     """Test that an error is raised when output directory is outside the project root."""
+    mock_config["folders"] = {"conversion_path": "../outside"}
     with pytest.raises(ValueError, match="outside the project root"):
         convert_rules(
             config=mock_config,
             path_prefix=temp_workspace,
-            conversions_output_dir="../outside",
             all_rules=True,
         )
 
@@ -176,7 +176,6 @@ def test_convert_rules_successful_conversion_all(temp_workspace, mock_config):
     convert_rules(
         config=mock_config,
         path_prefix=temp_workspace,
-        conversions_output_dir="conversions",
         all_rules=True,
     )
 
@@ -213,7 +212,6 @@ def test_convert_rules_successful_conversion_changed_files(temp_workspace, mock_
     convert_rules(
         config=mock_config,
         path_prefix=temp_workspace,
-        conversions_output_dir="conversions",
         changed_files="rules/test.yml",
     )
 
@@ -250,7 +248,6 @@ def test_convert_rules_skip_unchanged_rules(temp_workspace, mock_config):
     convert_rules(
         config=mock_config,
         path_prefix=temp_workspace,
-        conversions_output_dir="conversions",
         changed_files="rules/different.yml",
     )
 
@@ -265,7 +262,6 @@ def test_convert_rules_successful_conversion_with_correlation_rule_all(
     convert_rules(
         config=mock_config_with_correlation_rule,
         path_prefix=temp_workspace_with_correlation_rule,
-        conversions_output_dir="conversions",
         all_rules=True,
     )
 
@@ -351,7 +347,6 @@ def test_convert_rules_handles_empty_output(mock_invoke, temp_workspace, mock_co
     convert_rules(
         config=mock_config,
         path_prefix=temp_workspace,
-        conversions_output_dir="conversions",
         all_rules=True,
     )
 
@@ -369,7 +364,6 @@ def test_convert_rules_handles_empty_output_on_rule(temp_workspace, mock_config)
     convert_rules(
         config=mock_config,
         path_prefix=temp_workspace,
-        conversions_output_dir="conversions",
         all_rules=True,
     )
 
