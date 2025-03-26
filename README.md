@@ -12,15 +12,15 @@ Automate the conversion, testing, and deployment of Sigma Rules to Grafana with 
 
 ### Q: What backends/data sources do you support?
 
-The Actions can load **any** Sigma backend and produce valid alert rules for **any** data source, however, so far we have only thoroughly tested this functionality with Loki. In particular, converting log queries into metric queries so they can be used correctly with Grafana Managed Alerting is dependent on the backend supporting that option or by modifying the generated queries.
+The Actions can convert rules using **any** Sigma backend and produce valid alert rules for **any** data source, however, so far we have only thoroughly tested this functionality with Loki. In particular, converting log queries into metric queries so they can be used correctly with Grafana Managed Alerting is dependent on the backend supporting that option or by modifying the generated queries.
 
-Relevent backends and data sources include:
+Relevent conversion backends and data sources that can be used in Grafana include:
 
 - [Grafana Loki](https://github.com/grafana/pySigma-backend-loki) and [Loki data source](https://grafana.com/docs/loki/latest/)
-- [Azure KQL](https://github.com/AttackIQ/pySigma-backend-kusto) and the [Azure Monitor data source](https://grafana.com/grafana/plugins/grafana-azure-monitor-datasource/)
+- [Azure KQL](https://github.com/AttackIQ/pySigma-backend-kusto) and the [Azure Monitor data source](https://grafana.com/docs/grafana/latest/datasources/azure-monitor/)
 - [Datadog](https://github.com/DataDog/pysigma-backend-datadog) and the [Datadog data source](https://grafana.com/grafana/plugins/grafana-datadog-datasource/)
-- [Elasticsearch](https://github.com/SigmaHQ/pySigma-backend-elasticsearch) and the [Elasticsearch data source](https://grafana.com/grafana/plugins/elasticsearch/)
-- [QRadar AQL](https://github.com/IBM/pySigma-backend-QRadar-aql) and the [QRadar data source](https://grafana.com/grafana/plugins/ibm-aql-datasource/)
+- [Elasticsearch](https://github.com/SigmaHQ/pySigma-backend-elasticsearch) and the [Elasticsearch data source](https://grafana.com/docs/grafana/latest/datasources/elasticsearch/)
+- [QRadar AQL](https://github.com/IBM/pySigma-backend-QRadar-aql) and the [IBM Security QRadar data source](https://grafana.com/grafana/plugins/ibm-aql-datasource/)
 - [Opensearch](https://github.com/SigmaHQ/pySigma-backend-opensearch) and the [Opensearch data source](https://grafana.com/grafana/plugins/grafana-opensearch-datasource/)
 - [Splunk](https://github.com/SigmaHQ/pySigma-backend-splunk) and the [Splunk data source](https://grafana.com/grafana/plugins/grafana-splunk-datasource/)
 - [SQLite](https://github.com/SigmaHQ/pySigma-backend-sqlite) and the [SQLite data source](https://grafana.com/grafana/plugins/frser-sqlite-datasource/)
