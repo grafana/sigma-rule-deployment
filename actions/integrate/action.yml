@@ -74,6 +74,10 @@ runs:
         action_ref: ${{ github.action_ref }}
       run: |
         docker pull ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${{ env.action_ref }}
-        docker run --rm -v "$(pwd):/sigma-rules" -w /sigma-rules -e INTEGRATOR_CONFIG_PATH="${CONFIG_PATH}" -e INTEGRATOR_GRAFANA_SA_TOKEN="${GRAFANA_SA_TOKEN}" -e PRETTY_PRINT="${PRETTY_PRINT}" -e CHANGED_FILES="${CHANGED_FILES}" -e DELETED_FILES="${DELETED_FILES}" -e ALL_RULES="${ALL_RULES}" ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${action_ref} integrate
+        docker run --rm -v "$(pwd):/sigma-rules" -w /sigma-rules -e GITHUB_OUTPUT=/sigma-rules/github-output -e INTEGRATOR_CONFIG_PATH="${CONFIG_PATH}" -e INTEGRATOR_GRAFANA_SA_TOKEN="${GRAFANA_SA_TOKEN}" -e PRETTY_PRINT="${PRETTY_PRINT}" -e CHANGED_FILES="${CHANGED_FILES}" -e DELETED_FILES="${DELETED_FILES}" -e ALL_RULES="${ALL_RULES}" ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${action_ref} integrate
+    - name: Set output
+      shell: bash
+      run: |
+        mv github-output $GITHUB_OUTPUT
     - name: Commit integrated queries
       uses: stefanzweifel/git-auto-commit-action@v4
