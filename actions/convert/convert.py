@@ -1,4 +1,5 @@
-"""Convert Sigma rules to the target format per each conversion object in the config."""
+"""Convert Sigma rules to the target format per each file in the conversions object
+in the config."""
 
 import fnmatch
 import glob
@@ -17,24 +18,48 @@ from yaml import FullLoader, load_all
 
 def convert_rules(
     config: Dynaconf,
-    path_prefix: str | Path = Path(os.environ.get("GITHUB_WORKSPACE", "")),
-    conversions_output_dir: str | Path = Path(
-        os.environ.get("CONVERSIONS_OUTPUT_DIR", "conversions")
-    ),
-    render_traceback: bool = os.environ.get("RENDER_TRACEBACK", "false").lower()
-    == "true",
-    pretty_print: bool = os.environ.get("PRETTY_PRINT", "false").lower() == "true",
-    all_rules: bool = os.environ.get("ALL_RULES", "false").lower() == "true",
-    changed_files: str = os.environ.get("CHANGED_FILES", ""),
-    deleted_files: str = os.environ.get("DELETED_FILES", ""),
+    path_prefix: str | Path,
+    render_traceback: bool,
+    pretty_print: bool,
+    all_rules: bool,
+    changed_files: str,
+    deleted_files: str,
 ) -> None:
-    """Convert Sigma rules to the target format per each conversion object in the config.
+    """Convert Sigma rules to the target format per each file in the conversions object
+    in the config. The converted files will be saved in the PATH_PREFIX/conversions
+    directory and they are JSON files with the following structure:
+    {
+        "queries": [
+            "query1",
+            "query2",
+        ],
+        "conversion_name": "conversion_name",
+        "input_file": "input_file",
+        "rules": [
+            {
+                "id": "rule_id",
+                "title": "rule_title",
+                "description": "rule_description",
+                "severity": "rule_severity",
+                "query": "rule_query",
+            },
+            {
+                "id": "rule_id_2",
+                "title": "rule_title_2",
+                "description": "rule_description_2",
+                "severity": "rule_severity_2",
+                "query": "rule_query_2",
+            },
+        ],
+    }
 
     Args:
-        path_prefix (str | Path, optional): The path prefix to use for input files.
-            Defaults to GITHUB_WORKSPACE environment variable.
-        output_file (str, optional): The output file path. Defaults to "-" (stdout).
-        render_tb (bool, optional): Whether to render traceback on error. Defaults to False.
+        path_prefix (str | Path): The path prefix to use for input files.
+        render_traceback (bool): Whether to render traceback on error.
+        pretty_print (bool): Whether to pretty print the converted files.
+        all_rules (bool): Whether to convert all rules.
+        changed_files (str): The list of changed files.
+        deleted_files (str): The list of deleted files.
 
     Raises:
         ValueError: Path prefix must be set using GITHUB_WORKSPACE environment variable.
@@ -47,8 +72,12 @@ def convert_rules(
         ValueError: Pipeline file path must be relative to the project root.
         ValueError: Error loading rule file {rule_file}.
     """
-    changed_files_set = set(path_prefix / Path(x) for x in changed_files.split(" ") if x)
-    deleted_files_set = set(path_prefix / Path(x) for x in deleted_files.split(" ") if x)
+    changed_files_set = set(
+        path_prefix / Path(x) for x in changed_files.split(" ") if x
+    )
+    deleted_files_set = set(
+        path_prefix / Path(x) for x in deleted_files.split(" ") if x
+    )
 
     # Check if the path_prefix is set
     if not path_prefix or path_prefix == Path("."):
@@ -70,7 +99,9 @@ def convert_rules(
         exit(0)
 
     # Check if the conversions_output_dir stays within the project root to prevent path slip.
-    conversions_output_dir = path_prefix / Path(conversions_output_dir)
+    conversions_output_dir = path_prefix / Path(
+        config.get("folders.conversion_path", "conversions")
+    )
     if not is_safe_path(path_prefix, conversions_output_dir):
         raise ValueError("Conversion output directory is outside the project root")
 
@@ -182,7 +213,9 @@ def convert_rules(
                 and Path(input_file) not in changed_files_set
                 and not any_pipeline_changed
             ):
-                print(f"Skipping conversion of {input_file} because it and it's pipelines haven't changed")
+                print(
+                    f"Skipping conversion of {input_file} because it and it's pipelines haven't changed"
+                )
                 continue
 
             args = [
