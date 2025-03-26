@@ -56,6 +56,4 @@ jobs:
 
 This is a composite action relying on the following external actions:
 
-- [actions/checkout v4 by GitHub](https://github.com/actions/checkout)
-- [step-security/changed-files](https://github.com/step-security/changed-files)
-- [actions/setup-go v5 by GitHub](https://github.com/actions/setup-go)
+- [docker/login-action v3 by Docker](https://github.com/docker/login-action)
