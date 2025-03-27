@@ -68,7 +68,6 @@ func TestConvertToAlert(t *testing.T) {
 			queries: []string{"{job=`.+`} | json | test=`true`"},
 			titles:  "Alert Rule 3",
 			rule: &definitions.ProvisionedAlertRule{
-				ID:  0,
 				UID: "5c1c217a",
 			},
 			config: ConversionConfig{
