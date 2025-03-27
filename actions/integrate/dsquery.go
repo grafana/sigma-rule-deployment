@@ -159,12 +159,35 @@ func (h *HTTPDatasourceQuery) ExecuteQuery(
 
 // GetDatasource implementation for HTTPDatasourceQuery
 func (h *HTTPDatasourceQuery) GetDatasource(dsName, baseURL, apiKey string, timeout time.Duration) (*GrafanaDatasource, error) {
+	ds, err := h.getDatasourceByUID(dsName, baseURL, apiKey, timeout)
+	if err != nil {
+		return h.getDatasourceByName(dsName, baseURL, apiKey, timeout)
+	}
+	return ds, err
+}
+
+// getDatasourceByName uses the default executor to get datasource information
+func (h *HTTPDatasourceQuery) getDatasourceByName(dsName, baseURL, apiKey string, timeout time.Duration) (*GrafanaDatasource, error) {
 	dsURL, err := url.JoinPath(baseURL, "api/datasources/name", dsName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to construct API URL: %v", err)
 	}
 
-	req, err := http.NewRequest("GET", dsURL, nil)
+	return h.getDatasourceRequest(dsURL, apiKey, timeout)
+}
+
+// getDatasourceByUID uses the default executor to get datasource information
+func (h *HTTPDatasourceQuery) getDatasourceByUID(uid, baseURL, apiKey string, timeout time.Duration) (*GrafanaDatasource, error) {
+	dsURL, err := url.JoinPath(baseURL, "api/datasources/uid", uid)
+	if err != nil {
+		return nil, fmt.Errorf("failed to construct API URL: %v", err)
+	}
+
+	return h.getDatasourceRequest(dsURL, apiKey, timeout)
+}
+
+func (h *HTTPDatasourceQuery) getDatasourceRequest(baseURL, apiKey string, timeout time.Duration) (*GrafanaDatasource, error) {
+	req, err := http.NewRequest("GET", baseURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %v", err)
 	}

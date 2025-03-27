@@ -39,10 +39,10 @@ inputs:
 outputs:
   rules_integrated:
     description: "The repository file names changed (added/updated or removed) by this Action"
-    value: ${{ steps.integrate.outputs.rules_integrated }}
+    value: ${{ steps.set-output.outputs.rules_integrated }}
   test_query_results:
     description: "The results of testing the queries against the datasource for the past hour"
-    value: ${{ steps.integrate.outputs.test_query_results }}
+    value: ${{ steps.set-output.outputs.test_query_results }}
 
 runs:
   using: "composite"
@@ -66,4 +66,9 @@ runs:
         action_ref: ${{ github.action_ref }}
       run: |
         docker pull ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${{ env.action_ref }}
-        docker run --rm -v "$(pwd):/sigma-rules" -w /sigma-rules -e INTEGRATOR_CONFIG_PATH="${CONFIG_PATH}" -e INTEGRATOR_GRAFANA_SA_TOKEN="${GRAFANA_SA_TOKEN}" -e PRETTY_PRINT="${PRETTY_PRINT}" -e CHANGED_FILES="${CHANGED_FILES}" -e DELETED_FILES="${DELETED_FILES}" -e ALL_RULES="${ALL_RULES}" ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${action_ref} integrate
+        docker run --rm -v "$(pwd):/sigma-rules" -w /sigma-rules -e GITHUB_OUTPUT=/sigma-rules/github-output -e INTEGRATOR_CONFIG_PATH="${CONFIG_PATH}" -e INTEGRATOR_GRAFANA_SA_TOKEN="${GRAFANA_SA_TOKEN}" -e PRETTY_PRINT="${PRETTY_PRINT}" -e CHANGED_FILES="${CHANGED_FILES}" -e DELETED_FILES="${DELETED_FILES}" -e ALL_RULES="${ALL_RULES}" ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${action_ref} integrate
+    - name: Set output
+      id: set-output
+      shell: bash
+      run: |
+        mv github-output $GITHUB_OUTPUT

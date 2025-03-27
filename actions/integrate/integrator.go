@@ -72,7 +72,6 @@ type Stats struct {
 }
 
 type QueryTestResult struct {
-	Query      string `json:"query"`
 	Datasource string `json:"datasource"`
 	Stats      Stats  `json:"stats"`
 }
@@ -86,7 +85,7 @@ type Frame struct {
 		} `json:"fields"`
 	} `json:"schema"`
 	Data struct {
-		Values [][]interface{} `json:"values"`
+		Values [][]any `json:"values"`
 	} `json:"data"`
 }
 
@@ -287,7 +286,7 @@ func (i *Integrator) Run() error {
 		if i.config.IntegratorConfig.TestQueries {
 			fmt.Println("Testing queries against the datasource")
 			// Test all queries against the datasource
-			queryResults, err := i.TestQueries(queries, config, timeoutDuration)
+			queryResults, err := i.TestQueries(queries, config, i.config.ConversionDefaults, timeoutDuration)
 			if err != nil {
 				return err
 			}
@@ -530,7 +529,7 @@ func (i *Integrator) processFrame(frame Frame, result *QueryTestResult) error {
 		if labelIndex, ok := fieldIndices["labels"]; ok {
 			if labelIndex < len(frame.Data.Values) {
 				if rowIndex < len(frame.Data.Values[labelIndex]) {
-					if labelValues, ok := frame.Data.Values[labelIndex][rowIndex].(map[string]interface{}); ok {
+					if labelValues, ok := frame.Data.Values[labelIndex][rowIndex].(map[string]any); ok {
 						for label, value := range labelValues {
 							if _, exists := result.Stats.Fields[label]; !exists {
 								result.Stats.Fields[label] = fmt.Sprintf("%v", value)
@@ -561,12 +560,13 @@ func (i *Integrator) processFrame(frame Frame, result *QueryTestResult) error {
 	return nil
 }
 
-func (i *Integrator) TestQueries(queries []string, config ConversionConfig, timeoutDuration time.Duration) ([]QueryTestResult, error) {
+func (i *Integrator) TestQueries(queries []string, config, defaultConf ConversionConfig, timeoutDuration time.Duration) ([]QueryTestResult, error) {
 	var queryResults []QueryTestResult
+	datasource := getC(config.DataSource, defaultConf.DataSource, "")
 	for _, query := range queries {
 		resp, err := TestQuery(
 			query,
-			config.DataSource,
+			datasource,
 			i.config.DeployerConfig.GrafanaInstance,
 			os.Getenv("INTEGRATOR_GRAFANA_SA_TOKEN"),
 			i.config.IntegratorConfig.From,
@@ -579,8 +579,7 @@ func (i *Integrator) TestQueries(queries []string, config ConversionConfig, time
 
 		// Parse the response to extract statistics
 		result := QueryTestResult{
-			Query:      query,
-			Datasource: config.DataSource,
+			Datasource: datasource,
 			Stats: Stats{
 				Fields: make(map[string]string),
 				Errors: make([]string, 0),
