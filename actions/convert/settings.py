@@ -45,19 +45,16 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--render-traceback",
-        action=argparse.BooleanOptionalAction,
         help="Render traceback on error",
         default=os.environ.get("RENDER_TRACEBACK", "false").lower() in TRUE_VALUES,
     )
     parser.add_argument(
         "--pretty-print",
-        action=argparse.BooleanOptionalAction,
         help="Pretty print the converted files",
         default=os.environ.get("PRETTY_PRINT", "false").lower() in TRUE_VALUES,
     )
     parser.add_argument(
         "--all-rules",
-        action=argparse.BooleanOptionalAction,
         help="Convert all rules",
         default=os.environ.get("ALL_RULES", "false").lower() in TRUE_VALUES,
     )

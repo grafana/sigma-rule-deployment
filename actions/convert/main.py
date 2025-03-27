@@ -4,9 +4,10 @@ This script is used to convert Sigma rules to the target format per
 each conversion object in the config.
 ---
 usage: main.py [-h] [--config CONFIG] [--path-prefix PATH_PREFIX]
-               [--render-traceback | --no-render-traceback]
-               [--pretty-print | --no-pretty-print] [--all-rules | --no-all-rules]
-               [--changed-files CHANGED_FILES] [--deleted-files DELETED_FILES]
+               [--render-traceback RENDER_TRACEBACK]
+               [--pretty-print PRETTY_PRINT] [--all-rules ALL_RULES]
+               [--changed-files CHANGED_FILES]
+               [--deleted-files DELETED_FILES]
 
 Sigma CLI Conversion
 
@@ -15,11 +16,11 @@ options:
   --config CONFIG       Path to config YAML file (default: ./config.yaml)
   --path-prefix PATH_PREFIX
                         The path prefix to use for input files (default: .)
-  --render-traceback, --no-render-traceback
+  --render-traceback RENDER_TRACEBACK
                         Render traceback on error (default: False)
-  --pretty-print, --no-pretty-print
+  --pretty-print PRETTY_PRINT
                         Pretty print the converted files (default: False)
-  --all-rules, --no-all-rules
+  --all-rules ALL_RULES
                         Convert all rules (default: False)
   --changed-files CHANGED_FILES
                         List of changed files (default: )
