@@ -72,7 +72,6 @@ type Stats struct {
 }
 
 type QueryTestResult struct {
-	Query      string `json:"query"`
 	Datasource string `json:"datasource"`
 	Stats      Stats  `json:"stats"`
 }
@@ -86,7 +85,7 @@ type Frame struct {
 		} `json:"fields"`
 	} `json:"schema"`
 	Data struct {
-		Values [][]interface{} `json:"values"`
+		Values [][]any `json:"values"`
 	} `json:"data"`
 }
 
@@ -530,7 +529,7 @@ func (i *Integrator) processFrame(frame Frame, result *QueryTestResult) error {
 		if labelIndex, ok := fieldIndices["labels"]; ok {
 			if labelIndex < len(frame.Data.Values) {
 				if rowIndex < len(frame.Data.Values[labelIndex]) {
-					if labelValues, ok := frame.Data.Values[labelIndex][rowIndex].(map[string]interface{}); ok {
+					if labelValues, ok := frame.Data.Values[labelIndex][rowIndex].(map[string]any); ok {
 						for label, value := range labelValues {
 							if _, exists := result.Stats.Fields[label]; !exists {
 								result.Stats.Fields[label] = fmt.Sprintf("%v", value)
@@ -580,7 +579,6 @@ func (i *Integrator) TestQueries(queries []string, config, defaultConf Conversio
 
 		// Parse the response to extract statistics
 		result := QueryTestResult{
-			Query:      query,
 			Datasource: datasource,
 			Stats: Stats{
 				Fields: make(map[string]string),

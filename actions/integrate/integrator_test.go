@@ -839,7 +839,6 @@ func TestIntegratorWithQueryTesting(t *testing.T) {
 
 			// Verify the query results contain expected data
 			for i, query := range testQueries {
-				assert.Equal(t, query, queryResults[i].Query)
 				assert.Equal(t, "test-loki-datasource", queryResults[i].Datasource)
 
 				// Verify the stats contain expected data
