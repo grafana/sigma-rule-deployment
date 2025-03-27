@@ -820,10 +820,10 @@ func TestIntegratorWithQueryTesting(t *testing.T) {
 			assert.NotEmpty(t, testQueryResults)
 
 			// Parse and validate the query test results
-			var queryResults []QueryTestResult
+			var queryResults map[string][]QueryTestResult
 			err = json.Unmarshal([]byte(testQueryResults), &queryResults)
 			assert.NoError(t, err)
-			assert.Equal(t, len(testQueries), len(queryResults))
+			assert.Equal(t, len(testQueries), len(queryResults[convFile]))
 
 			// Verify both queries were executed
 			assert.Equal(t, len(testQueries), len(mockDatasourceQuery.queryLog))
@@ -837,38 +837,40 @@ func TestIntegratorWithQueryTesting(t *testing.T) {
 			assert.Contains(t, mockDatasourceQuery.datasourceLog, "test-loki-datasource")
 
 			// Verify the query results contain expected data
-			for i, query := range testQueries {
-				assert.Equal(t, "test-loki-datasource", queryResults[i].Datasource)
+			for _, results := range queryResults {
+				for i, queryTestResult := range results {
+					assert.Equal(t, "test-loki-datasource", queryTestResult.Datasource)
 
-				// Verify the stats contain expected data
-				stats := queryResults[i].Stats
-				assert.Equal(t, 2, stats.Count) // Each mock response has 2 log lines
-				assert.NotEmpty(t, stats.Fields)
-				assert.Empty(t, stats.Errors)
+					// Verify the stats contain expected data
+					stats := queryTestResult.Stats
+					assert.Equal(t, 2, stats.Count) // Each mock response has 2 log lines
+					assert.NotEmpty(t, stats.Fields)
+					assert.Empty(t, stats.Errors)
 
-				// Verify specific fields from our mock responses
-				if query == "{job=\"loki\"} |= \"error\"" {
-					if tt.wantLine {
-						assert.Contains(t, stats.Fields, "Line")
-						assert.Equal(t, "error log line", stats.Fields["Line"])
-					} else {
-						assert.NotContains(t, stats.Fields, "Line")
+					// Verify specific fields from our mock responses
+					if i == 0 {
+						if tt.wantLine {
+							assert.Contains(t, stats.Fields, "Line")
+							assert.Equal(t, "error log line", stats.Fields["Line"])
+						} else {
+							assert.NotContains(t, stats.Fields, "Line")
+						}
+						assert.Contains(t, stats.Fields, "job")
+						assert.Equal(t, "loki", stats.Fields["job"])
+						assert.Contains(t, stats.Fields, "level")
+						assert.Equal(t, "error", stats.Fields["level"])
+					} else if i == 1 {
+						if tt.wantLine {
+							assert.Contains(t, stats.Fields, "Line")
+							assert.Equal(t, "warning log line", stats.Fields["Line"])
+						} else {
+							assert.NotContains(t, stats.Fields, "Line")
+						}
+						assert.Contains(t, stats.Fields, "job")
+						assert.Equal(t, "loki", stats.Fields["job"])
+						assert.Contains(t, stats.Fields, "level")
+						assert.Equal(t, "warning", stats.Fields["level"])
 					}
-					assert.Contains(t, stats.Fields, "job")
-					assert.Equal(t, "loki", stats.Fields["job"])
-					assert.Contains(t, stats.Fields, "level")
-					assert.Equal(t, "error", stats.Fields["level"])
-				} else if query == "{job=\"loki\"} |= \"warning\"" {
-					if tt.wantLine {
-						assert.Contains(t, stats.Fields, "Line")
-						assert.Equal(t, "warning log line", stats.Fields["Line"])
-					} else {
-						assert.NotContains(t, stats.Fields, "Line")
-					}
-					assert.Contains(t, stats.Fields, "job")
-					assert.Equal(t, "loki", stats.Fields["job"])
-					assert.Contains(t, stats.Fields, "level")
-					assert.Equal(t, "warning", stats.Fields["level"])
 				}
 			}
 		})
