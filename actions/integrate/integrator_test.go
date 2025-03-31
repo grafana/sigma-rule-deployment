@@ -24,6 +24,7 @@ func TestConvertToAlert(t *testing.T) {
 		titles        string
 		config        ConversionConfig
 		wantQueryText string
+		wantDuration  definitions.Duration
 		wantUpdated   *time.Time // nil means expect an update, specified time means expect no change
 		wantError     bool
 	}{
@@ -42,6 +43,7 @@ func TestConvertToAlert(t *testing.T) {
 				TimeWindow: "5m",
 			},
 			wantQueryText: "sum(count_over_time({job=`.+`} | json | test=`true`[$__auto]))",
+			wantDuration:  300,
 			wantUpdated:   nil, // expect timestamp update
 			wantError:     false,
 		},
@@ -60,6 +62,7 @@ func TestConvertToAlert(t *testing.T) {
 				TimeWindow: "5m",
 			},
 			wantQueryText: `from * | where eventSource==\"kms.amazonaws.com\" and eventName==\"CreateGrant\"`,
+			wantDuration:  300,
 			wantUpdated:   nil, // expect timestamp update
 			wantError:     false,
 		},
@@ -73,8 +76,9 @@ func TestConvertToAlert(t *testing.T) {
 			config: ConversionConfig{
 				TimeWindow: "1y",
 			},
-			wantUpdated: nil, // expect timestamp update
-			wantError:   true,
+			wantDuration: 0,   // invalid time window, expect no value
+			wantUpdated:  nil, // expect timestamp update
+			wantError:    true,
 		},
 		{
 			name:    "invalid time window",
@@ -86,8 +90,9 @@ func TestConvertToAlert(t *testing.T) {
 			config: ConversionConfig{
 				TimeWindow: "1y",
 			},
-			wantUpdated: nil, // expect timestamp update
-			wantError:   true,
+			wantDuration: 0,   // invalid time window, expect no value
+			wantUpdated:  nil, // expect timestamp update
+			wantError:    true,
 		},
 		{
 			name:    "unchanged queries should not update timestamp",
@@ -122,6 +127,7 @@ func TestConvertToAlert(t *testing.T) {
 				RuleGroup:  "Every 5 Minutes",
 				TimeWindow: "5m",
 			},
+			wantDuration:  300,
 			wantQueryText: "sum(count_over_time({job=`.+`} | json | test=`true`[$__auto]))",
 			wantUpdated:   &fixedTime, // expect timestamp to remain unchanged
 			wantError:     false,
@@ -143,6 +149,7 @@ func TestConvertToAlert(t *testing.T) {
 					assert.NotEqual(t, originalTimestamp, tt.rule.Updated, "timestamp should have been updated")
 					assert.True(t, tt.rule.Updated.After(originalTimestamp), "new timestamp should be after original")
 					assert.Contains(t, string(tt.rule.Data[0].Model), tt.wantQueryText)
+					assert.Equal(t, tt.wantDuration, tt.rule.Data[0].RelativeTimeRange.From)
 					assert.Equal(t, tt.config.RuleGroup, tt.rule.RuleGroup)
 					assert.Equal(t, tt.config.DataSource, tt.rule.Data[0].DatasourceUID)
 					assert.Equal(t, tt.titles, tt.rule.Title)
