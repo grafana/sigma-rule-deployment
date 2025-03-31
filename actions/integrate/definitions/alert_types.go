@@ -2,6 +2,7 @@ package definitions
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/prometheus/common/model"
@@ -146,6 +147,46 @@ type RelativeTimeRange struct {
 
 // Duration represents a time duration
 type Duration time.Duration
+
+func (d Duration) String() string {
+	return time.Duration(d).String()
+}
+
+func (d Duration) MarshalJSON() ([]byte, error) {
+	return json.Marshal(time.Duration(d).Seconds())
+}
+
+func (d *Duration) UnmarshalJSON(b []byte) error {
+	var v any
+	if err := json.Unmarshal(b, &v); err != nil {
+		return err
+	}
+	switch value := v.(type) {
+	case float64:
+		*d = Duration(time.Duration(value) * time.Second)
+		return nil
+	default:
+		return fmt.Errorf("invalid duration %v", v)
+	}
+}
+
+func (d Duration) MarshalYAML() (any, error) {
+	return time.Duration(d).Seconds(), nil
+}
+
+func (d *Duration) UnmarshalYAML(unmarshal func(any) error) error {
+	var v any
+	if err := unmarshal(&v); err != nil {
+		return err
+	}
+	switch value := v.(type) {
+	case int:
+		*d = Duration(time.Duration(value) * time.Second)
+		return nil
+	default:
+		return fmt.Errorf("invalid duration %v", v)
+	}
+}
 
 // Provenance represents the provenance of the alert rule
 type Provenance string

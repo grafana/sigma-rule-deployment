@@ -341,7 +341,7 @@ func (i *Integrator) ConvertToAlert(rule *definitions.ProvisionedAlertRule, quer
 	if err != nil {
 		return fmt.Errorf("error parsing time window: %v", err)
 	}
-	timerange := definitions.RelativeTimeRange{From: definitions.Duration(duration), To: definitions.Duration(time.Duration(0))}
+	timerange := definitions.RelativeTimeRange{From: definitions.Duration(duration.Seconds()), To: definitions.Duration(time.Duration(0))}
 
 	queryData := make([]definitions.AlertQuery, 0, len(queries)+2)
 	refIds := make([]string, len(queries))
