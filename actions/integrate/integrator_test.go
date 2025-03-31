@@ -43,7 +43,7 @@ func TestConvertToAlert(t *testing.T) {
 				TimeWindow: "5m",
 			},
 			wantQueryText: "sum(count_over_time({job=`.+`} | json | test=`true`[$__auto]))",
-			wantDuration:  300,
+			wantDuration:  definitions.Duration(300 * time.Second),
 			wantUpdated:   nil, // expect timestamp update
 			wantError:     false,
 		},
@@ -62,7 +62,7 @@ func TestConvertToAlert(t *testing.T) {
 				TimeWindow: "5m",
 			},
 			wantQueryText: `from * | where eventSource==\"kms.amazonaws.com\" and eventName==\"CreateGrant\"`,
-			wantDuration:  300,
+			wantDuration:  definitions.Duration(300 * time.Second),
 			wantUpdated:   nil, // expect timestamp update
 			wantError:     false,
 		},
@@ -127,7 +127,7 @@ func TestConvertToAlert(t *testing.T) {
 				RuleGroup:  "Every 5 Minutes",
 				TimeWindow: "5m",
 			},
-			wantDuration:  300,
+			wantDuration:  definitions.Duration(300 * time.Second),
 			wantQueryText: "sum(count_over_time({job=`.+`} | json | test=`true`[$__auto]))",
 			wantUpdated:   &fixedTime, // expect timestamp to remain unchanged
 			wantError:     false,
