@@ -1,0 +1,20 @@
+name: Deploy Sigma Rules
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "deployments/*"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy Sigma rules
+        id: deploy
+        uses: grafana/sigma-rule-deployment/actions/deploy@690e3ec6fa350b6dc9a38fec270ac46c082a87c6
+        with:
+          config_path: "./config.yml"
+          grafana_sa_token: ${{ secrets.SECOPS_DEV_GCP_SA }}
