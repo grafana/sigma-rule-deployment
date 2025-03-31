@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -73,6 +74,7 @@ type Stats struct {
 
 type QueryTestResult struct {
 	Datasource string `json:"datasource"`
+	Link       string `json:"link"`
 	Stats      Stats  `json:"stats"`
 }
 
@@ -228,6 +230,7 @@ func (i *Integrator) Run() error {
 	if i.config.IntegratorConfig.TestQueries {
 		fmt.Println("Testing queries against the datasource")
 	}
+	queryTestResults := make(map[string][]QueryTestResult, len(i.addedFiles))
 
 	for _, inputFile := range i.addedFiles {
 		fmt.Printf("Integrating file: %s\n", inputFile)
@@ -291,15 +294,19 @@ func (i *Integrator) Run() error {
 				return err
 			}
 
-			// Marshal all query results into a single JSON object
-			resultsJSON, err := json.Marshal(queryResults)
-			if err != nil {
-				return fmt.Errorf("error marshalling query results: %v", err)
-			}
-
-			// Set a single output with all results
-			SetOutput("test_query_results", string(resultsJSON))
+			queryTestResults[inputFile] = queryResults
 		}
+	}
+
+	if i.config.IntegratorConfig.TestQueries {
+		// Marshal all query results into a single JSON object
+		resultsJSON, err := json.Marshal(queryTestResults)
+		if err != nil {
+			return fmt.Errorf("error marshalling query results: %v", err)
+		}
+
+		// Set a single output with all results
+		SetOutput("test_query_results", string(resultsJSON))
 	}
 
 	for _, deletedFile := range i.removedFiles {
@@ -577,9 +584,16 @@ func (i *Integrator) TestQueries(queries []string, config, defaultConf Conversio
 			return nil, fmt.Errorf("error testing query %s: %v", query, err)
 		}
 
+		jsonQuery, err := json.Marshal(query)
+		if err != nil {
+			return nil, fmt.Errorf("error marshalling query %s: %v", query, err)
+		}
+
+		pane := fmt.Sprintf(`{"yyz":{"datasource":"%[1]s","queries":[{"refId":"A","expr":%[2]s,"queryType":"range","datasource":{"type":"loki","uid":"%[1]s"},"editorMode":"code","direction":"backward"}],"range":{"from":"%[3]s","to":"%[4]s"}}}`, datasource, string(jsonQuery), i.config.IntegratorConfig.From, i.config.IntegratorConfig.To)
 		// Parse the response to extract statistics
 		result := QueryTestResult{
 			Datasource: datasource,
+			Link:       fmt.Sprintf("%s/explore?schemaVersion=1&panes=%s&orgId=%d", i.config.DeployerConfig.GrafanaInstance, url.QueryEscape(pane), i.config.IntegratorConfig.OrgID),
 			Stats: Stats{
 				Fields: make(map[string]string),
 				Errors: make([]string, 0),
