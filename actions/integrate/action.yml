@@ -23,6 +23,10 @@ inputs:
     description: "Output log lines to the outputs of the test_query_results"
     required: false
     default: "false"
+  all_rules:
+    description: "Whether to integrate all rules"
+    required: false
+    default: "false"
   changed_files:
     description: "The changed files to integrate"
     required: false
@@ -43,18 +47,6 @@ outputs:
 runs:
   using: "composite"
   steps:
-    # Remove checkout as unnecessary in unified workflow
-    # - name: "Checkout repository (fetch-depth: 0)"
-    #   id: checkout
-    #   uses: actions/checkout@v4
-    #   with:
-    #     fetch-depth: 0 # Important to ensure we'll have all the commits when a merge includes multiple
-    # - name: "Detect changed files"
-    #   id: changed-files
-    #   uses: step-security/changed-files@3dbe17c78367e7d60f00d78ae6781a35be47b4a1 # v45.0.1
-    #   with:
-    #     output_renamed_files_as_deleted_and_added: "true"
-    #     sha: ${{ github.head_ref }}
     - name: Login to GitHub Container Registry
       uses: docker/login-action@v3
       with:
@@ -80,5 +72,3 @@ runs:
       shell: bash
       run: |
         mv github-output $GITHUB_OUTPUT
-    - name: Commit integrated queries
-      uses: stefanzweifel/git-auto-commit-action@v4

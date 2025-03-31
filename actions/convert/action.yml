@@ -15,10 +15,6 @@ inputs:
     description: "Whether to render the traceback in the output."
     required: false
     default: "false"
-  github_token:
-    description: "GitHub token to use for the action."
-    required: false
-    default: ${{ github.token }}
   pretty_print:
     description: "Pretty print the JSON output"
     required: false
@@ -37,11 +33,6 @@ runs:
         registry: ghcr.io
         username: ${{ github.actor }}
         password: ${{ github.token }}
-    - name: "Checkout repository (fetch-depth: 0)"
-      id: checkout
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0 # Important to ensure we'll have all the commits when a merge includes multiple
     - name: Check for changed files
       id: changed-files
       uses: step-security/changed-files@3dbe17c78367e7d60f00d78ae6781a35be47b4a1 # v45.0.1
