@@ -86,7 +86,6 @@ runs:
             -e ALL_RULES="$ALL_RULES" \
             "ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-$ACTION_REF" \
             integrate
-
     - name: Set output
       id: set-output
       shell: bash
