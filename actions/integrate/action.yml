@@ -65,8 +65,28 @@ runs:
         ALL_RULES: ${{ inputs.all_rules }}
         action_ref: ${{ github.action_ref }}
       run: |
-        docker pull ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${{ env.action_ref }}
-        docker run --rm -v "$(pwd):/sigma-rules" -w /sigma-rules -e GITHUB_OUTPUT=/sigma-rules/github-output -e INTEGRATOR_CONFIG_PATH="${CONFIG_PATH}" -e INTEGRATOR_GRAFANA_SA_TOKEN="${GRAFANA_SA_TOKEN}" -e PRETTY_PRINT="${PRETTY_PRINT}" -e CHANGED_FILES="${CHANGED_FILES}" -e DELETED_FILES="${DELETED_FILES}" -e ALL_RULES="${ALL_RULES}" ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${{ env.action_ref }} integrate
+        # Safely escape environment variables
+        CONFIG_PATH=$(printf '%q' "$CONFIG_PATH")
+        GRAFANA_SA_TOKEN=$(printf '%q' "$GRAFANA_SA_TOKEN")
+        PRETTY_PRINT=$(printf '%q' "$PRETTY_PRINT")
+        CHANGED_FILES=$(printf '%q' "$CHANGED_FILES")
+        DELETED_FILES=$(printf '%q' "$DELETED_FILES")
+        ALL_RULES=$(printf '%q' "$ALL_RULES")
+        ACTION_REF=$(printf '%q' "$action_ref")
+
+        docker run --rm \
+            -v "$(pwd):/sigma-rules" \
+            -w /sigma-rules \
+            -e GITHUB_OUTPUT=/sigma-rules/github-output \
+            -e INTEGRATOR_CONFIG_PATH="$CONFIG_PATH" \
+            -e INTEGRATOR_GRAFANA_SA_TOKEN="$GRAFANA_SA_TOKEN" \
+            -e PRETTY_PRINT="$PRETTY_PRINT" \
+            -e CHANGED_FILES="$CHANGED_FILES" \
+            -e DELETED_FILES="$DELETED_FILES" \
+            -e ALL_RULES="$ALL_RULES" \
+            "ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-$ACTION_REF" \
+            integrate
+
     - name: Set output
       id: set-output
       shell: bash
