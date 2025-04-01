@@ -165,7 +165,9 @@ def convert_rules(
                     for deleted_file in deleted_files_set:
                         if fnmatch.fnmatch(str(deleted_file), str(path_prefix / pattern)):
                             output_filename = f"{name}_{deleted_file.stem}.json"
-                            conversions_to_delete.append(conversions_output_dir / output_filename)
+                            output_path = path_prefix / conversions_output_dir / output_filename
+                            if output_path.exists():
+                                conversions_to_delete.append(output_path)
             case str():
                 input_files.extend(
                     glob.glob(str(path_prefix / conversion_input), recursive=True)
@@ -173,7 +175,9 @@ def convert_rules(
                 for deleted_file in deleted_files_set:
                     if fnmatch.fnmatch(str(deleted_file), str(path_prefix / conversion_input)):
                         output_filename = f"{name}_{deleted_file.stem}.json"
-                        conversions_to_delete.append(conversions_output_dir / output_filename)
+                        output_path = path_prefix / conversions_output_dir / output_filename
+                        if output_path.exists():
+                            conversions_to_delete.append(output_path)
             case _:
                 raise ValueError("Invalid input file type")
 
