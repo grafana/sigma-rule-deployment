@@ -68,3 +68,67 @@ runs:
       shell: bash
       run: |
         mv github-output $GITHUB_OUTPUT
+    - name: Comment Status
+      if: success() && github.event_name == 'push'
+      uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
+      with:
+          script: |
+            const associatedPrs = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              commit_sha: context.sha,
+            });
+
+            if (associatedPrs.data.length > 0) {
+              for (const pr of associatedPrs.data) {
+                const nodeId = pr.node_id;
+
+                const query = `mutation AddComment {
+                addComment(input: {
+                  body: "Sigma Rules Deployed Successfully",
+                  subjectId: "${nodeId}",
+                }) {
+                  subject {
+                    id
+                    ... on PullRequest {
+                      number
+                    }
+                  } 
+                }
+                }`
+
+                await github.graphql(query);
+              }
+            }
+    - name: Comment Status
+      if: failure() && github.event_name == 'push'
+      uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
+      with:
+          script: |
+            const associatedPrs = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              commit_sha: context.sha,
+            });
+
+            if (associatedPrs.data.length > 0) {
+              for (const pr of associatedPrs.data) {
+                const nodeId = pr.node_id;
+
+                const query = `mutation AddComment {
+                addComment(input: {
+                  body: "Sigma Rules Deployment Failed",
+                  subjectId: "${nodeId}",
+                }) {
+                  subject {
+                    id
+                    ... on PullRequest {
+                      number
+                    }
+                  } 
+                }
+                }`
+
+                await github.graphql(query);
+              }
+            }
