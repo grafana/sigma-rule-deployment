@@ -51,16 +51,6 @@ runs:
         DELETED_FILES: ${{ steps.changed-files.outputs.deleted_files }}
         action_ref: ${{ github.action_ref }}
       run: |
-        # Safely escape environment variables
-        CONFIG_PATH=$(printf '%q' "$CONFIG_PATH")
-        PLUGIN_PACKAGES=$(printf '%q' "$PLUGIN_PACKAGES")
-        RENDER_TRACEBACK=$(printf '%q' "$RENDER_TRACEBACK")
-        PRETTY_PRINT=$(printf '%q' "$PRETTY_PRINT")
-        ALL_RULES=$(printf '%q' "$ALL_RULES")
-        CHANGED_FILES=$(printf '%q' "$CHANGED_FILES")
-        DELETED_FILES=$(printf '%q' "$DELETED_FILES")
-        ACTION_REF=$(printf '%q' "$action_ref")
-
         docker run --rm \
             -v "$(pwd):/sigma-rules" \
             -w /sigma-rules \

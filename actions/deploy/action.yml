@@ -62,17 +62,6 @@ runs:
         COPIED_FILES: ${{ steps.changed-files.outputs.copied_files }}
         action_ref: ${{ github.action_ref }}
       run: |
-        # Safely escape environment variables
-        CONFIG_PATH=$(printf '%q' "$CONFIG_PATH")
-        GRAFANA_SA_TOKEN=$(printf '%q' "$GRAFANA_SA_TOKEN")
-        FRESH_DEPLOY=$(printf '%q' "$FRESH_DEPLOY")
-        ADDED_FILES=$(printf '%q' "$ADDED_FILES")
-        MODIFIED_FILES=$(printf '%q' "$MODIFIED_FILES")
-        DELETED_FILES=$(printf '%q' "$DELETED_FILES")
-        COPIED_FILES=$(printf '%q' "$COPIED_FILES")
-        ACTION_REF=$(printf '%q' "$action_ref")
-
-        # Run docker with escaped variables
         docker run --rm \
             -v "$(pwd):/sigma-rules" \
             -w /sigma-rules \

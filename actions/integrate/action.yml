@@ -65,15 +65,6 @@ runs:
         ALL_RULES: ${{ inputs.all_rules }}
         action_ref: ${{ github.action_ref }}
       run: |
-        # Safely escape environment variables
-        CONFIG_PATH=$(printf '%q' "$CONFIG_PATH")
-        GRAFANA_SA_TOKEN=$(printf '%q' "$GRAFANA_SA_TOKEN")
-        PRETTY_PRINT=$(printf '%q' "$PRETTY_PRINT")
-        CHANGED_FILES=$(printf '%q' "$CHANGED_FILES")
-        DELETED_FILES=$(printf '%q' "$DELETED_FILES")
-        ALL_RULES=$(printf '%q' "$ALL_RULES")
-        ACTION_REF=$(printf '%q' "$action_ref")
-
         docker run --rm \
             -v "$(pwd):/sigma-rules" \
             -w /sigma-rules \
