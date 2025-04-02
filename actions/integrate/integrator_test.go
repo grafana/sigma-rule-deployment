@@ -763,7 +763,7 @@ func TestIntegratorWithQueryTesting(t *testing.T) {
 			// Create test conversion output file
 			convBytes, err := json.Marshal(convOutput)
 			assert.NoError(t, err)
-			convFile := filepath.Join(convPath, "test_loki.json")
+			convFile := filepath.Join(convPath, "test_loki_test_file_1.json")
 			err = os.WriteFile(convFile, convBytes, 0644)
 			assert.NoError(t, err)
 
@@ -852,7 +852,7 @@ func TestIntegratorWithQueryTesting(t *testing.T) {
 			convID, _, err := summariseSigmaRules(convOutput.Rules)
 			assert.NoError(t, err)
 			ruleUid := getRuleUid("test_loki", convID)
-			expectedFile := filepath.Join(deployPath, fmt.Sprintf("alert_rule_test_loki_%s.json", ruleUid))
+			expectedFile := filepath.Join(deployPath, fmt.Sprintf("alert_rule_test_loki_test_file_1_%s.json", ruleUid))
 			_, err = os.Stat(expectedFile)
 			assert.NoError(t, err)
 
