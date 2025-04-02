@@ -561,7 +561,7 @@ func TestIntegratorRun(t *testing.T) {
 				convID, _, err := summariseSigmaRules(tt.convOutput.Rules)
 				assert.NoError(t, err)
 				ruleUid := getRuleUid(tt.conversionName, convID)
-				deployFile := filepath.Join(deployPath, fmt.Sprintf("alert_rule_%s_%s.json", tt.conversionName, ruleUid))
+				deployFile := filepath.Join(deployPath, fmt.Sprintf("alert_rule_%s_%s_%s.json", tt.conversionName, tt.conversionName, ruleUid))
 
 				// Create a dummy alert rule file
 				dummyRule := &definitions.ProvisionedAlertRule{
@@ -601,7 +601,7 @@ func TestIntegratorRun(t *testing.T) {
 			assert.NoError(t, err)
 
 			ruleUid := getRuleUid(tt.conversionName, convID)
-			expectedFile := filepath.Join(deployPath, fmt.Sprintf("alert_rule_%s_%s.json", tt.conversionName, ruleUid))
+			expectedFile := filepath.Join(deployPath, fmt.Sprintf("alert_rule_%s_%s_%s.json", tt.conversionName, tt.conversionName, ruleUid))
 
 			// For removed files, verify the file was deleted
 			if len(tt.removedFiles) > 0 {
