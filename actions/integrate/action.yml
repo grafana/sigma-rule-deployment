@@ -63,7 +63,7 @@ runs:
         CHANGED_FILES: ${{ inputs.changed_files }}
         DELETED_FILES: ${{ inputs.deleted_files }}
         ALL_RULES: ${{ inputs.all_rules }}
-        action_ref: ${{ github.action_ref }}
+        ACTION_REF: ${{ github.action_ref }}
       run: |
         docker run --rm \
             -v "$(pwd):/sigma-rules" \

@@ -49,7 +49,7 @@ runs:
         ALL_RULES: ${{ inputs.all_rules }}
         CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
         DELETED_FILES: ${{ steps.changed-files.outputs.deleted_files }}
-        action_ref: ${{ github.action_ref }}
+        ACTION_REF: ${{ github.action_ref }}
       run: |
         docker run --rm \
             -v "$(pwd):/sigma-rules" \
@@ -62,5 +62,5 @@ runs:
             -e ALL_RULES="$ALL_RULES" \
             -e CHANGED_FILES="$CHANGED_FILES" \
             -e DELETED_FILES="$DELETED_FILES" \
-            "ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-$action_ref" \
+            "ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-$ACTION_REF" \
             convert
