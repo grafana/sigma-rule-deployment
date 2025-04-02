@@ -1030,3 +1030,24 @@ def test_default_correlation_method(
                     # is being included in the config, not necessarily in the args
                     # So we just verify the conversion ran successfully
                     assert mock_invoke.call_count > 0
+
+
+def test_convert_rules_deletes_conversion_for_deleted_rule(temp_workspace, mock_config):
+    """Test that when a rule is deleted, its associated conversion file is also deleted."""
+    # First create a conversion file for the test rule
+    conversion_dir = temp_workspace / "conversions"
+    conversion_dir.mkdir()
+    conversion_file = conversion_dir / "test_conversion_test.json"
+    conversion_file.write_text("{}")
+
+    assert conversion_file.exists()
+
+    # Run convert_rules with deleted_files to simulate a rule deletion
+    convert_rules(
+        config=mock_config,
+        path_prefix=temp_workspace,
+        deleted_files="rules/test.yml",
+    )
+
+    # Verify the conversion file was deleted
+    assert not conversion_file.exists()

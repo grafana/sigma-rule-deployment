@@ -424,6 +424,7 @@ func TestIntegratorRun(t *testing.T) {
 		convOutput     ConversionOutput
 		wantQueries    []string
 		wantTitles     string
+		removedFiles   []string
 		wantError      bool
 	}{
 		{
@@ -439,9 +440,10 @@ func TestIntegratorRun(t *testing.T) {
 					},
 				},
 			},
-			wantQueries: []string{"sum(count_over_time({job=`test`} | json[$__auto]))"},
-			wantTitles:  "Test Rule",
-			wantError:   false,
+			wantQueries:  []string{"sum(count_over_time({job=`test`} | json[$__auto]))"},
+			wantTitles:   "Test Rule",
+			removedFiles: []string{},
+			wantError:    false,
 		},
 		{
 			name:           "multiple rules multiple queries",
@@ -467,8 +469,9 @@ func TestIntegratorRun(t *testing.T) {
 				"sum(count_over_time({job=`test1`} | json[$__auto]))",
 				"sum(count_over_time({job=`test2`} | json[$__auto]))",
 			},
-			wantTitles: "Test Rule 1 & Test Rule 2",
-			wantError:  false,
+			wantTitles:   "Test Rule 1 & Test Rule 2",
+			removedFiles: []string{},
+			wantError:    false,
 		},
 		{
 			name:           "no queries",
@@ -483,7 +486,27 @@ func TestIntegratorRun(t *testing.T) {
 					},
 				},
 			},
-			wantError: false, // Should skip but not error
+			wantQueries:  []string{},
+			removedFiles: []string{},
+			wantError:    false,
+		},
+		{
+			name:           "remove existing alert rule",
+			conversionName: "test_conv5",
+			convOutput: ConversionOutput{
+				ConversionName: "test_conv5",
+				Queries:        []string{"{job=`test`} | json"},
+				Rules: []SigmaRule{
+					{
+						ID:    "996f8884-9144-40e7-ac63-29090ccde9a0",
+						Title: "Test Rule",
+					},
+				},
+			},
+			wantQueries:  []string{"sum(count_over_time({job=`test`} | json[$__auto]))"},
+			wantTitles:   "Test Rule",
+			removedFiles: []string{"testdata/test_conv5.json"},
+			wantError:    false,
 		},
 	}
 
@@ -533,11 +556,28 @@ func TestIntegratorRun(t *testing.T) {
 			err = os.WriteFile(convFile, convBytes, 0644)
 			assert.NoError(t, err)
 
+			// For the remove test case, create a deployment file that should be removed
+			if len(tt.removedFiles) > 0 {
+				convID, _, err := summariseSigmaRules(tt.convOutput.Rules)
+				assert.NoError(t, err)
+				ruleUid := getRuleUid(tt.conversionName, convID)
+				deployFile := filepath.Join(deployPath, fmt.Sprintf("alert_rule_%s_%s.json", tt.conversionName, ruleUid))
+
+				// Create a dummy alert rule file
+				dummyRule := &definitions.ProvisionedAlertRule{
+					UID:       ruleUid,
+					Title:     tt.wantTitles,
+					RuleGroup: "Test Rules",
+				}
+				err = writeRuleToFile(dummyRule, deployFile, false)
+				assert.NoError(t, err)
+			}
+
 			// Set up integrator
 			i := &Integrator{
 				config:       config,
 				addedFiles:   []string{convFile},
-				removedFiles: []string{},
+				removedFiles: tt.removedFiles,
 			}
 
 			// Run integration
@@ -562,6 +602,15 @@ func TestIntegratorRun(t *testing.T) {
 
 			ruleUid := getRuleUid(tt.conversionName, convID)
 			expectedFile := filepath.Join(deployPath, fmt.Sprintf("alert_rule_%s_%s.json", tt.conversionName, ruleUid))
+
+			// For removed files, verify the file was deleted
+			if len(tt.removedFiles) > 0 {
+				_, err = os.Stat(expectedFile)
+				assert.True(t, os.IsNotExist(err), "Expected file to be deleted but it still exists")
+				return
+			}
+
+			// For added files, verify the file exists and has correct content
 			_, err = os.Stat(expectedFile)
 			assert.NoError(t, err)
 
