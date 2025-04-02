@@ -171,7 +171,6 @@ func (i *Integrator) LoadConfig() error {
 
 	changedFiles := strings.Split(os.Getenv("CHANGED_FILES"), " ")
 	deletedFiles := strings.Split(os.Getenv("DELETED_FILES"), " ")
-	// copiedFiles := strings.Split(os.Getenv("COPIED_FILES"), " ") // TODO
 
 	newUpdatedFiles := make([]string, 0, len(changedFiles))
 	removedFiles := make([]string, 0, len(deletedFiles))

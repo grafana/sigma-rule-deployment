@@ -108,10 +108,6 @@ def convert_rules(
     if not is_safe_path(path_prefix, conversions_output_dir):
         raise ValueError("Conversion output directory is outside the project root")
 
-    # Remove the output directory if it exists
-    if conversions_output_dir.is_dir():
-        shutil.rmtree(conversions_output_dir)
-
     # Create the output directory if it doesn't exist
     conversions_output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -133,6 +129,7 @@ def convert_rules(
     default_json_indent = config.get("conversion_defaults.json_indent", "0")
     verbose = config.get("verbose", False)
 
+    conversions_to_delete = []
     # Convert Sigma rules to the target format per each conversion object in the config
     for conversion in config.get("conversions", []):
         # If the conversion name is not unique, we'll overwrite the output file,
@@ -165,10 +162,22 @@ def convert_rules(
                     input_files.extend(
                         glob.glob(str(path_prefix / pattern), recursive=True)
                     )
+                    for deleted_file in deleted_files_set:
+                        if fnmatch.fnmatch(str(deleted_file), str(path_prefix / pattern)):
+                            output_filename = f"{name}_{deleted_file.stem}.json"
+                            output_path = path_prefix / conversions_output_dir / output_filename
+                            if output_path.exists():
+                                conversions_to_delete.append(output_path)
             case str():
                 input_files.extend(
                     glob.glob(str(path_prefix / conversion_input), recursive=True)
                 )
+                for deleted_file in deleted_files_set:
+                    if fnmatch.fnmatch(str(deleted_file), str(path_prefix / conversion_input)):
+                        output_filename = f"{name}_{deleted_file.stem}.json"
+                        output_path = path_prefix / conversions_output_dir / output_filename
+                        if output_path.exists():
+                            conversions_to_delete.append(output_path)
             case _:
                 raise ValueError("Invalid input file type")
 
@@ -342,20 +351,12 @@ def convert_rules(
         print("-" * 80)
 
     # Remove conversions of deleted rules from the output directory
-    # TODO: FIXME this needs to be updated to work as intended
-    # if len(deleted_files_set) > 0:
-    #     print(f"Removing conversions of deleted rules from the output directory")
-    #     for deleted_file in deleted_files_set:
-    #         # Create output filename based on input file path
-    #         rel_deleted_path = Path(deleted_file).relative_to(path_prefix)
-    #         output_filename = f"{rel_deleted_path.stem}.json"
-    #         # Replace directory separators with underscores
-    #         output_filename = output_filename.replace(os.sep, "_")
-    #         output_file = path_prefix / conversions_output_dir / output_filename
-    #
-    #         if output_file.exists():
-    #             print(f"Removing {output_file}")
-    #             os.remove(output_file)
+    if len(conversions_to_delete) > 0:
+        print("Removing conversions of deleted rules from the output directory")
+        for deleted_file in conversions_to_delete:
+            if deleted_file.exists():
+                print(f"Removing {deleted_file}")
+                os.remove(deleted_file)
 
 
 def is_safe_path(base_dir: str | Path, target_path: str | Path) -> bool:
