@@ -132,10 +132,10 @@ runs:
               for (const pr of associatedPrs.data) {
                 const nodeId = pr.node_id;
 
-                const query = `mutation AddComment {
+                const query = `mutation AddComment($body: String!, $subjectId: ID!) {
                 addComment(input: {
-                  body: "${body}",
-                  subjectId: "${nodeId}",
+                  body: $body,
+                  subjectId: $subjectId,
                 }) {
                   subject {
                     id
@@ -146,7 +146,12 @@ runs:
                 }
                 }`
 
-                await github.graphql(query);
+                const variables = {
+                  body: body,
+                  subjectId: nodeId
+                };
+
+                await github.graphql(query, variables);
               }
             }
     - name: Comment Status
