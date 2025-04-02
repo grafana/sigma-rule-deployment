@@ -23,6 +23,14 @@ inputs:
     description: "Convert all rules specified in the config file."
     required: false
     default: "false"
+  actions_username:
+    description: "Username of the automation that commits conversions"
+    required: false
+    default: "github-actions[bot]"
+  changed_files_from_base:
+    description: "Whether to use the changed files from the base branch"
+    required: false
+    default: "false"
 
 runs:
   using: "composite"
@@ -33,11 +41,59 @@ runs:
         registry: ghcr.io
         username: ${{ github.actor }}
         password: ${{ github.token }}
-    - name: Check for changed files
-      id: changed-files
-      uses: step-security/changed-files@3dbe17c78367e7d60f00d78ae6781a35be47b4a1 # v45.0.1
+    - name: Get Last Commit or base_ref
+      if: ${{ github.event_name == 'pull_request' && inputs.changed_files_from_base == 'true' }}
+      id: last-commit
+      uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
+      env:
+        ACTIONS_USERNAME: ${{ inputs.actions_username }}
       with:
-        output_renamed_files_as_deleted_and_added: "true"
+        script: |
+          const iterator = github.paginate(github.rest.pulls.listCommits, {
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            pull_number: context.payload.pull_request.number,
+            per_page: 1
+          });
+          let commit = "";
+          for await (const { data } of iterator) {
+            if (commit === "") {
+              commit = data[0].sha;
+            }
+            for (const { commit } of data) {
+              if (commit.committer.name === process.env.ACTIONS_USERNAME) {
+                commit = commit.sha;
+              }
+            }
+          }
+          return commit;
+        result-encoding: string
+    - name: Get Changed Files
+      id: changed-files
+      shell: bash
+      env:
+        DIFF_COMMIT: ${{ steps.last-commit.outputs.result }}
+        BASE_REF: ${{ github.event.pull_request.base.ref }}
+      run: |
+        # Precedence of comparison:
+        # 1. The last commit on the PR
+        # 2. The base branch of the PR
+        # 3. origin/HEAD (default branch)
+
+        COMPARE=$(git rev-parse --abbrev-ref origin/HEAD)
+        if [ -n "$BASE_REF" ]; then
+          COMPARE=$BASE_REF
+        fi
+        if [ -n "$DIFF_COMMIT" ]; then
+          COMPARE=$DIFF_COMMIT
+        fi
+
+        CHANGED_FILES=$(git diff --name-only $COMPARE --diff-filter=ACMR)
+        DELETED_FILES=$(git diff --name-only $COMPARE --diff-filter=D)
+
+        echo all_changed_files=${CHANGED_FILES//\\n/} >> "$GITHUB_OUTPUT"
+        echo deleted_files=${DELETED_FILES//\\n/} >> "$GITHUB_OUTPUT"
+ 
     - name: Run Sigma Rule Converter
       id: convert
       shell: bash
