@@ -22,13 +22,13 @@ inputs:
 outputs:
   alerts_created:
     description: "List of alerts UIDs created in Grafana"
-    value: ${{ steps.deploy.outputs.alerts_created }}
+    value: ${{ steps.output.outputs.alerts_created }}
   alerts_updated:
     description: "List of alerts UIDs updated in Grafana"
-    value: ${{ steps.deploy.outputs.alerts_updated }}
+    value: ${{ steps.output.outputs.alerts_updated }}
   alerts_deleted:
     description: "List of alerts UIDs deleted in Grafana"
-    value: ${{ steps.deploy.outputs.alerts_deleted }}
+    value: ${{ steps.output.outputs.alerts_deleted }}
 
 runs:
   using: "composite"
@@ -65,14 +65,61 @@ runs:
         docker pull ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${{ env.action_ref }}
         docker run --rm -v "$(pwd):/sigma-rules" -w /sigma-rules -e GITHUB_OUTPUT="/sigma-rules/github-output" -e CONFIG_PATH="${CONFIG_PATH}" -e DEPLOYER_GRAFANA_SA_TOKEN="${GRAFANA_SA_TOKEN}" -e DEPLOYER_FRESH_DEPLOY="${FRESH_DEPLOY}" -e ADDED_FILES="${ADDED_FILES}" -e MODIFIED_FILES="${MODIFIED_FILES}" -e DELETED_FILES="${DELETED_FILES}" -e COPIED_FILES="${COPIED_FILES}" ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${action_ref} deploy
     - name: Move Output
+      id: output
       shell: bash
       run: |
         mv github-output $GITHUB_OUTPUT
+    - name: Get Grafana Instance
+      if: success() && github.event_name == 'push'
+      id: grafana-instance
+      shell: bash
+      run: |
+        sudo apt-get install -y yq
+        GRAFANA_INSTANCE=$(yq e '.deployment.grafana_instance' "${CONFIG_PATH}")
+        echo "grafana_instance=${GRAFANA_INSTANCE}" >> $GITHUB_OUTPUT
     - name: Comment Status
       if: success() && github.event_name == 'push'
       uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
+      env:
+        ALERTS_CREATED: ${{ steps.output.outputs.alerts_created }}
+        ALERTS_UPDATED: ${{ steps.output.outputs.alerts_updated }}
+        ALERTS_DELETED: ${{ steps.output.outputs.alerts_deleted }}
+        GRAFANA_INSTANCE: ${{ steps.grafana-instance.outputs.grafana_instance }}
       with:
           script: |
+            const createdUids = process.env.ALERTS_CREATED.split(" ");
+            const updatedUids = process.env.ALERTS_UPDATED.split(" ");
+            const deletedUids = process.env.ALERTS_DELETED.split(" ");
+
+            let createdUrls = [];
+            let updatedUrls = [];
+
+            if (process.env.GRAFANA_INSTANCE) {
+              createdUrls = createdUids.map(uid => `${process.env.GRAFANA_INSTANCE}/alerting/grafana/${uid}/view`);
+              updatedUrls = updatedUids.map(uid => `${process.env.GRAFANA_INSTANCE}/alerting/grafana/${uid}/view`);
+            }
+
+            const body = `
+            ## Sigma Rule Deployment Status
+
+            | Created | Updated | Deleted |
+            | --- | --- | --- |
+            | ${createdUids.length} | ${updatedUids.length} | ${deletedUids.length} |
+
+            ### Created
+
+            ${createdUrls.length === createdUids.length ? createdUrls.map(url => `- [${url}](${url})`).join("\n") : createdUids.map(uid => `- ${uid}`).join("\n")}
+
+            ### Updated
+
+            ${updatedUrls.length === updatedUids.length ? updatedUrls.map(url => `- [${url}](${url})`).join("\n") : updatedUids.map(uid => `- ${uid}`).join("\n")}
+
+            ### Deleted
+
+            ${deletedUids.map(uid => `- ${uid}`).join("\n")}
+
+            `;
+
             const associatedPrs = await github.rest.repos.listPullRequestsAssociatedWithCommit({
               owner: context.repo.owner,
               repo: context.repo.repo,
