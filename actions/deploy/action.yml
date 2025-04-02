@@ -89,16 +89,18 @@ runs:
         GRAFANA_INSTANCE: ${{ steps.grafana-instance.outputs.grafana_instance }}
       with:
           script: |
-            const createdUids = process.env.ALERTS_CREATED.split(" ");
-            const updatedUids = process.env.ALERTS_UPDATED.split(" ");
-            const deletedUids = process.env.ALERTS_DELETED.split(" ");
+            const url = process.env.GRAFANA_INSTANCE.replaceAll("\"", "");
+
+            const createdUids = process.env.ALERTS_CREATED.split(" ").filter(uid => uid !== "");
+            const updatedUids = process.env.ALERTS_UPDATED.split(" ").filter(uid => uid !== "");
+            const deletedUids = process.env.ALERTS_DELETED.split(" ").filter(uid => uid !== "");
 
             let createdUrls = [];
             let updatedUrls = [];
 
-            if (process.env.GRAFANA_INSTANCE) {
-              createdUrls = createdUids.map(uid => `${process.env.GRAFANA_INSTANCE}/alerting/grafana/${uid}/view`);
-              updatedUrls = updatedUids.map(uid => `${process.env.GRAFANA_INSTANCE}/alerting/grafana/${uid}/view`);
+            if (url) {
+              createdUrls = createdUids.map(uid => `${url}/alerting/grafana/${uid}/view`);
+              updatedUrls = updatedUids.map(uid => `${url}/alerting/grafana/${uid}/view`);
             }
 
             const body = `
@@ -110,11 +112,11 @@ runs:
 
             ### Created
 
-            ${createdUrls.length === createdUids.length ? createdUrls.map(url => `- [${url}](${url})`).join("\n") : createdUids.map(uid => `- ${uid}`).join("\n")}
+            ${createdUrls.length === createdUids.length ? createdUrls.map((url, index) => `- [${createdUids[index]}](${url})`).join("\n") : createdUids.map(uid => `- ${uid}`).join("\n")}
 
             ### Updated
 
-            ${updatedUrls.length === updatedUids.length ? updatedUrls.map(url => `- [${url}](${url})`).join("\n") : updatedUids.map(uid => `- ${uid}`).join("\n")}
+            ${updatedUrls.length === updatedUids.length ? updatedUrls.map((url, index) => `- [${updatedUids[index]}](${url})`).join("\n") : updatedUids.map(uid => `- ${uid}`).join("\n")}
 
             ### Deleted
 
