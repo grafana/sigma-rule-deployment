@@ -1,44 +1,46 @@
 name: "Build Consolidated Image"
 
 on:
-    push:
-        branches:
-            - main
-    pull_request:
-        branches:
-            - main
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
 
 permissions:
-    contents: read
-    packages: write
+  contents: read
+  packages: write
 
 jobs:
-    build:
-        runs-on: ubuntu-latest
-        steps:
-            - name: "Checkout"
-              uses: actions/checkout@v4
-            - name: "Login to GitHub Container Registry"
-              uses: docker/login-action@v3
-              with:
-                  registry: ghcr.io
-                  username: ${{ github.actor }}
-                  password: ${{ secrets.GITHUB_TOKEN }}
-            - name: "Build and Push"
-              uses: docker/build-push-action@v4
-              if: github.event_name == 'pull_request'
-              with:
-                  context: ./actions
-                  file: actions/Dockerfile
-                  tags: |
-                      ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${{ github.event.pull_request.head.sha }}
-                  push: true
-            - name: "Build and Push"
-              uses: docker/build-push-action@v4
-              if: github.event_name == 'push'
-              with:
-                  context: ./actions
-                  file: actions/Dockerfile
-                  tags: |
-                      ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${{ github.sha }}
-                  push: true
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Checkout"
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: "Login to GitHub Container Registry"
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: "Build and Push"
+        uses: docker/build-push-action@v4
+        if: github.event_name == 'pull_request'
+        with:
+          context: ./actions
+          file: actions/Dockerfile
+          tags: |
+            ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${{ github.event.pull_request.head.sha }}
+          push: true
+      - name: "Build and Push"
+        uses: docker/build-push-action@v4
+        if: github.event_name == 'push'
+        with:
+          context: ./actions
+          file: actions/Dockerfile
+          tags: |
+            ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${{ github.sha }}
+          push: true

@@ -36,7 +36,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--config",
         help="Path to config YAML file",
-        default=os.environ.get("CONFIG", "./config.yaml"),
+        default=os.environ.get("CONFIG_PATH", "./config.yaml"),
     )
     parser.add_argument(
         "--path-prefix",
