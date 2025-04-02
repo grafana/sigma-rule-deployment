@@ -352,7 +352,7 @@ def convert_rules(
 
     # Remove conversions of deleted rules from the output directory
     if len(conversions_to_delete) > 0:
-        print(f"Removing conversions of deleted rules from the output directory")
+        print("Removing conversions of deleted rules from the output directory")
         for deleted_file in conversions_to_delete:
             if deleted_file.exists():
                 print(f"Removing {deleted_file}")
