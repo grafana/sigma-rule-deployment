@@ -72,24 +72,10 @@ runs:
       id: changed-files
       shell: bash
       env:
-        DIFF_COMMIT: ${{ steps.last-commit.outputs.result }}
-        BASE_REF: ${{ github.event.pull_request.base.ref }}
+        BASE_REF: ${{ steps.last-commit.outputs.result || github.event.pull_request.base.ref || 'origin/HEAD' }}
       run: |
-        # Precedence of comparison:
-        # 1. The last commit on the PR
-        # 2. The base branch of the PR
-        # 3. origin/HEAD (default branch)
-
-        COMPARE=$(git rev-parse --abbrev-ref origin/HEAD)
-        if [ -n "$BASE_REF" ]; then
-          COMPARE=$BASE_REF
-        fi
-        if [ -n "$DIFF_COMMIT" ]; then
-          COMPARE=$DIFF_COMMIT
-        fi
-
-        CHANGED_FILES=$(git diff --name-only $COMPARE --diff-filter=ACMR)
-        DELETED_FILES=$(git diff --name-only $COMPARE --diff-filter=D)
+        CHANGED_FILES=$(git diff --name-only $BASE_REF --diff-filter=ACMR)
+        DELETED_FILES=$(git diff --name-only $BASE_REF --diff-filter=D)
 
         echo all_changed_files=${CHANGED_FILES//\\n/} >> "$GITHUB_OUTPUT"
         echo deleted_files=${DELETED_FILES//\\n/} >> "$GITHUB_OUTPUT"

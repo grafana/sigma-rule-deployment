@@ -27,14 +27,10 @@ inputs:
     description: "Whether to integrate all rules"
     required: false
     default: "false"
-  changed_files:
-    description: "The changed files to integrate"
+  conversion_path:
+    description: "The path to the conversion folder"
     required: false
-    default: ""
-  deleted_files:
-    description: "The deleted files to integrate"
-    required: false
-    default: ""
+    default: "./conversions"
 
 outputs:
   rules_integrated:
@@ -53,6 +49,46 @@ runs:
         registry: ghcr.io
         username: ${{ github.actor }}
         password: ${{ github.token }}
+    - name: Get Last Commit or base_ref
+      if: ${{ github.event_name == 'pull_request' && inputs.changed_files_from_base == 'false' }}
+      id: last-commit
+      uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
+      env:
+        ACTIONS_USERNAME: ${{ inputs.actions_username }}
+      with:
+        script: |
+          const iterator = github.paginate(github.rest.pulls.listCommits, {
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            pull_number: context.payload.pull_request.number,
+            per_page: 1
+          });
+          let commit = "";
+          for await (const { data } of iterator) {
+            if (commit === "") {
+              commit = data[0].sha;
+            }
+            for (const { commit } of data) {
+              if (commit.committer.name === process.env.ACTIONS_USERNAME) {
+                commit = commit.sha;
+              }
+            }
+          }
+          return commit;
+        result-encoding: string
+    - name: Calculate Change Files
+      id: changed-files
+      shell: bash
+      env:
+        CONVERSION_PATH: ${{ inputs.conversion_path }}
+        BASE_REF: ${{ steps.last-commit.outputs.result || github.base_ref || github.event.pull_request.base.ref || 'origin/HEAD' }}
+      run: |
+        git fetch
+        CHANGED_FILES=$(git diff --name-only $BASE_REF --diff-filter=ACMR -- $CONVERSION_PATH)
+        DELETED_FILES=$(git diff --name-only $BASE_REF --diff-filter=D -- $CONVERSION_PATH)
+        echo all_changed_files=${CHANGED_FILES//\\n/} >> "$GITHUB_OUTPUT"
+        echo deleted_files=${DELETED_FILES//\\n/} >> "$GITHUB_OUTPUT"
+
     - name: Run Sigma Rule Integrator
       id: integrate
       shell: bash
@@ -60,8 +96,8 @@ runs:
         CONFIG_PATH: ${{ inputs.config_path }}
         GRAFANA_SA_TOKEN: ${{ inputs.grafana_sa_token }}
         PRETTY_PRINT: ${{ inputs.pretty_print }}
-        CHANGED_FILES: ${{ inputs.changed_files }}
-        DELETED_FILES: ${{ inputs.deleted_files }}
+        CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
+        DELETED_FILES: ${{ steps.changed-files.outputs.deleted_files }}
         ALL_RULES: ${{ inputs.all_rules }}
         ACTION_REF: ${{ github.action_ref }}
       run: |
