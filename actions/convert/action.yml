@@ -42,7 +42,7 @@ runs:
         username: ${{ github.actor }}
         password: ${{ github.token }}
     - name: Get Last Commit or base_ref
-      if: ${{ github.event_name == 'pull_request' && inputs.changed_files_from_base == 'true' }}
+      if: ${{ github.event_name == 'pull_request' && inputs.changed_files_from_base == 'false' }}
       id: last-commit
       uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
       env:
