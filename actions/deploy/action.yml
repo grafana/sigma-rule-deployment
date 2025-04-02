@@ -134,7 +134,7 @@ runs:
 
                 const query = `mutation AddComment {
                 addComment(input: {
-                  body: "Sigma Rules Deployed Successfully",
+                  body: "${body}",
                   subjectId: "${nodeId}",
                 }) {
                   subject {
