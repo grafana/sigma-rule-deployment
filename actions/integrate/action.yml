@@ -73,8 +73,8 @@ runs:
           }));
           let commit = "";
           for (const remote_commit of iterator) {
-            if (commit === "") {
-              commit = remote_commit.sha;
+            if (commit === "" && remote_commit.parents.length > 0) {
+              commit = remote_commit.parents[0].sha;
             }
             if (remote_commit.commit.committer.name === process.env.ACTIONS_USERNAME) {
               commit = remote_commit.sha;
