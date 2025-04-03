@@ -267,8 +267,11 @@ func (i *Integrator) Run() error {
 			return fmt.Errorf("error summarising sigma rules: %v", err)
 		}
 
+		// Extract rule filename from input file name
+		ruleFilename := strings.TrimSuffix(filepath.Base(inputFile), ".json")
+		ruleFilename = strings.TrimPrefix(ruleFilename, config.Name+"_")
 		ruleUid := getRuleUid(conversionObject.ConversionName, conversionID)
-		file := fmt.Sprintf("%s%salert_rule_%s_%s.json", i.config.Folders.DeploymentPath, string(filepath.Separator), config.Name, ruleUid)
+		file := fmt.Sprintf("%s%salert_rule_%s_%s_%s.json", i.config.Folders.DeploymentPath, string(filepath.Separator), config.Name, ruleFilename, ruleUid)
 		fmt.Printf("Working on alert rule file: %s\n", file)
 		rule := &definitions.ProvisionedAlertRule{UID: ruleUid}
 

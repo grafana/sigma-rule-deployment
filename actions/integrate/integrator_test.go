@@ -561,7 +561,7 @@ func TestIntegratorRun(t *testing.T) {
 				convID, _, err := summariseSigmaRules(tt.convOutput.Rules)
 				assert.NoError(t, err)
 				ruleUid := getRuleUid(tt.conversionName, convID)
-				deployFile := filepath.Join(deployPath, fmt.Sprintf("alert_rule_%s_%s.json", tt.conversionName, ruleUid))
+				deployFile := filepath.Join(deployPath, fmt.Sprintf("alert_rule_%s_%s_%s.json", tt.conversionName, tt.conversionName, ruleUid))
 
 				// Create a dummy alert rule file
 				dummyRule := &definitions.ProvisionedAlertRule{
@@ -601,7 +601,7 @@ func TestIntegratorRun(t *testing.T) {
 			assert.NoError(t, err)
 
 			ruleUid := getRuleUid(tt.conversionName, convID)
-			expectedFile := filepath.Join(deployPath, fmt.Sprintf("alert_rule_%s_%s.json", tt.conversionName, ruleUid))
+			expectedFile := filepath.Join(deployPath, fmt.Sprintf("alert_rule_%s_%s_%s.json", tt.conversionName, tt.conversionName, ruleUid))
 
 			// For removed files, verify the file was deleted
 			if len(tt.removedFiles) > 0 {
@@ -763,7 +763,7 @@ func TestIntegratorWithQueryTesting(t *testing.T) {
 			// Create test conversion output file
 			convBytes, err := json.Marshal(convOutput)
 			assert.NoError(t, err)
-			convFile := filepath.Join(convPath, "test_loki.json")
+			convFile := filepath.Join(convPath, "test_loki_test_file_1.json")
 			err = os.WriteFile(convFile, convBytes, 0644)
 			assert.NoError(t, err)
 
@@ -852,7 +852,7 @@ func TestIntegratorWithQueryTesting(t *testing.T) {
 			convID, _, err := summariseSigmaRules(convOutput.Rules)
 			assert.NoError(t, err)
 			ruleUid := getRuleUid("test_loki", convID)
-			expectedFile := filepath.Join(deployPath, fmt.Sprintf("alert_rule_test_loki_%s.json", ruleUid))
+			expectedFile := filepath.Join(deployPath, fmt.Sprintf("alert_rule_test_loki_test_file_1_%s.json", ruleUid))
 			_, err = os.Stat(expectedFile)
 			assert.NoError(t, err)
 
