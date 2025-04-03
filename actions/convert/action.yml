@@ -34,7 +34,7 @@ inputs:
   conversion_path:
     description: "The path to the conversion folder"
     required: false
-    default: "./conversions"
+    default: "conversions"
 
 runs:
   using: "composite"

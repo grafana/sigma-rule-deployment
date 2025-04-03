@@ -30,11 +30,11 @@ inputs:
   conversion_path:
     description: "The path to the conversion folder"
     required: false
-    default: "./conversions"
+    default: "conversions"
   deployment_path:
     description: "The path to the deployment folder"
     required: false
-    default: "./deployments"
+    default: "deployments"
   changed_files_from_base:
     description: "Whether to use the changed files from the base branch"
     required: false
