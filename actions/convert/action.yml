@@ -60,14 +60,12 @@ runs:
             per_page: 1
           }));
           let commit = "";
-          for (const { data } of iterator) {
+          for (const remote_commit of iterator) {
             if (commit === "") {
-              commit = data[0].sha;
+              commit = remote_commit.sha;
             }
-            for (const { commit } of data) {
-              if (commit.committer.name === process.env.ACTIONS_USERNAME) {
-                commit = commit.sha;
-              }
+            if (remote_commit.committer.name === process.env.ACTIONS_USERNAME) {
+              commit = remote_commit.sha;
             }
           }
           return commit;
