@@ -130,16 +130,16 @@ runs:
       run: |
         CHANGED_FILES=$(git diff --name-only $BASE_REF --diff-filter=ACMR -- $DEPLOYMENT_PATH)
         DELETED_FILES=$(git diff --name-only $BASE_REF --diff-filter=D -- $DEPLOYMENT_PATH)
-        echo "changed_files=${CHANGED_FILES//\\n/}" >> $GITHUB_OUTPUT
-        echo "deleted_files=${DELETED_FILES//\\n/}" >> $GITHUB_OUTPUT
+        echo changed_files=${CHANGED_FILES//\\n/} >> $GITHUB_OUTPUT
+        echo deleted_files=${DELETED_FILES//\\n/} >> $GITHUB_OUTPUT
 
     - name: Comment Integrations
       id: comment-integrations
       uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
       env:
         HEAD_REF: ${{ steps.last-commit.outputs.result || github.head_ref || github.event.pull_request.head.ref || 'HEAD' }}
-        CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
-        DELETED_FILES: ${{ steps.changed-files.outputs.deleted_files }}
+        CHANGED_FILES: ${{ steps.generate-comment-data.outputs.changed_files }}
+        DELETED_FILES: ${{ steps.generate-comment-data.outputs.deleted_files }}
       with:
         script: |
           const changedFiles = process.env.CHANGED_FILES.split(',').filter(file => file.trim() !== '');
