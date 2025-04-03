@@ -72,8 +72,8 @@ runs:
           }
 
           return {
-            result: commit,
-            first_commit: first_commit
+            commit,
+            first_commit
           };
     - name: Select Commit
       id: previous-commit
