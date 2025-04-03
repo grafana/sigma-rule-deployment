@@ -60,15 +60,18 @@ runs:
             per_page: 1
           }));
           let commit = "";
+          let first_commit = "";
           for (const remote_commit of iterator) {
             if (commit === "" && remote_commit.parents.length > 0) {
               commit = remote_commit.parents[0].sha;
+              first_commit = remote_commit.sha;
             }
             if (remote_commit.commit.committer.name === process.env.ACTIONS_USERNAME) {
               commit = remote_commit.sha;
             }
           }
-          return commit;
+          core.setOutput("result", commit);
+          core.setOutput("first_commit", first_commit);
         result-encoding: string
     - name: Get Changed Files
       id: changed-files
@@ -121,11 +124,12 @@ runs:
         echo changed_files=${CHANGED_FILES//\\n/} >> $GITHUB_OUTPUT
         echo deleted_files=${DELETED_FILES//\\n/} >> $GITHUB_OUTPUT
 
+
     - name: Comment Conversions
       id: comment-conversions
       uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
       env:
-        BASE_REF: ${{ steps.last-commit.outputs.result || github.base_ref || github.event.pull_request.base.ref || 'HEAD' }}
+        BASE_REF: ${{ steps.last-commit.outputs.first_commit || github.base_ref || github.event.pull_request.base.ref || 'HEAD' }}
         CHANGED_FILES: ${{ steps.generate-comment-data.outputs.changed_files }}
         DELETED_FILES: ${{ steps.generate-comment-data.outputs.deleted_files }}
       with:
