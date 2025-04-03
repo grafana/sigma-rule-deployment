@@ -35,6 +35,10 @@ inputs:
     description: "The path to the deployment folder"
     required: false
     default: "./deployments"
+  changed_files_from_base:
+    description: "Whether to use the changed files from the base branch"
+    required: false
+    default: "false"
 
 outputs:
   rules_integrated:
