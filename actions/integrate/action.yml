@@ -159,8 +159,8 @@ runs:
         BASE_REF: ${{ steps.first-commit.outputs.result || github.base_ref || github.event.pull_request.base.ref || 'origin/HEAD' }}
         DEPLOYMENT_PATH: ${{ inputs.deployment_path }}
       run: |
-        CHANGED_FILES=$(git diff --name-only $BASE_REF --diff-filter=ACMR -- $DEPLOYMENT_PATH)
-        DELETED_FILES=$(git diff --name-only $BASE_REF --diff-filter=D -- $DEPLOYMENT_PATH)
+        CHANGED_FILES=$(git diff "$BASE_REF" --name-only --diff-filter=ACMR -- "$DEPLOYMENT_PATH")
+        DELETED_FILES=$(git diff "$BASE_REF" --name-only --diff-filter=D -- "$DEPLOYMENT_PATH")
 
         echo $CHANGED_FILES
         echo $DELETED_FILES
