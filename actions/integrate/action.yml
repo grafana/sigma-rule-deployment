@@ -82,15 +82,37 @@ runs:
               commit = remote_commit.sha;
             }
           }
-          core.setOutput("result", commit);
-          core.setOutput("first_commit", first_commit);
+
+          return {
+            result: commit,
+            first_commit: first_commit
+          };
+    - name: Select Commit
+      id: previous-commit
+      uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
+      env:
+        COMMIT: ${{ steps.last-commit.outputs.result }}
+      with:
+        script: |
+          const output = JSON.parse(process.env.COMMIT);
+          return output.commit;
+        result-encoding: string
+    - name: Select First Commit
+      id: first-commit
+      uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
+      env:
+        COMMIT: ${{ steps.last-commit.outputs.result }}
+      with:
+        script: |
+          const output = JSON.parse(process.env.COMMIT);
+          return output.first_commit;
         result-encoding: string
     - name: Calculate Change Files
       id: changed-files
       shell: bash
       env:
         CONVERSION_PATH: ${{ inputs.conversion_path }}
-        BASE_REF: ${{ steps.last-commit.outputs.result || github.base_ref || github.event.pull_request.base.ref || 'origin/HEAD' }}
+        BASE_REF: ${{ steps.previous-commit.outputs.result || github.base_ref || github.event.pull_request.base.ref || 'origin/HEAD' }}
       run: |
         git fetch
         CHANGED_FILES=$(git diff --name-only $BASE_REF --diff-filter=ACMR -- $CONVERSION_PATH)
@@ -132,7 +154,7 @@ runs:
       id: generate-comment-data
       shell: bash
       env:
-        BASE_REF: ${{ steps.last-commit.outputs.result || github.base_ref || github.event.pull_request.base.ref || 'origin/HEAD' }}
+        BASE_REF: ${{ steps.previous-commit.outputs.result || github.base_ref || github.event.pull_request.base.ref || 'origin/HEAD' }}
         DEPLOYMENT_PATH: ${{ inputs.deployment_path }}
       run: |
         CHANGED_FILES=$(git diff --name-only $BASE_REF --diff-filter=ACMR -- $DEPLOYMENT_PATH)
@@ -144,7 +166,7 @@ runs:
       id: comment-integrations
       uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
       env:
-        HEAD_REF: ${{ steps.last-commit.outputs.first_commit || github.head_ref || github.event.pull_request.head.ref || 'HEAD' }}
+        HEAD_REF: ${{ steps.first-commit.outputs.result || github.head_ref || github.event.pull_request.head.ref || 'HEAD' }}
         CHANGED_FILES: ${{ steps.generate-comment-data.outputs.changed_files }}
         DELETED_FILES: ${{ steps.generate-comment-data.outputs.deleted_files }}
       with:
