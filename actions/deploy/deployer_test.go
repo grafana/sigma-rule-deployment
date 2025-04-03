@@ -14,9 +14,9 @@ import (
 )
 
 func TestGetAlertUidFromFileName(t *testing.T) {
-	assert.Equal(t, "abcd123", getAlertUidFromFilename("alert_rule_conversion_abcd123.json"))
-	assert.Equal(t, "abcd123", getAlertUidFromFilename("alert_rule_conversion_name_abcd123.json"))
-	assert.Equal(t, "uAaCwL1wlmA", getAlertUidFromFilename("alert_rule_conversion_uAaCwL1wlmA.json"))
+	assert.Equal(t, "abcd123", getAlertUidFromFilename("alert_rule_conversion_test_file_1_abcd123.json"))
+	assert.Equal(t, "abcd123", getAlertUidFromFilename("alert_rule_conversion_name_test_file_2_abcd123.json"))
+	assert.Equal(t, "uAaCwL1wlmA", getAlertUidFromFilename("alert_rule_conversion_test_file_3_uAaCwL1wlmA.json"))
 }
 
 func TestParseAlert(t *testing.T) {
@@ -110,9 +110,9 @@ func TestAddAlertToList(t *testing.T) {
 	}{
 		{
 			name:          "simple alert path",
-			file:          "deployments/alert_rule_conversion_abcd123.json",
+			file:          "deployments/alert_rule_conversion_test_file_1_abcd123.json",
 			prefix:        "deployments",
-			wantAlertList: []string{"deployments/alert_rule_conversion_abcd123.json"},
+			wantAlertList: []string{"deployments/alert_rule_conversion_test_file_1_abcd123.json"},
 		},
 		{
 			name:          "alert path with extra folder",
@@ -351,13 +351,13 @@ func TestLoadConfig(t *testing.T) {
 	defer os.Unsetenv("CONFIG_PATH")
 	os.Setenv("DEPLOYER_GRAFANA_SA_TOKEN", "my-test-token")
 	defer os.Unsetenv("DEPLOYER_GRAFANA_SA_TOKEN")
-	os.Setenv("ADDED_FILES", "deployments/alert_rule_conversion_abcd123.json deployments/alert_rule_conversion_def3456789.json")
+	os.Setenv("ADDED_FILES", "deployments/alert_rule_conversion_test_file_1_abcd123.json deployments/alert_rule_conversion_test_file_2_def3456789.json")
 	defer os.Unsetenv("ADDED_FILES")
-	os.Setenv("COPIED_FILES", "deployments/alert_rule_conversion_ghij123.json deployments/alert_rule_conversion_klmn123.json")
+	os.Setenv("COPIED_FILES", "deployments/alert_rule_conversion_test_file_3_ghij123.json deployments/alert_rule_conversion_test_file_4_klmn123.json")
 	defer os.Unsetenv("COPIED_FILES")
-	os.Setenv("DELETED_FILES", "deployments/alert_rule_conversion_opqr123.json deployments/alert_rule_conversion_stuv123.json")
+	os.Setenv("DELETED_FILES", "deployments/alert_rule_conversion_test_file_5_opqr123.json deployments/alert_rule_conversion_test_file_6_stuv123.json")
 	defer os.Unsetenv("DELETED_FILES")
-	os.Setenv("MODIFIED_FILES", "deployments/alert_rule_conversion_wxyz123.json deployments/alert_rule_conversion_123456789.json")
+	os.Setenv("MODIFIED_FILES", "deployments/alert_rule_conversion_test_file_7_wxyz123.json deployments/alert_rule_conversion_test_file_8_123456789.json")
 	defer os.Unsetenv("MODIFIED_FILES")
 
 	ctx := context.Background()
@@ -381,18 +381,18 @@ func TestLoadConfig(t *testing.T) {
 
 	// Test alert file lists
 	assert.Equal(t, []string{
-		"deployments/alert_rule_conversion_abcd123.json",
-		"deployments/alert_rule_conversion_def3456789.json",
-		"deployments/alert_rule_conversion_ghij123.json",
-		"deployments/alert_rule_conversion_klmn123.json",
+		"deployments/alert_rule_conversion_test_file_1_abcd123.json",
+		"deployments/alert_rule_conversion_test_file_2_def3456789.json",
+		"deployments/alert_rule_conversion_test_file_3_ghij123.json",
+		"deployments/alert_rule_conversion_test_file_4_klmn123.json",
 	}, d.config.alertsToAdd)
 	assert.Equal(t, []string{
-		"deployments/alert_rule_conversion_opqr123.json",
-		"deployments/alert_rule_conversion_stuv123.json",
+		"deployments/alert_rule_conversion_test_file_5_opqr123.json",
+		"deployments/alert_rule_conversion_test_file_6_stuv123.json",
 	}, d.config.alertsToRemove)
 	assert.Equal(t, []string{
-		"deployments/alert_rule_conversion_wxyz123.json",
-		"deployments/alert_rule_conversion_123456789.json",
+		"deployments/alert_rule_conversion_test_file_7_wxyz123.json",
+		"deployments/alert_rule_conversion_test_file_8_123456789.json",
 	}, d.config.alertsToUpdate)
 
 	// Test group intervals
@@ -430,7 +430,7 @@ func TestListAlertsInDeploymentFolder(t *testing.T) {
 	}
 	alerts, err := d.listAlertsInDeploymentFolder()
 	assert.NoError(t, err)
-	assert.Equal(t, []string{"testdata/alert_rule_conversion_u123abc.json", "testdata/alert_rule_conversion_u456def.json", "testdata/alert_rule_conversion_u789ghi.json"}, alerts)
+	assert.Equal(t, []string{"testdata/alert_rule_conversion_test_file_1_u123abc.json", "testdata/alert_rule_conversion_test_file_2_u456def.json", "testdata/alert_rule_conversion_test_file_3_u789ghi.json"}, alerts)
 }
 
 func TestUpdateAlertGroupInterval(t *testing.T) {
