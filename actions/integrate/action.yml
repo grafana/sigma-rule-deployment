@@ -194,4 +194,4 @@ runs:
             }
           }
 
-          return comment;
+          return '';
