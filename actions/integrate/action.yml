@@ -31,6 +31,10 @@ inputs:
     description: "The path to the conversion folder"
     required: false
     default: "./conversions"
+  deployment_path:
+    description: "The path to the deployment folder"
+    required: false
+    default: "./deployments"
 
 outputs:
   rules_integrated:
@@ -118,3 +122,13 @@ runs:
       shell: bash
       run: |
         mv github-output $GITHUB_OUTPUT
+    
+    - name: Generate Comment
+      id: generate-comment
+      shell: bash
+      env:
+        BASE_REF: ${{ steps.last-commit.outputs.result || github.base_ref || github.event.pull_request.base.ref || 'origin/HEAD' }}
+        DEPLOYMENT_PATH: ${{ inputs.deployment_path }}
+      run: |
+        CHANGED_FILES=$(git diff --name-only $BASE_REF --diff-filter=ACMR -- $DEPLOYMENT_PATH)
+        DELETED_FILES=$(git diff --name-only $BASE_REF --diff-filter=D -- $DEPLOYMENT_PATH)
