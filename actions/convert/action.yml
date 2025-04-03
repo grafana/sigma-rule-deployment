@@ -64,7 +64,7 @@ runs:
             if (commit === "") {
               commit = remote_commit.sha;
             }
-            if (remote_commit.committer.name === process.env.ACTIONS_USERNAME) {
+            if (remote_commit.commit.committer.name === process.env.ACTIONS_USERNAME) {
               commit = remote_commit.sha;
             }
           }
@@ -151,7 +151,7 @@ runs:
 
           ### Changed Files
 
-          ${changedFiles.length ? changedFiles.map(file => `- [${file}](github.com/${context.repo.owner}/${context.repo.repo}/blob/${process.env.BASE_REF}/${file})`).join("\n") : "No files changed"}
+          ${changedFiles.length ? changedFiles.map(file => `- [${file}](https://github.com/${context.repo.owner}/${context.repo.repo}/blob/${process.env.BASE_REF}/${file})`).join("\n") : "No files changed"}
 
           ### Deleted Files
 
