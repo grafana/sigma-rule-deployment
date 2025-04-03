@@ -143,21 +143,21 @@ runs:
           if (associatedPrs.data.length > 0) {
             for (const pr of associatedPrs.data) {
               const comment = `
-              ### Sigma Rule Conversions
+          ### Sigma Rule Conversions
 
-              | Changed | Deleted |
-              | --- | --- |
-              | ${changedFiles.length} | ${deletedFiles.length} |
+          | Changed | Deleted |
+          | --- | --- |
+          | ${changedFiles.length} | ${deletedFiles.length} |
 
-              ### Changed Files
+          ### Changed Files
 
-              ${changedFiles.length ? changedFiles.map(file => `- [${file}](github.com/${context.repo.owner}/${context.repo.repo}/blob/${process.env.BASE_REF}/${file})`).join("\n") : "No files changed"}
+          ${changedFiles.length ? changedFiles.map(file => `- [${file}](github.com/${context.repo.owner}/${context.repo.repo}/blob/${process.env.BASE_REF}/${file})`).join("\n") : "No files changed"}
 
-              ### Deleted Files
+          ### Deleted Files
 
-              ${deletedFiles.length ? deletedFiles.map(file => `- ${file}`).join("\n") : "No files deleted"}
+          ${deletedFiles.length ? deletedFiles.map(file => `- ${file}`).join("\n") : "No files deleted"}
 
-              `;
+          `;
 
               const nodeId = pr.node_id;
 
