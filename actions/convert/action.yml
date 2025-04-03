@@ -47,7 +47,7 @@ runs:
         password: ${{ github.token }}
     - name: Get Last Commit or base_ref
       if: ${{ github.event_name == 'pull_request' && inputs.changed_files_from_base == 'false' }}
-      id: last-commit
+      id: commits
       uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
       env:
         ACTIONS_USERNAME: ${{ inputs.actions_username }}
@@ -79,20 +79,22 @@ runs:
       id: previous-commit
       uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
       env:
-        COMMIT: ${{ steps.last-commit.outputs.result }}
+        COMMIT: ${{ steps.commits.outputs.result }}
       with:
         script: |
           const output = JSON.parse(process.env.COMMIT);
+          console.log(output.commit);
           return output.commit;
         result-encoding: string
     - name: Select First Commit
       id: first-commit
       uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
       env:
-        COMMIT: ${{ steps.last-commit.outputs.result }}
+        COMMIT: ${{ steps.commits.outputs.result }}
       with:
         script: |
           const output = JSON.parse(process.env.COMMIT);
+          console.log(output.first_commit);
           return output.first_commit;
         result-encoding: string
     - name: Get Changed Files
