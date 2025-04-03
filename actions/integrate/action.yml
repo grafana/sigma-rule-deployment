@@ -126,7 +126,7 @@ runs:
         mv github-output $GITHUB_OUTPUT
     
     - name: Generate Comment Data
-      id: generate-comment
+      id: generate-comment-data
       shell: bash
       env:
         BASE_REF: ${{ steps.last-commit.outputs.result || github.base_ref || github.event.pull_request.base.ref || 'origin/HEAD' }}
