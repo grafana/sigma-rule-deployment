@@ -174,7 +174,7 @@ runs:
       id: generate-comment-data
       shell: bash
       env:
-        BASE_REF: ${{ steps.first-commit.outputs.result || github.base_ref || github.event.pull_request.base.ref || 'origin/HEAD' }}
+        BASE_REF: ${{ steps.last-commit.outputs.result || steps.first-commit.outputs.result || github.base_ref || github.event.pull_request.base.ref || 'origin/HEAD' }}
         DEPLOYMENT_PATH: ${{ inputs.deployment_path }}
       run: |
         CHANGED_FILES=$(git diff "$BASE_REF" --name-only --diff-filter=ACMR -- "$DEPLOYMENT_PATH")
