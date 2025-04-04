@@ -211,7 +211,7 @@ runs:
 
           for (const [key, value] of Object.entries(testResults)) {
             for (const result of value) {
-              resultTable += `| ${key} | [See in Explore](${result.link}) | ${result.count} | ${result.errors.length} |
+              resultTable += `| ${key} | [See in Explore](${result.link}) | ${result.stats.count} | ${result.stats.errors.length} |
               `;
             }
           }
