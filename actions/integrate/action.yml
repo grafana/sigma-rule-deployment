@@ -39,6 +39,10 @@ inputs:
     description: "Whether to use the changed files from the base branch"
     required: false
     default: "false"
+  actions_username:
+    description: "The username of the actions user"
+    required: false
+    default: "github-actions[bot]"
 
 outputs:
   rules_integrated:
