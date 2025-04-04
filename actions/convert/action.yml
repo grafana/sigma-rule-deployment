@@ -61,6 +61,7 @@ runs:
           }));
           let commit = "";
           let first_commit = "";
+          let last_commit = "";
           for (const remote_commit of iterator) {
             if (commit === "" && remote_commit.parents.length > 0) {
               commit = remote_commit.parents[0].sha;
@@ -68,12 +69,14 @@ runs:
             }
             if (remote_commit.commit.committer.name === process.env.ACTIONS_USERNAME) {
               commit = remote_commit.sha;
+              last_commit = remote_commit.sha;
             }
           }
 
           return {
             commit,
-            first_commit
+            first_commit,
+            last_commit
           };
     - name: Select Commit
       id: previous-commit
@@ -97,14 +100,25 @@ runs:
           console.log(output.first_commit);
           return output.first_commit;
         result-encoding: string
+    - name: Select Last Commit
+      id: last-commit
+      uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
+      env:
+        COMMIT: ${{ steps.commits.outputs.result }}
+      with:
+        script: |
+          const output = JSON.parse(process.env.COMMIT);
+          console.log(output.last_commit);
+          return output.last_commit;
+        result-encoding: string
     - name: Get Changed Files
       id: changed-files
       shell: bash
       env:
         BASE_REF: ${{ steps.previous-commit.outputs.result || github.event.pull_request.base.ref || 'origin/HEAD' }}
       run: |
-        CHANGED_FILES=$(git diff --name-only $BASE_REF --diff-filter=ACMR)
-        DELETED_FILES=$(git diff --name-only $BASE_REF --diff-filter=D)
+        CHANGED_FILES=$(git diff "$BASE_REF" --name-only --diff-filter=ACMR)
+        DELETED_FILES=$(git diff "$BASE_REF" --name-only --diff-filter=D)
 
         echo all_changed_files=${CHANGED_FILES//\\n/} >> "$GITHUB_OUTPUT"
         echo deleted_files=${DELETED_FILES//\\n/} >> "$GITHUB_OUTPUT"
@@ -140,11 +154,11 @@ runs:
       id: generate-comment-data
       shell: bash
       env:
-        BASE_REF: ${{ steps.first-commit.outputs.result || github.base_ref || github.event.pull_request.base.ref || 'origin/HEAD' }}
+        BASE_REF: ${{ steps.last-commit.outputs.result || steps.first-commit.outputs.result || github.base_ref || github.event.pull_request.base.ref || 'origin/HEAD' }}
         CONVERSION_PATH: ${{ inputs.conversion_path }}
       run: |
-        CHANGED_FILES=$(git diff --name-only $BASE_REF --diff-filter=ACMR -- $CONVERSION_PATH)
-        DELETED_FILES=$(git diff --name-only $BASE_REF --diff-filter=D -- $CONVERSION_PATH)
+        CHANGED_FILES=$(git diff "$BASE_REF" --name-only --diff-filter=ACMR -- "$CONVERSION_PATH")
+        DELETED_FILES=$(git diff "$BASE_REF" --name-only --diff-filter=D -- "$CONVERSION_PATH")
         echo changed_files=${CHANGED_FILES//\\n/} >> $GITHUB_OUTPUT
         echo deleted_files=${DELETED_FILES//\\n/} >> $GITHUB_OUTPUT
 
