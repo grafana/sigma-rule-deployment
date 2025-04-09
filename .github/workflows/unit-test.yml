@@ -33,6 +33,12 @@ jobs:
       - name: Install dependencies with uv
         run: |
           uv sync -q --directory actions/convert
+          uv sync -q --directory actions/convert --group dev
+
+      - name: Run linter and type checker
+        run: |
+          uv run --directory actions/convert ruff check .
+          uv run --directory actions/convert mypy .
 
       - name: Run unit tests
         run: |
