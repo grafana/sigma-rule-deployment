@@ -10,7 +10,40 @@ on:
   workflow_dispatch:
 
 jobs:
+  golangci-lint:
+    name: Run golangci-lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.1"
+          cache: false
+
+      - name: Run golangci-lint on integrate project
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: latest
+          working-directory: actions/integrate
+          args: --timeout=5m
+
+      - name: Run golangci-lint on deploy project
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: latest
+          working-directory: actions/deploy
+          args: --timeout=5m
+
   convert-test:
+    needs: golangci-lint
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -39,6 +72,7 @@ jobs:
           uv run --directory actions/convert pytest -v .
 
   integrate-test:
+    needs: golangci-lint
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -68,6 +102,7 @@ jobs:
           go test -v ./...
 
   deploy-test:
+    needs: golangci-lint
     runs-on: ubuntu-latest
     permissions:
       contents: read
