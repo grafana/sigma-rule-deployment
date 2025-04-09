@@ -34,6 +34,7 @@ jobs:
           version: latest
           working-directory: actions/integrate
           args: --timeout=5m
+          install-mode: "goinstall"
 
       - name: Run golangci-lint on deploy project
         uses: golangci/golangci-lint-action@v7
@@ -41,6 +42,7 @@ jobs:
           version: latest
           working-directory: actions/deploy
           args: --timeout=5m
+          install-mode: "goinstall"
 
   convert-test:
     needs: golangci-lint
