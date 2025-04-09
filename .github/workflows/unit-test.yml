@@ -29,7 +29,7 @@ jobs:
           cache: false
 
       - name: Run golangci-lint on integrate project
-        uses: golangci/golangci-lint-action@v7
+        uses: golangci/golangci-lint-action@v6
         with:
           version: v1.64.8
           working-directory: actions/integrate
@@ -37,7 +37,7 @@ jobs:
           install-mode: "goinstall"
 
       - name: Run golangci-lint on deploy project
-        uses: golangci/golangci-lint-action@v7
+        uses: golangci/golangci-lint-action@v6
         with:
           version: v1.64.8
           working-directory: actions/deploy
