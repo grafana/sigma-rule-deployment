@@ -5,8 +5,10 @@ WORKDIR /src
 COPY ./deploy ./deploy
 COPY ./integrate ./integrate
 
-RUN cd deploy && go build -ldflags="-s -w" -o /build/deploy .
-RUN cd integrate && go build -ldflags="-s -w" -o /build/integrate .
+WORKDIR /src/deploy
+RUN go build -ldflags="-s -w" -o /build/deploy .
+WORKDIR /src/integrate
+RUN go build -ldflags="-s -w" -o /build/integrate .
 
 FROM python:3.10-alpine
 
@@ -18,9 +20,9 @@ COPY --from=builder /build/integrate /usr/local/bin/integrate
 COPY ./convert ./convert
 
 WORKDIR /app/convert
-RUN apk add --no-cache bash
-RUN python -m pip install --upgrade pip
-RUN pip install --disable-pip-version-check uv
+RUN apk add --no-cache bash=5.2.37-r0 && \
+    python -m pip install --no-cache-dir --upgrade pip==25.0.1 && \
+    pip install --no-cache-dir uv==0.6.13
 
 WORKDIR /app
 
