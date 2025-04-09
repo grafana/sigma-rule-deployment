@@ -2,6 +2,8 @@ name: Hadolint
 
 on:
   push:
+    branches:
+      - main
     paths:
       - "actions/Dockerfile"
   pull_request:
