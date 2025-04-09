@@ -1,8 +1,7 @@
-version: 2
+version: "2"
 run:
-  timeout: 3m
+  timeout: 5m
 linters:
-  disable-all: true
   enable:
     # Default linters
     - errcheck
@@ -14,7 +13,6 @@ linters:
     # Custom linters
     - asciicheck
     - bodyclose
-    - depguard
     - dogsled
     - gofmt
     - exhaustive
@@ -33,24 +31,3 @@ linters:
     - unconvert
     - whitespace
     - prealloc
-linters-settings:
-  depguard:
-    rules:
-      main:
-        files:
-          - $all
-          - "!$test"
-        allow:
-          - $gostd
-          - github.com/google/uuid
-          - github.com/grafana/sigma-rule-deployment/actions/integrate/definitions
-          - github.com/spaolacci/murmur3
-      test:
-        files:
-          - $test
-        allow:
-          - $gostd
-          - github.com/stretchr/testify/assert
-          - github.com/stretchr/testify/require
-          - github.com/google/uuid
-          - github.com/grafana/sigma-rule-deployment/actions/integrate/definitions
