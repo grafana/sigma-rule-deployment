@@ -2,6 +2,8 @@ name: ShellCheck Validation
 
 on:
   push:
+    branches:
+      - main
     paths:
       - "actions/entrypoint.sh"
   pull_request:
