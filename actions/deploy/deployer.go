@@ -8,11 +8,10 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
-
-	"path/filepath"
 
 	"gopkg.in/yaml.v3"
 )
@@ -29,8 +28,8 @@ type deploymentConfig struct {
 	alertPath       string
 	saToken         string
 	freshDeploy     bool
-	folderUid       string
-	orgId           int64
+	folderUID       string
+	orgID           int64
 	alertsToAdd     []string
 	alertsToRemove  []string
 	alertsToUpdate  []string
@@ -74,9 +73,9 @@ type Deployer struct {
 
 // Non exhaustive list of alert fields
 type Alert struct {
-	Uid       string `json:"uid"`
+	UID       string `json:"uid"`
 	Title     string `json:"title"`
-	FolderUid string `json:"folderUID"`
+	FolderUID string `json:"folderUID"`
 	RuleGroup string `json:"ruleGroup"`
 	OrgID     int64  `json:"orgID"`
 }
@@ -154,12 +153,12 @@ func (d *Deployer) Deploy(ctx context.Context) ([]string, []string, []string, er
 	// is recreated in a different file (with a different UID), to avoid conflicts on the alert title
 	// By deleting the old one first, we can then create the new one without issues
 	for _, alertFile := range d.config.alertsToRemove {
-		alertUid := getAlertUidFromFilename(filepath.Base(alertFile))
-		if alertUid == "" {
+		alertUID := getAlertUIDFromFilename(filepath.Base(alertFile))
+		if alertUID == "" {
 			err := fmt.Errorf("invalid alert filename: %s", alertFile)
 			return alertsCreated, alertsUpdated, alertsDeleted, err
 		}
-		uid, err := d.deleteAlert(ctx, alertUid)
+		uid, err := d.deleteAlert(ctx, alertUID)
 		if err != nil {
 			return alertsCreated, alertsUpdated, alertsDeleted, err
 		}
@@ -195,7 +194,7 @@ func (d *Deployer) Deploy(ctx context.Context) ([]string, []string, []string, er
 	// Process alert group interval updates
 	if len(d.groupsToUpdate) > 0 {
 		for group := range d.groupsToUpdate {
-			if err := d.updateAlertGroupInterval(ctx, d.config.folderUid, group, d.config.groupsIntervals[group]); err != nil {
+			if err := d.updateAlertGroupInterval(ctx, d.config.folderUID, group, d.config.groupsIntervals[group]); err != nil {
 				return alertsCreated, alertsUpdated, alertsDeleted, err
 			}
 		}
@@ -213,7 +212,7 @@ func (d *Deployer) writeOutput(alertsCreated []string, alertsUpdated []string, a
 	if githubOutput == "" {
 		return fmt.Errorf("GITHUB_OUTPUT is not set or empty")
 	}
-	f, err := os.OpenFile(githubOutput, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(githubOutput, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
 		return err
 	}
@@ -228,7 +227,7 @@ func (d *Deployer) writeOutput(alertsCreated []string, alertsUpdated []string, a
 	return nil
 }
 
-func (d *Deployer) LoadConfig(ctx context.Context) error {
+func (d *Deployer) LoadConfig(_ context.Context) error {
 	// Load the sigma rule deployer config file
 	configFile := os.Getenv("CONFIG_PATH")
 	if configFile == "" {
@@ -249,8 +248,8 @@ func (d *Deployer) LoadConfig(ctx context.Context) error {
 	d.config = deploymentConfig{
 		endpoint:        configYAML.DeployerConfig.GrafanaInstance,
 		alertPath:       filepath.Clean(configYAML.Folders.DeploymentPath),
-		orgId:           configYAML.IntegratorConfig.OrgID,
-		folderUid:       configYAML.IntegratorConfig.FolderID,
+		orgID:           configYAML.IntegratorConfig.OrgID,
+		folderUID:       configYAML.IntegratorConfig.FolderID,
 		groupsIntervals: make(map[string]int64),
 		timeout:         defaultRequestTimeout,
 	}
@@ -425,9 +424,9 @@ func (d *Deployer) createAlert(ctx context.Context, content string) (string, err
 		return "", fmt.Errorf("error creating alert: returned status %s", res.Status)
 	}
 
-	log.Printf("Alert %s (%s) created", alert.Uid, alert.Title)
+	log.Printf("Alert %s (%s) created", alert.UID, alert.Title)
 
-	return alert.Uid, nil
+	return alert.UID, nil
 }
 
 func (d *Deployer) updateAlert(ctx context.Context, content string) (string, error) {
@@ -439,9 +438,9 @@ func (d *Deployer) updateAlert(ctx context.Context, content string) (string, err
 	d.groupsToUpdate[alert.RuleGroup] = true
 
 	// Prepare the request
-	url := fmt.Sprintf("%sapi/v1/provisioning/alert-rules/%s", d.config.endpoint, alert.Uid)
+	url := fmt.Sprintf("%sapi/v1/provisioning/alert-rules/%s", d.config.endpoint, alert.UID)
 
-	req, err := http.NewRequestWithContext(ctx, "PUT", url, bytes.NewBuffer([]byte(content)))
+	req, err := http.NewRequestWithContext(ctx, "PUT", url, bytes.NewBufferString(content))
 	if err != nil {
 		return "", err
 	}
@@ -460,14 +459,14 @@ func (d *Deployer) updateAlert(ctx context.Context, content string) (string, err
 		return "", fmt.Errorf("error updating alert: returned status %s", res.Status)
 	}
 
-	log.Printf("Alert %s (%s) updated", alert.Uid, alert.Title)
+	log.Printf("Alert %s (%s) updated", alert.UID, alert.Title)
 
-	return alert.Uid, nil
+	return alert.UID, nil
 }
 
-func (d *Deployer) updateAlertGroupInterval(ctx context.Context, folderUid string, group string, interval int64) error {
-	log.Printf("Checking alert group interval for %s/%s to %d", folderUid, group, interval)
-	url := fmt.Sprintf("%sapi/v1/provisioning/folder/%s/rule-groups/%s", d.config.endpoint, folderUid, group)
+func (d *Deployer) updateAlertGroupInterval(ctx context.Context, folderUID string, group string, interval int64) error {
+	log.Printf("Checking alert group interval for %s/%s to %d", folderUID, group, interval)
+	url := fmt.Sprintf("%sapi/v1/provisioning/folder/%s/rule-groups/%s", d.config.endpoint, folderUID, group)
 
 	// Get the current alert group content
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
@@ -485,7 +484,7 @@ func (d *Deployer) updateAlertGroupInterval(ctx context.Context, folderUid strin
 	// Check the response
 	if res.StatusCode != http.StatusOK {
 		log.Printf("Can't find alert group. Status: %d", res.StatusCode)
-		return fmt.Errorf("error finding alert group %s/%s: returned status %s", folderUid, group, res.Status)
+		return fmt.Errorf("error finding alert group %s/%s: returned status %s", folderUID, group, res.Status)
 	}
 	resp := AlertRuleGroup{}
 	if err := json.NewDecoder(res.Body).Decode(&resp); err != nil {
@@ -493,18 +492,18 @@ func (d *Deployer) updateAlertGroupInterval(ctx context.Context, folderUid strin
 	}
 
 	if resp.Interval != interval {
-		log.Printf("Updating alert group interval for %s/%s to %d", folderUid, group, interval)
+		log.Printf("Updating alert group interval for %s/%s to %d", folderUID, group, interval)
 		resp.Interval = interval
 		content, err := json.Marshal(resp)
 		if err != nil {
 			log.Printf("Can't update alert group interval. Error: %s", err.Error())
-			return fmt.Errorf("error updating alert group interval %s/%s: returned error %s", folderUid, group, err.Error())
+			return fmt.Errorf("error updating alert group interval %s/%s: returned error %s", folderUID, group, err.Error())
 		}
 
 		// Note the implicit race condition - if a rule is added to the group between these two requests,
 		// they will be overwritten by this request. There's nothing we can do about this; alerting
 		// would need to update their API to allow the interval to be updated independent of the alert rules
-		req, err := http.NewRequestWithContext(ctx, "PUT", url, bytes.NewBuffer([]byte(content)))
+		req, err := http.NewRequestWithContext(ctx, "PUT", url, bytes.NewBuffer(content))
 		if err != nil {
 			return err
 		}
@@ -518,7 +517,7 @@ func (d *Deployer) updateAlertGroupInterval(ctx context.Context, folderUid strin
 
 		if res.StatusCode != http.StatusOK {
 			log.Printf("Can't update alert group interval. Status: %d", res.StatusCode)
-			return fmt.Errorf("error updating alert group interval %s/%s: returned status %s", folderUid, group, res.Status)
+			return fmt.Errorf("error updating alert group interval %s/%s: returned status %s", folderUID, group, res.Status)
 		}
 	}
 
@@ -554,7 +553,7 @@ func (d *Deployer) deleteAlert(ctx context.Context, uid string) (string, error) 
 }
 
 func (d *Deployer) listAlerts(ctx context.Context) ([]string, error) {
-	if d.config.folderUid == "" {
+	if d.config.folderUID == "" {
 		return nil, fmt.Errorf("folder UID is not set")
 	}
 
@@ -589,8 +588,8 @@ func (d *Deployer) listAlerts(ctx context.Context) ([]string, error) {
 
 	// Get the list of alerts in the folder we're deploying to
 	for _, alert := range alertsReturned {
-		if alert.FolderUid == d.config.folderUid && alert.OrgID == d.config.orgId {
-			alertList = append(alertList, alert.Uid)
+		if alert.FolderUID == d.config.folderUID && alert.OrgID == d.config.orgID {
+			alertList = append(alertList, alert.UID)
 		}
 	}
 
@@ -605,7 +604,7 @@ func parseAlert(content string) (Alert, error) {
 		return Alert{}, err
 	}
 	// Sanity check to ensure we've read an alert file
-	if alert.Uid == "" || alert.Title == "" || alert.FolderUid == "" {
+	if alert.UID == "" || alert.Title == "" || alert.FolderUID == "" {
 		return Alert{}, fmt.Errorf("invalid alert file")
 	}
 
@@ -650,7 +649,7 @@ func (d *Deployer) fakeAlertFilename(uid string) string {
 	return filepath.Join(d.config.alertPath, filename)
 }
 
-func getAlertUidFromFilename(filename string) string {
+func getAlertUIDFromFilename(filename string) string {
 	matches := regexAlertFilename.FindStringSubmatch(filename)
 	if len(matches) != 2 {
 		return ""
