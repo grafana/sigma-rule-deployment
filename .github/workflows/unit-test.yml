@@ -31,7 +31,7 @@ jobs:
       - name: Run golangci-lint on integrate project
         uses: golangci/golangci-lint-action@v7
         with:
-          version: latest
+          version: v1.64.8
           working-directory: actions/integrate
           args: --timeout=5m
           install-mode: "goinstall"
@@ -39,7 +39,7 @@ jobs:
       - name: Run golangci-lint on deploy project
         uses: golangci/golangci-lint-action@v7
         with:
-          version: latest
+          version: v1.64.8
           working-directory: actions/deploy
           args: --timeout=5m
           install-mode: "goinstall"
