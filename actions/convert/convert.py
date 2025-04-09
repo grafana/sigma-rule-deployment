@@ -5,7 +5,6 @@ import fnmatch
 import glob
 import orjson as json
 import os
-import shutil
 import traceback
 from pathlib import Path
 from typing import Any
