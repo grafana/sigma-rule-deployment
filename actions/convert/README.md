@@ -13,7 +13,7 @@
 | `all_rules`               | Whether to convert all rules, regardless of changes (`true/false`).                                                                   | No       | `false`                 |
 | `actions_username`        | The username of the github actions bot committer.                                                                                     | No       | `"github-actions[bot]"` |
 | `changed_files_from_base` | Calculate changes from PR base.                                                                                                       | No       | `"false"`               |
-| `conversion_path`         | The path where the conversions will be output to                                                                                      | No       | `"./conversions"`       |
+| `conversion_path`         | The path where the conversions will be output to                                                                                      | No       | `"conversions"`         |
 
 ## Usage
 
