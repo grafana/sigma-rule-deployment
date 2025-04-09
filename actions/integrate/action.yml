@@ -102,7 +102,7 @@ runs:
       with:
         script: |
           const output = JSON.parse(process.env.COMMIT);
-          console.log(output.commit);
+          console.log(`Last commit or base ref: ${output.commit}`);
           return output.commit;
         result-encoding: string
     - name: Select First Commit
@@ -113,7 +113,7 @@ runs:
       with:
         script: |
           const output = JSON.parse(process.env.COMMIT);
-          console.log(output.first_commit);
+          console.log(`PR First Commit: ${output.first_commit}`);
           return output.first_commit;
         result-encoding: string
     - name: Select Last Commit
@@ -124,7 +124,7 @@ runs:
       with:
         script: |
           const output = JSON.parse(process.env.COMMIT);
-          console.log(output.last_commit);
+          console.log(`PR Last Commit by automation: ${output.last_commit}`);
           return output.last_commit;
         result-encoding: string
     - name: Calculate Change Files
