@@ -7,8 +7,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from dynaconf.utils import DynaconfDict
 
-from . import convert
-from .convert import convert_rules, is_path, is_safe_path, load_rules
+from convert import convert
+from convert.convert import convert_rules, is_path, is_safe_path, load_rules
 
 
 @pytest.fixture
