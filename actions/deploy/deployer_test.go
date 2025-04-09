@@ -164,12 +164,7 @@ func TestUpdateAlert(t *testing.T) {
 	ctx := context.Background()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/api/v1/provisioning/alert-rules/") {
-			uid := strings.TrimPrefix(r.URL.Path, "/api/v1/provisioning/alert-rules/")
-			if uid != "abcd123" {
-				t.Errorf("Expected to request '/api/v1/provisioning/alert-rules/abcd123', got: %s", r.URL.Path)
-			}
-		} else {
+		if r.URL.Path != "/api/v1/provisioning/alert-rules/abcd123" {
 			t.Errorf("Expected to request '/api/v1/provisioning/alert-rules/abcd123', got: %s", r.URL.Path)
 		}
 		if r.Header.Get("Content-Type") != contentTypeJSON {
@@ -185,11 +180,11 @@ func TestUpdateAlert(t *testing.T) {
 		// Read the request body
 		body, err := io.ReadAll(r.Body)
 		assert.NoError(t, err)
+		w.WriteHeader(http.StatusOK)
 		if _, err := w.Write(body); err != nil {
 			t.Errorf("failed to write response body: %v", err)
 			return
 		}
-		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
 
@@ -227,11 +222,11 @@ func TestCreateAlert(t *testing.T) {
 		// Read the request body
 		body, err := io.ReadAll(r.Body)
 		assert.NoError(t, err)
+		w.WriteHeader(http.StatusCreated)
 		if _, err := w.Write(body); err != nil {
 			t.Errorf("failed to write response body: %v", err)
 			return
 		}
-		w.WriteHeader(http.StatusCreated)
 	}))
 	defer server.Close()
 
