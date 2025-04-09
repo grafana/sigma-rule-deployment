@@ -34,7 +34,7 @@ func (m *MockDatasourceQuery) AddMockResponse(query string, response []byte) {
 	m.mockResponses[query] = response
 }
 
-func (m *MockDatasourceQuery) GetDatasource(dsName, baseURL, apiKey string, timeout time.Duration) (*GrafanaDatasource, error) {
+func (m *MockDatasourceQuery) GetDatasource(dsName, _, _ string, _ time.Duration) (*GrafanaDatasource, error) {
 	m.dsQueries = append(m.dsQueries, dsName)
 
 	if ds, exists := m.mockDatasources[dsName]; exists {
@@ -49,7 +49,7 @@ func (m *MockDatasourceQuery) GetDatasource(dsName, baseURL, apiKey string, time
 	}, nil
 }
 
-func (m *MockDatasourceQuery) ExecuteQuery(query, dsName, baseURL, apiKey, from, to string, timeout time.Duration) ([]byte, error) {
+func (m *MockDatasourceQuery) ExecuteQuery(query, _, _, _, _, _ string, _ time.Duration) ([]byte, error) {
 	m.execQueries = append(m.execQueries, query)
 
 	if response, exists := m.mockResponses[query]; exists {

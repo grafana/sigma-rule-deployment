@@ -1,0 +1,56 @@
+version: 2
+run:
+  timeout: 3m
+linters:
+  disable-all: true
+  enable:
+    # Default linters
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    # Custom linters
+    - asciicheck
+    - bodyclose
+    - depguard
+    - dogsled
+    - gofmt
+    - exhaustive
+    - forcetypeassert
+    - goconst
+    - gocritic
+    - gofumpt
+    - goimports
+    - goprintffuncname
+    - gosec
+    - misspell
+    - nakedret
+    - nilerr
+    - reassign
+    - revive
+    - unconvert
+    - whitespace
+    - prealloc
+linters-settings:
+  depguard:
+    rules:
+      main:
+        files:
+          - $all
+          - "!$test"
+        allow:
+          - $gostd
+          - github.com/google/uuid
+          - github.com/grafana/sigma-rule-deployment/actions/integrate/definitions
+          - github.com/spaolacci/murmur3
+      test:
+        files:
+          - $test
+        allow:
+          - $gostd
+          - github.com/stretchr/testify/assert
+          - github.com/stretchr/testify/require
+          - github.com/google/uuid
+          - github.com/grafana/sigma-rule-deployment/actions/integrate/definitions

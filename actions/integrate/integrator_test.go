@@ -514,16 +514,16 @@ func TestIntegratorRun(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create temporary test directory
 			testDir := filepath.Join("testdata", "test_run", tt.name)
-			err := os.MkdirAll(testDir, 0755)
+			err := os.MkdirAll(testDir, 0o755)
 			assert.NoError(t, err)
 			defer os.RemoveAll(testDir)
 
 			// Create conversion and deployment subdirectories
 			convPath := filepath.Join(testDir, "conv")
 			deployPath := filepath.Join(testDir, "deploy")
-			err = os.MkdirAll(convPath, 0755)
+			err = os.MkdirAll(convPath, 0o755)
 			assert.NoError(t, err)
-			err = os.MkdirAll(deployPath, 0755)
+			err = os.MkdirAll(deployPath, 0o755)
 			assert.NoError(t, err)
 
 			// Create test configuration
@@ -553,19 +553,19 @@ func TestIntegratorRun(t *testing.T) {
 			convBytes, err := json.Marshal(tt.convOutput)
 			assert.NoError(t, err)
 			convFile := filepath.Join(convPath, tt.conversionName+".json")
-			err = os.WriteFile(convFile, convBytes, 0644)
+			err = os.WriteFile(convFile, convBytes, 0o600)
 			assert.NoError(t, err)
 
 			// For the remove test case, create a deployment file that should be removed
 			if len(tt.removedFiles) > 0 {
 				convID, _, err := summariseSigmaRules(tt.convOutput.Rules)
 				assert.NoError(t, err)
-				ruleUid := getRuleUid(tt.conversionName, convID)
-				deployFile := filepath.Join(deployPath, fmt.Sprintf("alert_rule_%s_%s_%s.json", tt.conversionName, tt.conversionName, ruleUid))
+				ruleUID := getRuleUID(tt.conversionName, convID)
+				deployFile := filepath.Join(deployPath, fmt.Sprintf("alert_rule_%s_%s_%s.json", tt.conversionName, tt.conversionName, ruleUID))
 
 				// Create a dummy alert rule file
 				dummyRule := &definitions.ProvisionedAlertRule{
-					UID:       ruleUid,
+					UID:       ruleUID,
 					Title:     tt.wantTitles,
 					RuleGroup: "Test Rules",
 				}
@@ -600,8 +600,8 @@ func TestIntegratorRun(t *testing.T) {
 			convID, _, err := summariseSigmaRules(tt.convOutput.Rules)
 			assert.NoError(t, err)
 
-			ruleUid := getRuleUid(tt.conversionName, convID)
-			expectedFile := filepath.Join(deployPath, fmt.Sprintf("alert_rule_%s_%s_%s.json", tt.conversionName, tt.conversionName, ruleUid))
+			ruleUID := getRuleUID(tt.conversionName, convID)
+			expectedFile := filepath.Join(deployPath, fmt.Sprintf("alert_rule_%s_%s_%s.json", tt.conversionName, tt.conversionName, ruleUID))
 
 			// For removed files, verify the file was deleted
 			if len(tt.removedFiles) > 0 {
@@ -620,7 +620,7 @@ func TestIntegratorRun(t *testing.T) {
 			assert.NoError(t, err)
 
 			// Verify rule properties
-			assert.Equal(t, ruleUid, rule.UID)
+			assert.Equal(t, ruleUID, rule.UID)
 			assert.Equal(t, tt.wantTitles, rule.Title)
 			assert.Equal(t, "Test Rules", rule.RuleGroup)
 			assert.Equal(t, "test-datasource", rule.Data[0].DatasourceUID)
@@ -652,7 +652,7 @@ func (t *testDatasourceQuery) AddMockResponse(query string, response []byte) {
 	t.mockResponses[query] = response
 }
 
-func (t *testDatasourceQuery) GetDatasource(dsName, baseURL, apiKey string, timeout time.Duration) (*GrafanaDatasource, error) {
+func (t *testDatasourceQuery) GetDatasource(dsName, _, _ string, _ time.Duration) (*GrafanaDatasource, error) {
 	t.datasourceLog = append(t.datasourceLog, dsName)
 
 	// For tests, always return a consistent datasource
@@ -663,7 +663,7 @@ func (t *testDatasourceQuery) GetDatasource(dsName, baseURL, apiKey string, time
 	}, nil
 }
 
-func (t *testDatasourceQuery) ExecuteQuery(query, dsName, baseURL, apiKey, from, to string, timeout time.Duration) ([]byte, error) {
+func (t *testDatasourceQuery) ExecuteQuery(query, dsName, _, _, _, _ string, _ time.Duration) ([]byte, error) {
 	t.queryLog = append(t.queryLog, query)
 	t.datasourceLog = append(t.datasourceLog, dsName)
 
@@ -704,16 +704,16 @@ func TestIntegratorWithQueryTesting(t *testing.T) {
 
 			// Create temporary test directory
 			testDir := filepath.Join("testdata", "test_query", tt.name)
-			err := os.MkdirAll(testDir, 0755)
+			err := os.MkdirAll(testDir, 0o755)
 			assert.NoError(t, err)
 			defer os.RemoveAll(testDir)
 
 			// Create conversion and deployment subdirectories
 			convPath := filepath.Join(testDir, "conv")
 			deployPath := filepath.Join(testDir, "deploy")
-			err = os.MkdirAll(convPath, 0755)
+			err = os.MkdirAll(convPath, 0o755)
 			assert.NoError(t, err)
-			err = os.MkdirAll(deployPath, 0755)
+			err = os.MkdirAll(deployPath, 0o755)
 			assert.NoError(t, err)
 
 			// Create test conversion output
@@ -764,7 +764,7 @@ func TestIntegratorWithQueryTesting(t *testing.T) {
 			convBytes, err := json.Marshal(convOutput)
 			assert.NoError(t, err)
 			convFile := filepath.Join(convPath, "test_loki_test_file_1.json")
-			err = os.WriteFile(convFile, convBytes, 0644)
+			err = os.WriteFile(convFile, convBytes, 0o600)
 			assert.NoError(t, err)
 
 			// Create mock query executor
@@ -851,8 +851,8 @@ func TestIntegratorWithQueryTesting(t *testing.T) {
 			// Verify alert rule file was created
 			convID, _, err := summariseSigmaRules(convOutput.Rules)
 			assert.NoError(t, err)
-			ruleUid := getRuleUid("test_loki", convID)
-			expectedFile := filepath.Join(deployPath, fmt.Sprintf("alert_rule_test_loki_test_file_1_%s.json", ruleUid))
+			ruleUID := getRuleUID("test_loki", convID)
+			expectedFile := filepath.Join(deployPath, fmt.Sprintf("alert_rule_test_loki_test_file_1_%s.json", ruleUID))
 			_, err = os.Stat(expectedFile)
 			assert.NoError(t, err)
 
