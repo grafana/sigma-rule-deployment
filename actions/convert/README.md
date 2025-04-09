@@ -4,15 +4,16 @@
 
 ## Inputs
 
-| Name               | Description                                                                                                                           | Required | Default         |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------- | -------- | --------------- |
-| `config_path`      | Path to the Sigma conversion config file. An example config file is available in the config directory at the root of this repository. | Yes      | `./config.yaml` |
-| `plugin_packages`  | Comma-separated list of Sigma CLI plugin packages to install.                                                                         | No       | `""`            |
-| `render_traceback` | Whether to render the traceback in the output (`true/false`).                                                                         | No       | `false`         |
-| `pretty_print`     | Whether to pretty print the converted files (`true/false`).                                                                           | No       | `false`         |
-| `all_rules`        | Whether to convert all rules, regardless of changes (`true/false`).                                                                   | No       | `false`         |
-| `changed_files`    | Space-separated list of changed files to process.                                                                                     | No       | `""`            |
-| `deleted_files`    | Space-separated list of deleted files to process.                                                                                     | No       | `""`            |
+| Name                      | Description                                                                                                                           | Required | Default                 |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | -------- | ----------------------- |
+| `config_path`             | Path to the Sigma conversion config file. An example config file is available in the config directory at the root of this repository. | Yes      | `./config.yaml`         |
+| `plugin_packages`         | Comma-separated list of Sigma CLI plugin packages to install.                                                                         | No       | `""`                    |
+| `render_traceback`        | Whether to render the traceback in the output (`true/false`).                                                                         | No       | `false`                 |
+| `pretty_print`            | Whether to pretty print the converted files (`true/false`).                                                                           | No       | `false`                 |
+| `all_rules`               | Whether to convert all rules, regardless of changes (`true/false`).                                                                   | No       | `false`                 |
+| `actions_username`        | The username of the github actions bot committer.                                                                                     | No       | `"github-actions[bot]"` |
+| `changed_files_from_base` | Calculate changes from PR base.                                                                                                       | No       | `"false"`               |
+| `conversion_path`         | The path where the conversions will be output to                                                                                      | No       | `"conversions"`         |
 
 ## Usage
 

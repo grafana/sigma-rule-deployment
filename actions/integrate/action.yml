@@ -27,14 +27,22 @@ inputs:
     description: "Whether to integrate all rules"
     required: false
     default: "false"
-  changed_files:
-    description: "The changed files to integrate"
+  conversion_path:
+    description: "The path to the conversion folder"
     required: false
-    default: ""
-  deleted_files:
-    description: "The deleted files to integrate"
+    default: "conversions"
+  deployment_path:
+    description: "The path to the deployment folder"
     required: false
-    default: ""
+    default: "deployments"
+  changed_files_from_base:
+    description: "Whether to use the changed files from the base branch"
+    required: false
+    default: "false"
+  actions_username:
+    description: "The username of the actions user"
+    required: false
+    default: "github-actions[bot]"
 
 outputs:
   rules_integrated:
@@ -53,6 +61,85 @@ runs:
         registry: ghcr.io
         username: ${{ github.actor }}
         password: ${{ github.token }}
+    - name: Get Last Commit or base_ref
+      if: ${{ github.event_name == 'pull_request' && inputs.changed_files_from_base == 'false' }}
+      id: commits
+      uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
+      env:
+        ACTIONS_USERNAME: ${{ inputs.actions_username }}
+      with:
+        script: |
+          const iterator = await github.paginate(github.rest.pulls.listCommits.endpoint.merge({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            pull_number: context.payload.pull_request.number,
+            per_page: 1
+          }));
+          let commit = "";
+          let first_commit = "";
+          let last_commit = "";
+          for (const remote_commit of iterator) {
+            if (commit === "" && remote_commit.parents.length > 0) {
+              commit = remote_commit.parents[0].sha;
+              first_commit = remote_commit.sha;
+            }
+            if (remote_commit.commit.committer.name === process.env.ACTIONS_USERNAME) {
+              commit = remote_commit.sha;
+              last_commit = remote_commit.sha;
+            }
+          }
+
+          return {
+            commit,
+            first_commit,
+            last_commit
+          };
+    - name: Select Commit
+      id: previous-commit
+      uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
+      env:
+        COMMIT: ${{ steps.commits.outputs.result }}
+      with:
+        script: |
+          const output = JSON.parse(process.env.COMMIT);
+          console.log(`Last commit or base ref: ${output.commit}`);
+          return output.commit;
+        result-encoding: string
+    - name: Select First Commit
+      id: first-commit
+      uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
+      env:
+        COMMIT: ${{ steps.commits.outputs.result }}
+      with:
+        script: |
+          const output = JSON.parse(process.env.COMMIT);
+          console.log(`PR First Commit: ${output.first_commit}`);
+          return output.first_commit;
+        result-encoding: string
+    - name: Select Last Commit
+      id: last-commit
+      uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
+      env:
+        COMMIT: ${{ steps.commits.outputs.result }}
+      with:
+        script: |
+          const output = JSON.parse(process.env.COMMIT);
+          console.log(`PR Last Commit by automation: ${output.last_commit}`);
+          return output.last_commit;
+        result-encoding: string
+    - name: Calculate Change Files
+      id: changed-files
+      shell: bash
+      env:
+        CONVERSION_PATH: ${{ inputs.conversion_path }}
+        BASE_REF: ${{ steps.previous-commit.outputs.result || github.base_ref || github.event.pull_request.base.ref || 'origin/HEAD' }}
+      run: |
+        git fetch
+        CHANGED_FILES=$(git diff "$BASE_REF" --name-only --diff-filter=ACMR -- "$CONVERSION_PATH")
+        DELETED_FILES=$(git diff "$BASE_REF" --name-only --diff-filter=D -- "$CONVERSION_PATH")
+        echo all_changed_files=${CHANGED_FILES//\\n/} >> "$GITHUB_OUTPUT"
+        echo deleted_files=${DELETED_FILES//\\n/} >> "$GITHUB_OUTPUT"
+
     - name: Run Sigma Rule Integrator
       id: integrate
       shell: bash
@@ -60,8 +147,8 @@ runs:
         CONFIG_PATH: ${{ inputs.config_path }}
         GRAFANA_SA_TOKEN: ${{ inputs.grafana_sa_token }}
         PRETTY_PRINT: ${{ inputs.pretty_print }}
-        CHANGED_FILES: ${{ inputs.changed_files }}
-        DELETED_FILES: ${{ inputs.deleted_files }}
+        CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
+        DELETED_FILES: ${{ steps.changed-files.outputs.deleted_files }}
         ALL_RULES: ${{ inputs.all_rules }}
         ACTION_REF: ${{ github.action_ref }}
       run: |
@@ -82,3 +169,104 @@ runs:
       shell: bash
       run: |
         mv github-output $GITHUB_OUTPUT
+    
+    - name: Generate Comment Data
+      id: generate-comment-data
+      shell: bash
+      env:
+        BASE_REF: ${{ steps.last-commit.outputs.result || steps.first-commit.outputs.result || github.base_ref || github.event.pull_request.base.ref || 'origin/HEAD' }}
+        DEPLOYMENT_PATH: ${{ inputs.deployment_path }}
+      run: |
+        CHANGED_FILES=$(git diff "$BASE_REF" --name-only --diff-filter=ACMR -- "$DEPLOYMENT_PATH")
+        DELETED_FILES=$(git diff "$BASE_REF" --name-only --diff-filter=D -- "$DEPLOYMENT_PATH")
+
+        echo $CHANGED_FILES
+        echo $DELETED_FILES
+
+        echo changed_files=${CHANGED_FILES//\\n/} >> $GITHUB_OUTPUT
+        echo deleted_files=${DELETED_FILES//\\n/} >> $GITHUB_OUTPUT
+
+    - name: Comment Integrations
+      id: comment-integrations
+      uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
+      env:
+        HEAD_REF: ${{ steps.first-commit.outputs.result || github.head_ref || github.event.pull_request.head.ref || 'HEAD' }}
+        CHANGED_FILES: ${{ steps.generate-comment-data.outputs.changed_files }}
+        DELETED_FILES: ${{ steps.generate-comment-data.outputs.deleted_files }}
+        TEST_RESULTS: ${{ steps.set-output.outputs.test_query_results }}
+      with:
+        script: |
+          const changedFiles = process.env.CHANGED_FILES.split(' ').filter(file => file.trim() !== '');
+          const deletedFiles = process.env.DELETED_FILES.split(' ').filter(file => file.trim() !== '');
+          let testResults = {};
+          try {
+            testResults = JSON.parse(process.env.TEST_RESULTS);
+          } catch (e) {
+            console.log("No test results found");
+          }
+
+          let resultTable = `| File name | Link | Result count | Errors |
+          | --- | --- | --- | --- |
+          `;
+
+          for (const [key, value] of Object.entries(testResults)) {
+            for (const result of value) {
+              resultTable += `| ${key} | [See in Explore](${result.link}) | ${result.stats.count} | ${result.stats.errors.length} |
+              `;
+            }
+          }
+
+          const associatedPrs = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            commit_sha: process.env.HEAD_REF,
+          });
+
+          if (associatedPrs.data.length > 0) {
+            for (const pr of associatedPrs.data) {
+              const comment = `
+          ### Sigma Rule Integrations
+
+          | Changed | Deleted |
+          | --- | --- |
+          | ${changedFiles.length} | ${deletedFiles.length} |
+
+          ### Changed Files
+
+          ${changedFiles.length ? changedFiles.map(file => `- [${file}](https://github.com/${context.repo.owner}/${context.repo.repo}/blob/${pr.head.ref}/${file})`).join("\n") : "No files changed"}
+
+          ### Deleted Files
+
+          ${deletedFiles.length ? deletedFiles.map(file => `- ${file}`).join("\n") : "No files deleted"}
+
+          ### Test Results
+
+          ${resultTable}
+          `;
+
+              const nodeId = pr.node_id;
+
+              const query = `mutation AddComment($body: String!, $subjectId: ID!) {
+                addComment(input: {
+                  body: $body,
+                  subjectId: $subjectId,
+                }) {
+                  subject {
+                    id
+                    ... on PullRequest {
+                      number
+                    }
+                  } 
+                }
+              }`
+
+              const variables = {
+                body: comment,
+                subjectId: nodeId
+              };
+
+              await github.graphql(query, variables);
+            }
+          }
+
+          return '';
