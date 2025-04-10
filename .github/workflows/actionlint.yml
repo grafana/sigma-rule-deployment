@@ -27,5 +27,5 @@ jobs:
         uses: raven-actions/actionlint@v2
         with:
           files: ".github/workflows/*.yml,.github/workflows/*.yaml"
-          fail-on-error: false
+          fail-on-error: true
           cache: false
