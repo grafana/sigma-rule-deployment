@@ -13,73 +13,79 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+const (
+	contentTypeJSON = "application/json"
+	//nolint:gosec
+	authToken = "Bearer my-test-token"
+)
+
 func TestGetAlertUidFromFileName(t *testing.T) {
-	assert.Equal(t, "abcd123", getAlertUidFromFilename("alert_rule_conversion_test_file_1_abcd123.json"))
-	assert.Equal(t, "abcd123", getAlertUidFromFilename("alert_rule_conversion_name_test_file_2_abcd123.json"))
-	assert.Equal(t, "uAaCwL1wlmA", getAlertUidFromFilename("alert_rule_conversion_test_file_3_uAaCwL1wlmA.json"))
+	assert.Equal(t, "abcd123", getAlertUIDFromFilename("alert_rule_conversion_test_file_1_abcd123.json"))
+	assert.Equal(t, "abcd123", getAlertUIDFromFilename("alert_rule_conversion_name_test_file_2_abcd123.json"))
+	assert.Equal(t, "uAaCwL1wlmA", getAlertUIDFromFilename("alert_rule_conversion_test_file_3_uAaCwL1wlmA.json"))
 }
 
 func TestParseAlert(t *testing.T) {
 	tests := []struct {
 		name           string
 		content        string
-		wantAlertUid   string
-		wantFolderUid  string
-		wantOrdId      int64
+		wantAlertUID   string
+		wantFolderUID  string
+		wantOrdID      int64
 		wantAlertTitle string
 		wantError      bool
 	}{
 		{
 			name:           "valid alert",
 			content:        `{"uid":"abcd123","title":"Test alert", "folderUID": "efgh456", "orgID": 23}`,
-			wantAlertUid:   "abcd123",
-			wantFolderUid:  "efgh456",
-			wantOrdId:      23,
+			wantAlertUID:   "abcd123",
+			wantFolderUID:  "efgh456",
+			wantOrdID:      23,
 			wantAlertTitle: "Test alert",
 			wantError:      false,
 		},
 		{
 			name:           "invalid alert title",
 			content:        `{"uid":"abcd123""`,
-			wantAlertUid:   "",
-			wantFolderUid:  "",
-			wantOrdId:      0,
+			wantAlertUID:   "",
+			wantFolderUID:  "",
+			wantOrdID:      0,
 			wantAlertTitle: "",
 			wantError:      true,
 		},
 		{
 			name:           "invalid alert uid",
 			content:        `{"title":"Test alert"}`,
-			wantAlertUid:   "",
-			wantFolderUid:  "",
-			wantOrdId:      0,
+			wantAlertUID:   "",
+			wantFolderUID:  "",
+			wantOrdID:      0,
 			wantAlertTitle: "",
 			wantError:      true,
 		},
 		{
 			name:           "invalid folder uid",
 			content:        `{"uid":"abcd123", "title":"Test alert"}`,
-			wantAlertUid:   "",
-			wantFolderUid:  "",
-			wantOrdId:      0,
+			wantAlertUID:   "",
+			wantFolderUID:  "",
+			wantOrdID:      0,
 			wantAlertTitle: "",
 			wantError:      true,
 		},
 		{
 			name:           "empty alert",
 			content:        `{}`,
-			wantAlertUid:   "",
-			wantFolderUid:  "",
-			wantOrdId:      0,
+			wantAlertUID:   "",
+			wantFolderUID:  "",
+			wantOrdID:      0,
 			wantAlertTitle: "",
 			wantError:      true,
 		},
 		{
 			name:           "extra fields",
 			content:        `{"uid":"abcd123","title":"Test alert", "folderUID": "efgh456", "orgID": 23, "extra":"field"}`,
-			wantAlertUid:   "abcd123",
-			wantFolderUid:  "efgh456",
-			wantOrdId:      23,
+			wantAlertUID:   "abcd123",
+			wantFolderUID:  "efgh456",
+			wantOrdID:      23,
 			wantAlertTitle: "Test alert",
 			wantError:      false,
 		},
@@ -92,10 +98,10 @@ func TestParseAlert(t *testing.T) {
 				assert.NotNil(t, err)
 			} else {
 				assert.NoError(t, err)
-				assert.Equal(t, tt.wantAlertUid, alert.Uid)
+				assert.Equal(t, tt.wantAlertUID, alert.UID)
 				assert.Equal(t, tt.wantAlertTitle, alert.Title)
-				assert.Equal(t, tt.wantFolderUid, alert.FolderUid)
-				assert.Equal(t, tt.wantOrdId, alert.OrgID)
+				assert.Equal(t, tt.wantFolderUID, alert.FolderUID)
+				assert.Equal(t, tt.wantOrdID, alert.OrgID)
 			}
 		})
 	}
@@ -158,21 +164,16 @@ func TestUpdateAlert(t *testing.T) {
 	ctx := context.Background()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/api/v1/provisioning/alert-rules/") {
-			uid := strings.TrimPrefix(r.URL.Path, "/api/v1/provisioning/alert-rules/")
-			if uid != "abcd123" {
-				t.Errorf("Expected to request '/api/v1/provisioning/alert-rules/abcd123', got: %s", r.URL.Path)
-			}
-		} else {
+		if r.URL.Path != "/api/v1/provisioning/alert-rules/abcd123" {
 			t.Errorf("Expected to request '/api/v1/provisioning/alert-rules/abcd123', got: %s", r.URL.Path)
 		}
-		if r.Header.Get("Content-Type") != "application/json" {
+		if r.Header.Get("Content-Type") != contentTypeJSON {
 			t.Errorf("Expected Content-Typet: application/json header, got: %s", r.Header.Get("Content-Type"))
 		}
 		if r.Method != http.MethodPut {
 			t.Errorf("Expected PUT method, got: %s", r.Method)
 		}
-		if r.Header.Get("Authorization") != "Bearer my-test-token" {
+		if r.Header.Get("Authorization") != authToken {
 			t.Errorf("Invalid Authorization header")
 		}
 		defer r.Body.Close()
@@ -180,7 +181,10 @@ func TestUpdateAlert(t *testing.T) {
 		body, err := io.ReadAll(r.Body)
 		assert.NoError(t, err)
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(body))
+		if _, err := w.Write(body); err != nil {
+			t.Errorf("failed to write response body: %v", err)
+			return
+		}
 	}))
 	defer server.Close()
 
@@ -205,13 +209,13 @@ func TestCreateAlert(t *testing.T) {
 		if r.URL.Path != "/api/v1/provisioning/alert-rules" {
 			t.Errorf("Expected to request '/api/v1/provisioning/alert-rules', got: %s", r.URL.Path)
 		}
-		if r.Header.Get("Content-Type") != "application/json" {
+		if r.Header.Get("Content-Type") != contentTypeJSON {
 			t.Errorf("Expected Content-Typet: application/json header, got: %s", r.Header.Get("Content-Type"))
 		}
 		if r.Method != http.MethodPost {
 			t.Errorf("Expected POST method, got: %s", r.Method)
 		}
-		if r.Header.Get("Authorization") != "Bearer my-test-token" {
+		if r.Header.Get("Authorization") != authToken {
 			t.Errorf("Invalid Authorization header")
 		}
 		defer r.Body.Close()
@@ -219,7 +223,10 @@ func TestCreateAlert(t *testing.T) {
 		body, err := io.ReadAll(r.Body)
 		assert.NoError(t, err)
 		w.WriteHeader(http.StatusCreated)
-		w.Write([]byte(body))
+		if _, err := w.Write(body); err != nil {
+			t.Errorf("failed to write response body: %v", err)
+			return
+		}
 	}))
 	defer server.Close()
 
@@ -252,7 +259,7 @@ func TestDeleteAlert(t *testing.T) {
 		if r.Method != http.MethodDelete {
 			t.Errorf("Expected DELETE method, got: %s", r.Method)
 		}
-		if r.Header.Get("Authorization") != "Bearer my-test-token" {
+		if r.Header.Get("Authorization") != authToken {
 			t.Errorf("Invalid Authorization header")
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -279,31 +286,31 @@ func TestListAlerts(t *testing.T) {
 		{
 			"uid": "abcd123",
 			"title": "Test alert",
-			"folderUid": "efgh456",
+			"folderUID": "efgh456",
 			"orgID": 23
 		},
 		{
 			"uid": "ijkl456",
 			"title": "Test alert 2",
-			"folderUid": "mnop789",
+			"folderUID": "mnop789",
 			"orgID": 23
 		},
 		{
 			"uid": "qwerty123",
 			"title": "Test alert 3",
-			"folderUid": "efgh456",
+			"folderUID": "efgh456",
 			"orgID": 23
 		},
 		{
 			"uid": "test123123",
 			"title": "Test alert 4",
-			"folderUid": "efgh456",
+			"folderUID": "efgh456",
 			"orgID": 1
 		},
 		{
 			"uid": "newalert1",
 			"title": "Test alert 5",
-			"folderUid": "efgh456",
+			"folderUID": "efgh456",
 			"orgID": 23
 		}
 	]`
@@ -312,21 +319,23 @@ func TestListAlerts(t *testing.T) {
 		if r.URL.Path != "/api/v1/provisioning/alert-rules" {
 			t.Errorf("Expected to request '/api/v1/provisioning/alert-rules', got: %s", r.URL.Path)
 		}
-		if r.Header.Get("Content-Type") != "application/json" {
+		if r.Header.Get("Content-Type") != contentTypeJSON {
 			t.Errorf("Expected Content-Typet: application/json header, got: %s", r.Header.Get("Content-Type"))
 		}
-		if r.Method != http.MethodGet {
-			t.Errorf("Expected GET method, got: %s", r.Method)
+		switch r.Method {
+		case http.MethodGet:
+			// Validate authorization header
+			assert.Equal(t, authToken, r.Header.Get("Authorization"))
+
+			// Return a list of alerts
+			w.WriteHeader(http.StatusOK)
+			if _, err := w.Write([]byte(alertList)); err != nil {
+				t.Errorf("failed to write alert list: %v", err)
+				return
+			}
+		default:
+			t.Errorf("Unexpected method: %s", r.Method)
 		}
-		if r.Header.Get("Authorization") != "Bearer my-test-token" {
-			t.Errorf("Invalid Authorization header")
-		}
-		defer r.Body.Close()
-		// Read the request body
-		_, err := io.ReadAll(r.Body)
-		assert.NoError(t, err)
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(alertList))
 	}))
 	defer server.Close()
 
@@ -334,8 +343,8 @@ func TestListAlerts(t *testing.T) {
 		config: deploymentConfig{
 			endpoint:  server.URL + "/",
 			saToken:   "my-test-token",
-			folderUid: "efgh456",
-			orgId:     23,
+			folderUID: "efgh456",
+			orgID:     23,
 		},
 		client: server.Client(),
 	}
@@ -375,8 +384,8 @@ func TestLoadConfig(t *testing.T) {
 	assert.Equal(t, "my-test-token", d.config.saToken)
 	assert.Equal(t, "https://myinstance.grafana.com/", d.config.endpoint)
 	assert.Equal(t, "deployments", d.config.alertPath)
-	assert.Equal(t, "abcdef123", d.config.folderUid)
-	assert.Equal(t, int64(23), d.config.orgId)
+	assert.Equal(t, "abcdef123", d.config.folderUID)
+	assert.Equal(t, int64(23), d.config.orgID)
 	assert.Equal(t, false, d.config.freshDeploy)
 
 	// Test alert file lists
@@ -414,15 +423,15 @@ func TestFakeAlertFilename(t *testing.T) {
 			Timeout: defaultRequestTimeout,
 		},
 	}
-	assert.Equal(t, "abcd123", getAlertUidFromFilename(d.fakeAlertFilename("abcd123")))
+	assert.Equal(t, "abcd123", getAlertUIDFromFilename(d.fakeAlertFilename("abcd123")))
 }
 
 func TestListAlertsInDeploymentFolder(t *testing.T) {
 	d := Deployer{
 		config: deploymentConfig{
 			alertPath: "testdata",
-			folderUid: "abcdef123",
-			orgId:     1,
+			folderUID: "abcdef123",
+			orgID:     1,
 		},
 		client: &http.Client{
 			Timeout: defaultRequestTimeout,
@@ -436,7 +445,7 @@ func TestListAlertsInDeploymentFolder(t *testing.T) {
 func TestUpdateAlertGroupInterval(t *testing.T) {
 	testCases := []struct {
 		name               string
-		folderUid          string
+		folderUID          string
 		group              string
 		interval           int64
 		currentInterval    int64
@@ -449,7 +458,7 @@ func TestUpdateAlertGroupInterval(t *testing.T) {
 	}{
 		{
 			name:               "successful interval update",
-			folderUid:          "folder123",
+			folderUID:          "folder123",
 			group:              "group1",
 			interval:           600, // 10m
 			currentInterval:    300, // 5m
@@ -462,7 +471,7 @@ func TestUpdateAlertGroupInterval(t *testing.T) {
 		},
 		{
 			name:               "interval already set correctly",
-			folderUid:          "folder123",
+			folderUID:          "folder123",
 			group:              "group2",
 			interval:           600, // 10m
 			currentInterval:    600, // 10m (already correct)
@@ -475,7 +484,7 @@ func TestUpdateAlertGroupInterval(t *testing.T) {
 		},
 		{
 			name:               "get request returns error",
-			folderUid:          "folder123",
+			folderUID:          "folder123",
 			group:              "group3",
 			interval:           600,
 			currentInterval:    300,
@@ -488,7 +497,7 @@ func TestUpdateAlertGroupInterval(t *testing.T) {
 		},
 		{
 			name:               "put request returns error",
-			folderUid:          "folder123",
+			folderUID:          "folder123",
 			group:              "group4",
 			interval:           600,
 			currentInterval:    300,
@@ -501,7 +510,7 @@ func TestUpdateAlertGroupInterval(t *testing.T) {
 		},
 		{
 			name:               "special characters in folder and group",
-			folderUid:          "folder-with_special.chars",
+			folderUID:          "folder-with_special.chars",
 			group:              "group-with_special.chars",
 			interval:           3600, // 1h
 			currentInterval:    600,  // 10m
@@ -524,13 +533,15 @@ func TestUpdateAlertGroupInterval(t *testing.T) {
 				assert.Equal(t, tc.expectedRequestURL, r.URL.Path)
 
 				// Validate authorization header
-				assert.Equal(t, "Bearer test-token", r.Header.Get("Authorization"))
+				assert.Equal(t, authToken, r.Header.Get("Authorization"))
 
-				if r.Method == http.MethodGet {
+				switch r.Method {
+				case http.MethodGet:
 					// Return the mocked response for GET
 					w.WriteHeader(tc.getStatusCode)
-					w.Write([]byte(tc.responseBody))
-				} else if r.Method == http.MethodPut {
+					_, err := w.Write([]byte(tc.responseBody))
+					assert.NoError(t, err)
+				case http.MethodPut:
 					// Mark that a PUT request was made
 					putRequestMade = true
 
@@ -547,7 +558,7 @@ func TestUpdateAlertGroupInterval(t *testing.T) {
 
 					// Return status code based on test case
 					w.WriteHeader(tc.putStatusCode)
-				} else {
+				default:
 					t.Errorf("Unexpected HTTP method: %s", r.Method)
 					w.WriteHeader(http.StatusMethodNotAllowed)
 				}
@@ -558,13 +569,13 @@ func TestUpdateAlertGroupInterval(t *testing.T) {
 			d := Deployer{
 				config: deploymentConfig{
 					endpoint: server.URL + "/",
-					saToken:  "test-token",
+					saToken:  "my-test-token",
 				},
 				client: server.Client(),
 			}
 
 			// Call the function being tested
-			err := d.updateAlertGroupInterval(context.Background(), tc.folderUid, tc.group, tc.interval)
+			err := d.updateAlertGroupInterval(context.Background(), tc.folderUID, tc.group, tc.interval)
 
 			// Verify error expectation
 			if tc.expectError {

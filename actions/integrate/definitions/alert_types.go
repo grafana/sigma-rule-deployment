@@ -59,7 +59,7 @@ type ProvisionedAlertRule struct {
 	IsPaused bool `json:"isPaused"`
 	// example: {"receiver":"email","group_by":["alertname","grafana_folder","cluster"],"group_wait":"30s","group_interval":"1m","repeat_interval":"4d","mute_time_intervals":["Weekends","Holidays"]}
 	NotificationSettings *AlertRuleNotificationSettings `json:"notification_settings"`
-	//example: {"metric":"grafana_alerts_ratio", "from":"A"}
+	// example: {"metric":"grafana_alerts_ratio", "from":"A"} //nolint:gofumpt
 	Record *Record `json:"record"`
 	// example: 2
 	MissingSeriesEvalsToResolve *int `json:"missingSeriesEvalsToResolve,omitempty"`
@@ -136,7 +136,7 @@ type AlertQuery struct {
 	// JSON is the raw JSON query and includes the above properties as well as custom properties.
 	Model json.RawMessage `json:"model"`
 
-	modelProps map[string]any
+	modelProps map[string]any //nolint:unused
 }
 
 // RelativeTimeRange represents a time range relative to the current time

@@ -154,7 +154,7 @@ func (i *Integrator) LoadConfig() error {
 	fmt.Printf("Conversion path: %s\nDeployment path: %s\n", i.config.Folders.ConversionPath, i.config.Folders.DeploymentPath)
 
 	if _, err = os.Stat(i.config.Folders.DeploymentPath); err != nil {
-		err = os.MkdirAll(i.config.Folders.DeploymentPath, 0755)
+		err = os.MkdirAll(i.config.Folders.DeploymentPath, 0o755)
 		if err != nil {
 			return fmt.Errorf("error creating deployment directory: %v", err)
 		}
@@ -176,15 +176,17 @@ func (i *Integrator) LoadConfig() error {
 	removedFiles := make([]string, 0, len(deletedFiles))
 
 	if i.allRules {
-		filepath.Walk(i.config.Folders.ConversionPath, func(path string, info os.FileInfo, err error) error {
+		if err = filepath.Walk(i.config.Folders.ConversionPath, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to walk directory: %w", err)
 			}
 			if !info.IsDir() {
 				newUpdatedFiles = append(newUpdatedFiles, path)
 			}
 			return nil
-		})
+		}); err != nil {
+			return fmt.Errorf("failed to walk directory: %w", err)
+		}
 	} else {
 		for _, path := range changedFiles {
 			// Ensure paths appear within specified conversion path
@@ -270,10 +272,10 @@ func (i *Integrator) Run() error {
 		// Extract rule filename from input file name
 		ruleFilename := strings.TrimSuffix(filepath.Base(inputFile), ".json")
 		ruleFilename = strings.TrimPrefix(ruleFilename, config.Name+"_")
-		ruleUid := getRuleUid(conversionObject.ConversionName, conversionID)
-		file := fmt.Sprintf("%s%salert_rule_%s_%s_%s.json", i.config.Folders.DeploymentPath, string(filepath.Separator), config.Name, ruleFilename, ruleUid)
+		ruleUID := getRuleUID(conversionObject.ConversionName, conversionID)
+		file := fmt.Sprintf("%s%salert_rule_%s_%s_%s.json", i.config.Folders.DeploymentPath, string(filepath.Separator), config.Name, ruleFilename, ruleUID)
 		fmt.Printf("Working on alert rule file: %s\n", file)
-		rule := &definitions.ProvisionedAlertRule{UID: ruleUid}
+		rule := &definitions.ProvisionedAlertRule{UID: ruleUID}
 
 		err = readRuleFromFile(rule, file)
 		if err != nil {
@@ -308,7 +310,9 @@ func (i *Integrator) Run() error {
 		}
 
 		// Set a single output with all results
-		SetOutput("test_query_results", string(resultsJSON))
+		if err := SetOutput("test_query_results", string(resultsJSON)); err != nil {
+			return fmt.Errorf("failed to set test query results output: %w", err)
+		}
 	}
 
 	for _, deletedFile := range i.removedFiles {
@@ -331,7 +335,9 @@ func (i *Integrator) Run() error {
 		rulesIntegrated += " "
 	}
 	rulesIntegrated += strings.Join(i.removedFiles, " ")
-	SetOutput("rules_integrated", rulesIntegrated)
+	if err := SetOutput("rules_integrated", rulesIntegrated); err != nil {
+		return fmt.Errorf("failed to set rules integrated output: %w", err)
+	}
 
 	return nil
 }
@@ -346,7 +352,7 @@ func (i *Integrator) ConvertToAlert(rule *definitions.ProvisionedAlertRule, quer
 	timerange := definitions.RelativeTimeRange{From: definitions.Duration(duration), To: definitions.Duration(time.Duration(0))}
 
 	queryData := make([]definitions.AlertQuery, 0, len(queries)+2)
-	refIds := make([]string, len(queries))
+	refIDs := make([]string, len(queries))
 	for index, query := range queries {
 		if getC(config.Target, i.config.ConversionDefaults.Target, "loki") == "loki" {
 			// if the query is not a metric query, we need to add a sum aggregation to it
@@ -359,19 +365,19 @@ func (i *Integrator) ConvertToAlert(rule *definitions.ProvisionedAlertRule, quer
 		if err != nil {
 			return fmt.Errorf("could not escape provided query: %s", query)
 		}
-		refIds[index] = fmt.Sprintf("A%d", index)
+		refIDs[index] = fmt.Sprintf("A%d", index)
 		queryData = append(queryData,
 			definitions.AlertQuery{
-				RefID:             refIds[index],
+				RefID:             refIDs[index],
 				QueryType:         "instant",
 				DatasourceUID:     datasource,
 				RelativeTimeRange: timerange,
-				Model:             json.RawMessage(fmt.Sprintf(`{"refId":"%s","hide":false,"expr":"%s","queryType":"instant","editorMode":"code"}`, refIds[index], escapedQuery)),
+				Model:             json.RawMessage(fmt.Sprintf(`{"refId":"%s","hide":false,"expr":"%s","queryType":"instant","editorMode":"code"}`, refIDs[index], escapedQuery)),
 			})
 	}
 	reducer := json.RawMessage(
 		fmt.Sprintf(`{"refId":"B","hide":false,"type":"reduce","datasource":{"uid":"__expr__","type":"__expr__"},"conditions":[{"type":"query","evaluator":{"params":[],"type":"gt"},"operator":{"type":"and"},"query":{"params":["B"]},"reducer":{"params":[],"type":"last"}}],"reducer":"last","expression":"%s"}`,
-			strings.Join(refIds, "||")))
+			strings.Join(refIDs, "||")))
 	threshold := json.RawMessage(`{"refId":"C","hide":false,"type":"threshold","datasource":{"uid":"__expr__","type":"__expr__"},"conditions":[{"type":"query","evaluator":{"params":[1],"type":"gt"},"operator":{"type":"and"},"query":{"params":["C"]},"reducer":{"params":[],"type":"last"}}],"expression":"B"}`)
 
 	queryData = append(queryData,
@@ -570,7 +576,7 @@ func (i *Integrator) processFrame(frame Frame, result *QueryTestResult) error {
 }
 
 func (i *Integrator) TestQueries(queries []string, config, defaultConf ConversionConfig, timeoutDuration time.Duration) ([]QueryTestResult, error) {
-	var queryResults []QueryTestResult
+	queryResults := make([]QueryTestResult, 0, len(queries))
 	datasource := getC(config.DataSource, defaultConf.DataSource, "")
 	for _, query := range queries {
 		resp, err := TestQuery(
@@ -630,7 +636,7 @@ func (i *Integrator) TestQueries(queries []string, config, defaultConf Conversio
 	return queryResults, nil
 }
 
-func getRuleUid(conversionName string, conversionID uuid.UUID) string {
+func getRuleUID(conversionName string, conversionID uuid.UUID) string {
 	hash := int64(murmur3.Sum32([]byte(conversionName + "_" + conversionID.String())))
 	return fmt.Sprintf("%x", hash)
 }
