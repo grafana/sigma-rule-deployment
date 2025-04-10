@@ -1,0 +1,31 @@
+name: Hadolint
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "actions/Dockerfile"
+  pull_request:
+    paths:
+      - "actions/Dockerfile"
+  workflow_dispatch:
+
+jobs:
+  hadolint:
+    name: Hadolint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Run Hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: actions/Dockerfile
+          failure-threshold: warning
+          format: tty

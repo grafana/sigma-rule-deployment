@@ -1,0 +1,30 @@
+name: ShellCheck Validation
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "actions/entrypoint.sh"
+  pull_request:
+    paths:
+      - "actions/entrypoint.sh"
+  workflow_dispatch:
+
+jobs:
+  shellcheck:
+    name: ShellCheck
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Run ShellCheck
+        uses: ludeeus/action-shellcheck@00b27aa7cb85167568cb48a3838b75f4265f2bca
+        with:
+          scandir: "./actions"
+          severity: error

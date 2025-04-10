@@ -16,7 +16,7 @@ function _convert() {
     declare -a valid_plugins=()
 
     shopt -s nocasematch
-    for plugin in $(echo $plugin_packages | tr ',' ' '); do
+    for plugin in $(echo "$plugin_packages" | tr ',' ' '); do
         if [[ "$plugin" == pysigma-* ]]; then
             valid_plugins+=("$plugin")
         else
