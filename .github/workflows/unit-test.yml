@@ -45,7 +45,6 @@ jobs:
           install-mode: "goinstall"
 
   convert-test:
-    needs: golangci-lint
     runs-on: ubuntu-latest
     permissions:
       contents: read
