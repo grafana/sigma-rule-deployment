@@ -27,7 +27,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: "Build and Push"
-        uses: docker/build-push-action@v4
+        uses: docker/build-push-action@v6
         if: github.event_name == 'pull_request'
         with:
           context: ./actions
@@ -36,7 +36,7 @@ jobs:
             ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${{ github.event.pull_request.head.sha }}
           push: true
       - name: "Build and Push"
-        uses: docker/build-push-action@v4
+        uses: docker/build-push-action@v6
         if: github.event_name == 'push'
         with:
           context: ./actions
