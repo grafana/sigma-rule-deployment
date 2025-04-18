@@ -163,15 +163,30 @@ func TestAddAlertToList(t *testing.T) {
 func TestUpdateAlert(t *testing.T) {
 	ctx := context.Background()
 
+	// Test cases:
+	// 1. Update an alert that exists: abcd123
+	// 2. Update an alert that doesn't exist: xyz123
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v1/provisioning/alert-rules/abcd123" {
-			t.Errorf("Expected to request '/api/v1/provisioning/alert-rules/abcd123', got: %s", r.URL.Path)
+		validRequest := false
+
+		// Case for actually updating an alert
+		if r.Method == http.MethodPut {
+			if r.URL.Path == "/api/v1/provisioning/alert-rules/abcd123" || r.URL.Path == "/api/v1/provisioning/alert-rules/xyz123" {
+				validRequest = true
+			}
+		}
+		// Case for updating an alert that doesn't exist (anymore) with fallback to creation
+		if r.Method == http.MethodPost {
+			if r.URL.Path == "/api/v1/provisioning/alert-rules" {
+				validRequest = true
+			}
+		}
+
+		if !validRequest {
+			t.Errorf("Unexpected request %s (%s)", r.URL.Path, r.Method)
 		}
 		if r.Header.Get("Content-Type") != contentTypeJSON {
 			t.Errorf("Expected Content-Typet: application/json header, got: %s", r.Header.Get("Content-Type"))
-		}
-		if r.Method != http.MethodPut {
-			t.Errorf("Expected PUT method, got: %s", r.Method)
 		}
 		if r.Header.Get("Authorization") != authToken {
 			t.Errorf("Invalid Authorization header")
@@ -180,7 +195,21 @@ func TestUpdateAlert(t *testing.T) {
 		// Read the request body
 		body, err := io.ReadAll(r.Body)
 		assert.NoError(t, err)
-		w.WriteHeader(http.StatusOK)
+
+		switch r.URL.Path {
+		case "/api/v1/provisioning/alert-rules/abcd123":
+			// Simulate a successful update
+			w.WriteHeader(http.StatusOK)
+		case "/api/v1/provisioning/alert-rules/xyz123":
+			// Simulate a non-existing alert
+			w.WriteHeader(http.StatusNotFound)
+		case "/api/v1/provisioning/alert-rules":
+			// Simulate a successful creation
+			w.WriteHeader(http.StatusCreated)
+		default:
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+
 		if _, err := w.Write(body); err != nil {
 			t.Errorf("failed to write response body: %v", err)
 			return
@@ -197,9 +226,17 @@ func TestUpdateAlert(t *testing.T) {
 		groupsToUpdate: map[string]bool{},
 	}
 
-	uid, err := d.updateAlert(ctx, `{"uid":"abcd123","title":"Test alert", "folderUID": "efgh456", "orgID": 23}`)
+	// Update an alert
+	uid, created, err := d.updateAlert(ctx, `{"uid":"abcd123","title":"Test alert", "folderUID": "efgh456", "orgID": 23}`, true)
 	assert.NoError(t, err)
+	assert.Equal(t, false, created)
 	assert.Equal(t, "abcd123", uid)
+
+	// Try to update an alert that doesn't exist. This should lead to a creation
+	uid, created, err = d.updateAlert(ctx, `{"uid":"xyz123","title":"Test alert", "folderUID": "efgh456", "orgID": 23}`, true)
+	assert.NoError(t, err)
+	assert.Equal(t, true, created)
+	assert.Equal(t, "xyz123", uid)
 }
 
 func TestCreateAlert(t *testing.T) {
