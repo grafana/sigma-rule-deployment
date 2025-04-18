@@ -40,7 +40,7 @@ runs:
   using: "composite"
   steps:
     - name: Login to GitHub Container Registry
-      uses: docker/login-action@v3
+      uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 #v3.4.0
       with:
         registry: ghcr.io
         username: ${{ github.actor }}
@@ -48,7 +48,7 @@ runs:
     - name: Get Last Commit or base_ref
       if: ${{ github.event_name == 'pull_request' && inputs.changed_files_from_base == 'false' }}
       id: commits
-      uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
+      uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea #v7.0.1
       env:
         ACTIONS_USERNAME: ${{ inputs.actions_username }}
       with:
@@ -80,7 +80,7 @@ runs:
           };
     - name: Select Commit
       id: previous-commit
-      uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
+      uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea #v7.0.1
       env:
         COMMIT: ${{ steps.commits.outputs.result }}
       with:
@@ -91,7 +91,7 @@ runs:
         result-encoding: string
     - name: Select First Commit
       id: first-commit
-      uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
+      uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea #v7.0.1
       env:
         COMMIT: ${{ steps.commits.outputs.result }}
       with:
@@ -102,7 +102,7 @@ runs:
         result-encoding: string
     - name: Select Last Commit
       id: last-commit
-      uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
+      uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea #v7.0.1
       env:
         COMMIT: ${{ steps.commits.outputs.result }}
       with:
@@ -165,7 +165,7 @@ runs:
 
     - name: Comment Conversions
       id: comment-conversions
-      uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
+      uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea #v7.0.1
       env:
         BASE_REF: ${{ steps.first-commit.outputs.result || github.base_ref || github.event.pull_request.base.ref || 'HEAD' }}
         CHANGED_FILES: ${{ steps.generate-comment-data.outputs.changed_files }}
