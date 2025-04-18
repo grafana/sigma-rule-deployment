@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -229,7 +230,7 @@ func (d *Deployer) writeOutput(alertsCreated []string, alertsUpdated []string, a
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer tryToClose("GITHUB_OUTPUT", f)
 
 	output := fmt.Sprintf("alerts_created=%s\nalerts_updated=%s\nalerts_deleted=%s\n",
 		alertsCreatedStr, alertsUpdatedStr, alertsDeletedStr)
@@ -687,4 +688,10 @@ func getAlertUIDFromFilename(filename string) string {
 		return ""
 	}
 	return matches[1]
+}
+
+func tryToClose(fileName string, c io.Closer) {
+	if err := c.Close(); err != nil {
+		log.Printf("Couldn't close '%s' properly: %v", fileName, err)
+	}
 }

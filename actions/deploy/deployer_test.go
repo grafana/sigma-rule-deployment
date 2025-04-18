@@ -17,7 +17,7 @@ const (
 	contentTypeJSON = "application/json"
 	//nolint:gosec
 	authToken         = "Bearer my-test-token"
-	alertingApiPrefix = "/api/v1/provisioning/alert-rules"
+	alertingAPIPrefix = "/api/v1/provisioning/alert-rules"
 )
 
 func TestGetAlertUidFromFileName(t *testing.T) {
@@ -172,13 +172,13 @@ func TestUpdateAlert(t *testing.T) {
 
 		// Case for actually updating an alert
 		if r.Method == http.MethodPut {
-			if r.URL.Path == alertingApiPrefix+"/abcd123" || r.URL.Path == alertingApiPrefix+"/xyz123" {
+			if r.URL.Path == alertingAPIPrefix+"/abcd123" || r.URL.Path == alertingAPIPrefix+"/xyz123" {
 				validRequest = true
 			}
 		}
 		// Case for updating an alert that doesn't exist (anymore) with fallback to creation
 		if r.Method == http.MethodPost {
-			if r.URL.Path == alertingApiPrefix {
+			if r.URL.Path == alertingAPIPrefix {
 				validRequest = true
 			}
 		}
@@ -198,13 +198,13 @@ func TestUpdateAlert(t *testing.T) {
 		assert.NoError(t, err)
 
 		switch r.URL.Path {
-		case alertingApiPrefix + "/abcd123":
+		case alertingAPIPrefix + "/abcd123":
 			// Simulate a successful update
 			w.WriteHeader(http.StatusOK)
-		case alertingApiPrefix + "/xyz123":
+		case alertingAPIPrefix + "/xyz123":
 			// Simulate a non-existing alert
 			w.WriteHeader(http.StatusNotFound)
-		case alertingApiPrefix:
+		case alertingAPIPrefix:
 			// Simulate a successful creation
 			w.WriteHeader(http.StatusCreated)
 		default:
@@ -245,8 +245,8 @@ func TestCreateAlert(t *testing.T) {
 	ctx := context.Background()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != alertingApiPrefix {
-			t.Errorf("Expected to request '%s', got: %s", alertingApiPrefix, r.URL.Path)
+		if r.URL.Path != alertingAPIPrefix {
+			t.Errorf("Expected to request '%s', got: %s", alertingAPIPrefix, r.URL.Path)
 		}
 		if r.Header.Get("Content-Type") != contentTypeJSON {
 			t.Errorf("Expected Content-Typet: application/json header, got: %s", r.Header.Get("Content-Type"))
@@ -287,13 +287,13 @@ func TestDeleteAlert(t *testing.T) {
 	ctx := context.Background()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, alertingApiPrefix) {
-			uid := strings.TrimPrefix(r.URL.Path, alertingApiPrefix+"/")
+		if strings.HasPrefix(r.URL.Path, alertingAPIPrefix) {
+			uid := strings.TrimPrefix(r.URL.Path, alertingAPIPrefix+"/")
 			if uid != "abcd123" {
-				t.Errorf("Expected to request '%s/abcd123', got: %s", alertingApiPrefix, r.URL.Path)
+				t.Errorf("Expected to request '%s/abcd123', got: %s", alertingAPIPrefix, r.URL.Path)
 			}
 		} else {
-			t.Errorf("Expected to request '%s/abcd123', got: %s", alertingApiPrefix, r.URL.Path)
+			t.Errorf("Expected to request '%s/abcd123', got: %s", alertingAPIPrefix, r.URL.Path)
 		}
 		if r.Method != http.MethodDelete {
 			t.Errorf("Expected DELETE method, got: %s", r.Method)
@@ -355,8 +355,8 @@ func TestListAlerts(t *testing.T) {
 	]`
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != alertingApiPrefix {
-			t.Errorf("Expected to request '%s', got: %s", alertingApiPrefix, r.URL.Path)
+		if r.URL.Path != alertingAPIPrefix {
+			t.Errorf("Expected to request '%s', got: %s", alertingAPIPrefix, r.URL.Path)
 		}
 		if r.Header.Get("Content-Type") != contentTypeJSON {
 			t.Errorf("Expected Content-Typet: application/json header, got: %s", r.Header.Get("Content-Type"))
