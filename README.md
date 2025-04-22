@@ -30,6 +30,16 @@ Relevent conversion backends and data sources that can be used in Grafana includ
 - [SQLite](https://github.com/SigmaHQ/pySigma-backend-sqlite) and the [SQLite data source](https://grafana.com/grafana/plugins/frser-sqlite-datasource/)
 - [SurrealQL](https://github.com/SigmaHQ/pySigma-backend-surrealql) and the [SurrealDB data source](https://grafana.com/grafana/plugins/grafana-surrealdb-datasource/)
 
+When using a data source other than Loki and Elasticsearch, you may need to provide a bespoke `query_model` in the conversion configuration to ensure the data source plugin can execute it correctly. To do this, you provide a [fmt.Sprintf](https://pkg.go.dev/fmt#pkg-overview) formatted JSON string, which receives the following arguments:
+1. the ref ID for the query
+2. the UID for the data source
+3. the query, escaped as a JSON string
+
+An example query model would be:
+```
+query_model: '{"refId":"%s","datasource":{"type":"my_data_source","uid":"%s"},"query":"%s"}'
+```
+
 ### Q: Are there any restrictions on the Sigma rule files?
 
 The main restriction are they need to be valid Sigma rules. If you are using [Correlation rules](https://github.com/SigmaHQ/sigma-specification/blob/main/specification/sigma-correlation-rules-specification.md), the rule files must contain **all** the referenced rules within the rule file (using [YAML's multiple document feature](https://gettaurus.org/docs/YAMLTutorial/#YAML-Multi-Documents), i.e., combined with `---`).
