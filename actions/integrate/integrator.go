@@ -630,6 +630,7 @@ func getRuleUID(conversionName string, conversionID uuid.UUID) string {
 // createAlertQuery creates an AlertQuery based on the target data source and configuration
 func createAlertQuery(query string, refID string, datasource string, timerange definitions.RelativeTimeRange, config ConversionConfig, defaultConf ConversionConfig) (definitions.AlertQuery, error) {
 	target := getC(config.Target, defaultConf.Target, "loki")
+	customModel := getC(config.QueryModel, defaultConf.QueryModel, "")
 
 	// Modify query based on target data source
 	if target == "loki" {
@@ -652,21 +653,17 @@ func createAlertQuery(query string, refID string, datasource string, timerange d
 		RelativeTimeRange: timerange,
 	}
 
-	// Populate the alert query model based on the target data source
-	if target == "loki" {
+	// Populate the alert query model, first see if the user has provided a custom model
+	// else use defaults based on the target data source type
+	if customModel != "" {
+		alertQuery.Model = json.RawMessage(fmt.Sprintf(customModel, refID, datasource, escapedQuery))
+	} else if target == "loki" {
 		alertQuery.QueryType = "instant"
 		alertQuery.Model = json.RawMessage(fmt.Sprintf(`{"refId":"%s","datasource":{"type":"loki","uid":"%s"},"hide":false,"expr":"%s","queryType":"instant","editorMode":"code"}`, refID, datasource, escapedQuery))
 	} else if target == "elasticsearch" {
 		// Based on the Elasticsearch data source plugin
 		// https://github.com/grafana/grafana/blob/main/public/app/plugins/datasource/elasticsearch/dataquery.gen.ts
 		alertQuery.Model = json.RawMessage(fmt.Sprintf(`{"refId":"%s","datasource":{"type":"elasticsearch","uid":"%s"},"query":"%s","alias":"","metrics":[{"type":"count","id":"1"}],"bucketAggs":[{"type":"date_histogram","id":"2","settings":{"interval":"auto"}}],"intervalMs":2000,"maxDataPoints":1354,"timeField":"@timestamp"}`, refID, datasource, escapedQuery))
-	} else if target == "splunk" {
-		// Based on the Splunk data source plugin
-		alertQuery.Model = json.RawMessage(fmt.Sprintf(`{"refId":"%s","datasource":{"type":"splunk","uid":"%s"},"query":"%s"}`, refID, datasource, escapedQuery))
-	} else if target == "bigquery" {
-		// Based on the BigQuery data source plugin
-		// https://github.com/grafana/google-bigquery-datasource
-		alertQuery.Model = json.RawMessage(fmt.Sprintf(`{"refId":"%s","datasource":{"type":"grafana-bigquery-datasource","uid":"%s"},"rawQuery":true,"rawSql":"%s"}`, refID, datasource, escapedQuery))
 	} else {
 		// try a basic query
 		alertQuery.Model = json.RawMessage(fmt.Sprintf(`{"refId":"%s","datasource":{"type":"%s","uid":"%s"},"query":"%s"}`, refID, target, datasource, escapedQuery))

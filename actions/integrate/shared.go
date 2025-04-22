@@ -23,6 +23,9 @@ type ConversionConfig struct {
 	Pipeline        []string `yaml:"pipelines"`
 	RuleGroup       string   `yaml:"rule_group"`
 	TimeWindow      string   `yaml:"time_window"`
+	// Use a sprintf format string to populate a bespoke query model
+	// refID, datasource, query
+	QueryModel string `yaml:"query_model,omitempty"`
 }
 
 type IntegrationConfig struct {

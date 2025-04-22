@@ -132,6 +132,26 @@ func TestConvertToAlert(t *testing.T) {
 			wantUpdated:   &fixedTime, // expect timestamp to remain unchanged
 			wantError:     false,
 		},
+		{
+			name:    "valid query with a custom query model",
+			queries: []string{"DO MY QUERY"},
+			titles:  "Alert Rule 7",
+			rule: &definitions.ProvisionedAlertRule{
+				UID: "5c1c217a",
+			},
+			config: ConversionConfig{
+				Name:       "conv",
+				Target:     "custom",
+				DataSource: "my_custom_data_source",
+				RuleGroup:  "Every Hour",
+				TimeWindow: "1h",
+				QueryModel: `{"refId":"%s","datasource":{"type":"custom","uid":"%s"},"queryString":"(%s)"}`,
+			},
+			wantQueryText: "(DO MY QUERY)",
+			wantDuration:  definitions.Duration(1 * time.Hour),
+			wantUpdated:   nil, // expect timestamp update
+			wantError:     false,
+		},
 	}
 
 	for _, tt := range tests {
