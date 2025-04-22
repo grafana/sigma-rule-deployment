@@ -660,12 +660,13 @@ func createAlertQuery(query string, refID string, datasource string, timerange d
 	} else if target == "loki" {
 		alertQuery.QueryType = "instant"
 		alertQuery.Model = json.RawMessage(fmt.Sprintf(`{"refId":"%s","datasource":{"type":"loki","uid":"%s"},"hide":false,"expr":"%s","queryType":"instant","editorMode":"code"}`, refID, datasource, escapedQuery))
-	} else if target == "elasticsearch" {
+	} else if target == "esql" {
 		// Based on the Elasticsearch data source plugin
 		// https://github.com/grafana/grafana/blob/main/public/app/plugins/datasource/elasticsearch/dataquery.gen.ts
 		alertQuery.Model = json.RawMessage(fmt.Sprintf(`{"refId":"%s","datasource":{"type":"elasticsearch","uid":"%s"},"query":"%s","alias":"","metrics":[{"type":"count","id":"1"}],"bucketAggs":[{"type":"date_histogram","id":"2","settings":{"interval":"auto"}}],"intervalMs":2000,"maxDataPoints":1354,"timeField":"@timestamp"}`, refID, datasource, escapedQuery))
 	} else {
 		// try a basic query
+		fmt.Printf("WARNING: Using generic query model for target %s; if the queries don't work, try providing a custom query model\n", target)
 		alertQuery.Model = json.RawMessage(fmt.Sprintf(`{"refId":"%s","datasource":{"type":"%s","uid":"%s"},"query":"%s"}`, refID, target, datasource, escapedQuery))
 	}
 
