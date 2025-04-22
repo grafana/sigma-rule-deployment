@@ -482,7 +482,6 @@ func (d *Deployer) updateAlert(ctx context.Context, content string, createIfNotF
 			log.Printf("Can't create alert. Status: %d", res.StatusCode)
 			return "", true, err
 		}
-		log.Printf("Alert %s (%s) created", uid, alert.Title)
 		return uid, true, nil
 	} else if res.StatusCode != http.StatusOK {
 		log.Printf("Can't update alert. Status: %d", res.StatusCode)
