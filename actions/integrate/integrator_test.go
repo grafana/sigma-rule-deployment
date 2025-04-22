@@ -105,7 +105,7 @@ func TestConvertToAlert(t *testing.T) {
 						RefID:         "A0",
 						QueryType:     "instant",
 						DatasourceUID: "my_data_source",
-						Model:         json.RawMessage("{\"refId\":\"A0\",\"hide\":false,\"expr\":\"sum(count_over_time({job=`.+`} | json | test=`true`[$__auto]))\",\"queryType\":\"instant\",\"editorMode\":\"code\"}"),
+						Model:         json.RawMessage("{\"refId\":\"A0\",\"datasource\":{\"type\":\"loki\",\"uid\":\"my_data_source\"},\"hide\":false,\"expr\":\"sum(count_over_time({job=`.+`} | json | test=`true`[$__auto]))\",\"queryType\":\"instant\",\"editorMode\":\"code\"}"),
 					},
 					{
 						RefID:         "B",
@@ -517,6 +517,10 @@ func TestIntegratorRun(t *testing.T) {
 			err := os.MkdirAll(testDir, 0o755)
 			assert.NoError(t, err)
 			defer os.RemoveAll(testDir)
+
+			// Set up the github output file
+			os.Setenv("GITHUB_OUTPUT", filepath.Join(testDir, "github-output"))
+			defer os.Unsetenv("GITHUB_OUTPUT")
 
 			// Create conversion and deployment subdirectories
 			convPath := filepath.Join(testDir, "conv")
