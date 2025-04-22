@@ -558,8 +558,9 @@ func TestIntegratorRun(t *testing.T) {
 			defer os.RemoveAll(testDir)
 
 			// Set up the github output file
+			oldGithubOutput := os.Getenv("GITHUB_OUTPUT")
 			os.Setenv("GITHUB_OUTPUT", filepath.Join(testDir, "github-output"))
-			defer os.Unsetenv("GITHUB_OUTPUT")
+			defer os.Setenv("GITHUB_OUTPUT", oldGithubOutput)
 
 			// Create conversion and deployment subdirectories
 			convPath := filepath.Join(testDir, "conv")
