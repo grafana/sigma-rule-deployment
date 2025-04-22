@@ -629,11 +629,11 @@ func getRuleUID(conversionName string, conversionID uuid.UUID) string {
 
 // createAlertQuery creates an AlertQuery based on the target data source and configuration
 func createAlertQuery(query string, refID string, datasource string, timerange definitions.RelativeTimeRange, config ConversionConfig, defaultConf ConversionConfig) (definitions.AlertQuery, error) {
-	target := getC(config.Target, defaultConf.Target, "loki")
+	datasourceType := getC(config.DataSourceType, defaultConf.DataSourceType, getC(config.Target, defaultConf.Target, "loki"))
 	customModel := getC(config.QueryModel, defaultConf.QueryModel, "")
 
 	// Modify query based on target data source
-	if target == "loki" {
+	if datasourceType == "loki" {
 		// if the query is not a metric query, we need to add a sum aggregation to it
 		if !strings.HasPrefix(query, "sum") {
 			query = fmt.Sprintf("sum(count_over_time(%s[$__auto]))", query)
@@ -658,17 +658,17 @@ func createAlertQuery(query string, refID string, datasource string, timerange d
 	switch {
 	case customModel != "":
 		alertQuery.Model = json.RawMessage(fmt.Sprintf(customModel, refID, datasource, escapedQuery))
-	case target == "loki":
+	case datasourceType == "loki":
 		alertQuery.QueryType = "instant"
 		alertQuery.Model = json.RawMessage(fmt.Sprintf(`{"refId":"%s","datasource":{"type":"loki","uid":"%s"},"hide":false,"expr":"%s","queryType":"instant","editorMode":"code"}`, refID, datasource, escapedQuery))
-	case target == "esql":
+	case datasourceType == "elasticsearch":
 		// Based on the Elasticsearch data source plugin
 		// https://github.com/grafana/grafana/blob/main/public/app/plugins/datasource/elasticsearch/dataquery.gen.ts
 		alertQuery.Model = json.RawMessage(fmt.Sprintf(`{"refId":"%s","datasource":{"type":"elasticsearch","uid":"%s"},"query":"%s","alias":"","metrics":[{"type":"count","id":"1"}],"bucketAggs":[{"type":"date_histogram","id":"2","settings":{"interval":"auto"}}],"intervalMs":2000,"maxDataPoints":1354,"timeField":"@timestamp"}`, refID, datasource, escapedQuery))
 	default:
 		// try a basic query
-		fmt.Printf("WARNING: Using generic query model for target %s; if the queries don't work, try providing a custom query model\n", target)
-		alertQuery.Model = json.RawMessage(fmt.Sprintf(`{"refId":"%s","datasource":{"type":"%s","uid":"%s"},"query":"%s"}`, refID, target, datasource, escapedQuery))
+		fmt.Printf("WARNING: Using generic query model for the data source type %s; if these queries don't work, try configuring a custom query_model\n", datasourceType)
+		alertQuery.Model = json.RawMessage(fmt.Sprintf(`{"refId":"%s","datasource":{"type":"%s","uid":"%s"},"query":"%s"}`, refID, datasourceType, datasource, escapedQuery))
 	}
 
 	return alertQuery, nil

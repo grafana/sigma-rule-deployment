@@ -55,11 +55,12 @@ func TestConvertToAlert(t *testing.T) {
 				UID: "3bb06d82",
 			},
 			config: ConversionConfig{
-				Name:       "conv",
-				Target:     "esql",
-				DataSource: "my_es_data_source",
-				RuleGroup:  "Every 5 Minutes",
-				TimeWindow: "5m",
+				Name:           "conv",
+				Target:         "esql",
+				DataSource:     "my_es_data_source",
+				RuleGroup:      "Every 5 Minutes",
+				TimeWindow:     "5m",
+				DataSourceType: "elasticsearch",
 			},
 			wantQueryText: `from * | where eventSource==\"kms.amazonaws.com\" and eventName==\"CreateGrant\"`,
 			wantDuration:  definitions.Duration(300 * time.Second),
@@ -266,6 +267,7 @@ func TestLoadConfig(t *testing.T) {
 					SkipUnsupported: "true",
 					FilePattern:     "*.yml",
 					DataSource:      "grafanacloud-es-logs",
+					DataSourceType:  "elasticsearch",
 				},
 				Conversions: []ConversionConfig{
 					{
