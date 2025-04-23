@@ -30,6 +30,18 @@ Relevent conversion backends and data sources that can be used in Grafana includ
 - [SQLite](https://github.com/SigmaHQ/pySigma-backend-sqlite) and the [SQLite data source](https://grafana.com/grafana/plugins/frser-sqlite-datasource/)
 - [SurrealQL](https://github.com/SigmaHQ/pySigma-backend-surrealql) and the [SurrealDB data source](https://grafana.com/grafana/plugins/grafana-surrealdb-datasource/)
 
+To ensure the data source plugin can execute your queries, you may need to provide a bespoke `query_model` in the conversion configuration. You do this by specifing a [fmt.Sprintf](https://pkg.go.dev/fmt#pkg-overview) formatted JSON string, which receives the following arguments:
+1. the ref ID for the query
+2. the UID for the data source
+3. the query, escaped as a JSON string
+
+An example query model would be:
+```
+query_model: '{"refId":"%s","datasource":{"type":"my_data_source_type","uid":"%s"},"query":"%s","customKey":"customValue"}'
+```
+
+Other than the `refId` and `datasource` (which are required by Grafana), the keys used for the query model are data source dependent. They can be identified by testing a query against the data source with the [Query inspector](https://grafana.com/docs/grafana/latest/explore/explore-inspector/) open, going to the Query tab, and examining the items used in the `request.data.queries` list.
+
 ### Q: Are there any restrictions on the Sigma rule files?
 
 The main restriction are they need to be valid Sigma rules. If you are using [Correlation rules](https://github.com/SigmaHQ/sigma-specification/blob/main/specification/sigma-correlation-rules-specification.md), the rule files must contain **all** the referenced rules within the rule file (using [YAML's multiple document feature](https://gettaurus.org/docs/YAMLTutorial/#YAML-Multi-Documents), i.e., combined with `---`).

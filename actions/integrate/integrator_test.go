@@ -55,11 +55,12 @@ func TestConvertToAlert(t *testing.T) {
 				UID: "3bb06d82",
 			},
 			config: ConversionConfig{
-				Name:       "conv",
-				Target:     "esql",
-				DataSource: "my_es_data_source",
-				RuleGroup:  "Every 5 Minutes",
-				TimeWindow: "5m",
+				Name:           "conv",
+				Target:         "esql",
+				DataSource:     "my_es_data_source",
+				RuleGroup:      "Every 5 Minutes",
+				TimeWindow:     "5m",
+				DataSourceType: "elasticsearch",
 			},
 			wantQueryText: `from * | where eventSource==\"kms.amazonaws.com\" and eventName==\"CreateGrant\"`,
 			wantDuration:  definitions.Duration(300 * time.Second),
@@ -105,7 +106,7 @@ func TestConvertToAlert(t *testing.T) {
 						RefID:         "A0",
 						QueryType:     "instant",
 						DatasourceUID: "my_data_source",
-						Model:         json.RawMessage("{\"refId\":\"A0\",\"hide\":false,\"expr\":\"sum(count_over_time({job=`.+`} | json | test=`true`[$__auto]))\",\"queryType\":\"instant\",\"editorMode\":\"code\"}"),
+						Model:         json.RawMessage("{\"refId\":\"A0\",\"datasource\":{\"type\":\"loki\",\"uid\":\"my_data_source\"},\"hide\":false,\"expr\":\"sum(count_over_time({job=`.+`} | json | test=`true`[$__auto]))\",\"queryType\":\"instant\",\"editorMode\":\"code\"}"),
 					},
 					{
 						RefID:         "B",
@@ -130,6 +131,45 @@ func TestConvertToAlert(t *testing.T) {
 			wantDuration:  definitions.Duration(300 * time.Second),
 			wantQueryText: "sum(count_over_time({job=`.+`} | json | test=`true`[$__auto]))",
 			wantUpdated:   &fixedTime, // expect timestamp to remain unchanged
+			wantError:     false,
+		},
+		{
+			name:    "valid query with a custom query model",
+			queries: []string{"DO MY QUERY"},
+			titles:  "Alert Rule 7",
+			rule: &definitions.ProvisionedAlertRule{
+				UID: "5c1c217a",
+			},
+			config: ConversionConfig{
+				Name:       "conv",
+				Target:     "custom",
+				DataSource: "my_custom_data_source",
+				RuleGroup:  "Every Hour",
+				TimeWindow: "1h",
+				QueryModel: `{"refId":"%s","datasource":{"type":"custom","uid":"%s"},"queryString":"(%s)"}`,
+			},
+			wantQueryText: "(DO MY QUERY)",
+			wantDuration:  definitions.Duration(1 * time.Hour),
+			wantUpdated:   nil, // expect timestamp update
+			wantError:     false,
+		},
+		{
+			name:    "valid query with a generic query model",
+			queries: []string{"DO MY QUERY"},
+			titles:  "Alert Rule 8",
+			rule: &definitions.ProvisionedAlertRule{
+				UID: "5c1c217a",
+			},
+			config: ConversionConfig{
+				Name:       "conv",
+				Target:     "generic",
+				DataSource: "generic_uid",
+				RuleGroup:  "Every 30 Minutes",
+				TimeWindow: "30m",
+			},
+			wantQueryText: `"DO MY QUERY"`,
+			wantDuration:  definitions.Duration(30 * time.Minute),
+			wantUpdated:   nil, // expect timestamp update
 			wantError:     false,
 		},
 	}
@@ -227,6 +267,7 @@ func TestLoadConfig(t *testing.T) {
 					SkipUnsupported: "true",
 					FilePattern:     "*.yml",
 					DataSource:      "grafanacloud-es-logs",
+					DataSourceType:  "elasticsearch",
 				},
 				Conversions: []ConversionConfig{
 					{
@@ -517,6 +558,11 @@ func TestIntegratorRun(t *testing.T) {
 			err := os.MkdirAll(testDir, 0o755)
 			assert.NoError(t, err)
 			defer os.RemoveAll(testDir)
+
+			// Set up the github output file
+			oldGithubOutput := os.Getenv("GITHUB_OUTPUT")
+			os.Setenv("GITHUB_OUTPUT", filepath.Join(testDir, "github-output"))
+			defer os.Setenv("GITHUB_OUTPUT", oldGithubOutput)
 
 			// Create conversion and deployment subdirectories
 			convPath := filepath.Join(testDir, "conv")

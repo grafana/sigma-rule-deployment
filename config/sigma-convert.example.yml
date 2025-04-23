@@ -46,6 +46,8 @@ conversions:
       add_line_filters: true
     rule_group: Every 6 Hours
     time_window: 6h
+    data_source_type: loki
+    query_model: '{"refId":"%s","datasource":{"type":"loki","uid":"%s"},"query":"%s"}'
 integration:
   folder_id: XXXX # Use a dedicated folder that will only contain the alerts created by these actions
   org_id: 1
