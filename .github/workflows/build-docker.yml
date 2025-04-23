@@ -33,8 +33,9 @@ jobs:
         with:
           context: ./actions
           file: actions/Dockerfile
-          tags: |
-            ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${{ github.event.pull_request.head.sha }}
+          tags:
+            - ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${{ github.event.pull_request.head.sha }}
+            - ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:latest
           push: true
       - name: "Build and Push"
         uses: docker/build-push-action@471d1dc4e07e5cdedd4c2171150001c434f0b7a4 #v6.15.0
@@ -42,8 +43,9 @@ jobs:
         with:
           context: ./actions
           file: actions/Dockerfile
-          tags: |
-            ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${{ github.sha }}
+          tags:
+            - ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${{ github.sha }}
+            - ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:latest
           push: true
 
   e2e-convert-and-integrate:
@@ -57,10 +59,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref }}
+          persist-credentials: false
 
       - name: Convert Sigma Rules
         id: converted-rules-output
-        uses: grafana/sigma-rule-deployment/actions/convert@${{ github.sha }}
+        uses: grafana/sigma-rule-deployment/actions/convert@latest
         with:
           config_path: "./test/config.yml"
           pretty_print: true
@@ -69,7 +72,7 @@ jobs:
 
       - name: Integrate Converted Rules
         id: integrated-rules-output
-        uses: grafana/sigma-rule-deployment/actions/integrate@${{ github.sha }}
+        uses: grafana/sigma-rule-deployment/actions/integrate@latest
         with:
           config_path: "./test/config.yml"
           pretty_print: true
