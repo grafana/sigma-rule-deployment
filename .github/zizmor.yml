@@ -2,4 +2,4 @@ rules:
   unpinned-uses:
     config:
       policies:
-        grafana/sigma-rule-deployment: any  # trust this repo
+        grafana/sigma-rule-deployment/*: any  # trust this repo
