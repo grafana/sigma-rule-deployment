@@ -1,0 +1,14 @@
+name: test_pipeline
+priority: 10
+transformations:
+    - id: field_prefix
+      type: field_name_prefix
+      prefix: prefix_
+    - id: Enable placeholder
+      type: value_placeholders
+      include:
+          - TestPlaceholder
+var:
+    TestPlaceholder:
+        - value3
+        - value4

@@ -1,0 +1,19 @@
+title: Test Sigma Rule
+id: 7fda29ae-25d2-4a3e-a84e-90ac1de0a508
+status: test
+description: A Sigma rule created to test conversions
+references:
+    - https://github.com/SigmaHQ/sigma-specification/blob/main/specification/sigma-rules-specification.md
+author: kelnage
+date: 2025-04-23
+logsource:
+    category: testing
+detection:
+    check:
+        field:
+            - value1
+            - value2
+    condition: check
+falsepositives:
+    - Likely
+level: informational

@@ -45,3 +45,35 @@ jobs:
           tags: |
             ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${{ github.sha }}
           push: true
+
+  e2e-convert-and-integrate:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Convert Sigma Rules
+        id: converted-rules-output
+        uses: grafana/sigma-rule-deployment/actions/convert@${{ github.sha }}
+        with:
+          config_path: "./test/config.yml"
+          pretty_print: true
+          plugin_packages: pysigma-backend-loki,pysigma-backend-elasticsearch
+          all_rules: true
+
+      - name: Integrate Converted Rules
+        id: integrated-rules-output
+        uses: grafana/sigma-rule-deployment/actions/integrate@${{ github.sha }}
+        with:
+          config_path: "./test/config.yml"
+          pretty_print: true
+          all_rules: true
+          changed_files: ${{ steps.converted-rules-output.outputs.changed_files }}
+          deleted_files: ${{ steps.converted-rules-output.outputs.deleted_files }}
+

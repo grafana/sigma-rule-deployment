@@ -1,0 +1,34 @@
+folders:
+  conversion_path: "./test_output/conversions"
+  deployment_path: "./test_output/deployments"
+conversion_defaults:
+  target: loki
+  format: default
+  skip_unsupported: true
+  file_pattern: "*.yml"
+conversions:
+  - name: loki_test_folder
+    input: "test/rules/*"
+    backend_options:
+      case_sensitive: true
+    pipelines:
+      - pipelines/test_pipeline.yml
+    rule_group: Every 5 Minutes Loki
+    time_window: 5m
+    data_source: test_loki_ds_uid
+  - name: es_test_folder
+    input: "test/rules/*"
+    pipelines:
+      - pipelines/test_pipeline.yml
+    rule_group: Every 5 Minutes ES
+    time_window: 5m
+    data_source: test_es_ds_uid
+integration:
+  folder_id: test_folder
+  org_id: 1
+  test_queries: false
+  from: "now-1h"
+  to: "now"
+deployment:
+  grafana_instance: https://myinstance.grafana.com
+  timeout: 10s
