@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -162,7 +163,11 @@ func (d *Deployer) Deploy(ctx context.Context) ([]string, []string, []string, er
 		if err != nil {
 			return alertsCreated, alertsUpdated, alertsDeleted, err
 		}
-		alertsDeleted = append(alertsDeleted, uid)
+		// UID could be empty if the alert was not found
+		// In this case, we don't want to add it to the list of deleted alerts
+		if uid != "" {
+			alertsDeleted = append(alertsDeleted, uid)
+		}
 	}
 	// Process alert CREATIONS
 	for _, alertFile := range d.config.alertsToAdd {
@@ -184,11 +189,20 @@ func (d *Deployer) Deploy(ctx context.Context) ([]string, []string, []string, er
 			log.Printf("Can't read file %s: %v", alertFile, err)
 			return alertsCreated, alertsUpdated, alertsDeleted, err
 		}
-		uid, err := d.updateAlert(ctx, content)
+		uid, created, err := d.updateAlert(ctx, content, true)
 		if err != nil {
 			return alertsCreated, alertsUpdated, alertsDeleted, err
 		}
-		alertsUpdated = append(alertsUpdated, uid)
+		// Sometimes the alert to update doesn't exist anymore (e.g. it was deleted manually)
+		// In this case, we re-create it instead of updating it
+		// So we take this into account for the reporting
+		if !created {
+			// If the alert was updated, we need to add it to the list of updated alerts
+			alertsUpdated = append(alertsUpdated, uid)
+		} else {
+			// If the alert was created, we need to add it to the list of created alerts
+			alertsCreated = append(alertsCreated, uid)
+		}
 	}
 
 	// Process alert group interval updates
@@ -216,7 +230,7 @@ func (d *Deployer) writeOutput(alertsCreated []string, alertsUpdated []string, a
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer tryToClose("GITHUB_OUTPUT", f)
 
 	output := fmt.Sprintf("alerts_created=%s\nalerts_updated=%s\nalerts_deleted=%s\n",
 		alertsCreatedStr, alertsUpdatedStr, alertsDeletedStr)
@@ -429,11 +443,16 @@ func (d *Deployer) createAlert(ctx context.Context, content string) (string, err
 	return alert.UID, nil
 }
 
-func (d *Deployer) updateAlert(ctx context.Context, content string) (string, error) {
+func (d *Deployer) updateAlert(ctx context.Context, content string, createIfNotFound bool) (string, bool, error) {
+	//  Return values:
+	// 1. UID of the alert
+	// 2. Whether the alert had to be (re-)created. If createIfNotFound is false, this will always be false.
+	// 3. Error if any
+
 	// Retrieve some alert information
 	alert, err := parseAlert(content)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	d.groupsToUpdate[alert.RuleGroup] = true
 
@@ -442,26 +461,36 @@ func (d *Deployer) updateAlert(ctx context.Context, content string) (string, err
 
 	req, err := http.NewRequestWithContext(ctx, "PUT", url, bytes.NewBufferString(content))
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", d.config.saToken))
 
 	res, err := d.client.Do(req)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	defer res.Body.Close()
 
 	// Check the response
-	if res.StatusCode != http.StatusOK {
+	if res.StatusCode == http.StatusNotFound && createIfNotFound {
+		// If an alert has been manually deleted in Grafana, and the deployer isn't aware of it, then next time it's modified
+		// it will try to update it. This will fail with a 404 error, so we need to create it instead
+		log.Printf("Alert %s not found for update, (re-)creating it instead", alert.UID)
+		uid, err := d.createAlert(ctx, content)
+		if err != nil {
+			log.Printf("Can't create alert. Status: %d", res.StatusCode)
+			return "", true, err
+		}
+		return uid, true, nil
+	} else if res.StatusCode != http.StatusOK {
 		log.Printf("Can't update alert. Status: %d", res.StatusCode)
-		return "", fmt.Errorf("error updating alert: returned status %s", res.Status)
+		return "", false, fmt.Errorf("error updating alert: returned status %s", res.Status)
 	}
 
 	log.Printf("Alert %s (%s) updated", alert.UID, alert.Title)
 
-	return alert.UID, nil
+	return alert.UID, false, nil
 }
 
 func (d *Deployer) updateAlertGroupInterval(ctx context.Context, folderUID string, group string, interval int64) error {
@@ -542,7 +571,10 @@ func (d *Deployer) deleteAlert(ctx context.Context, uid string) (string, error) 
 	defer res.Body.Close()
 
 	// Check the response
-	if res.StatusCode != http.StatusNoContent {
+	if res.StatusCode == http.StatusNotFound {
+		log.Printf("Alert %s not found for deletion. Ignoring.", uid)
+		return "", nil
+	} else if res.StatusCode != http.StatusNoContent {
 		log.Printf("Can't delete alert. Status: %d", res.StatusCode)
 		return "", fmt.Errorf("error deleting alert: returned status %s", res.Status)
 	}
@@ -655,4 +687,10 @@ func getAlertUIDFromFilename(filename string) string {
 		return ""
 	}
 	return matches[1]
+}
+
+func tryToClose(fileName string, c io.Closer) {
+	if err := c.Close(); err != nil {
+		log.Printf("Couldn't close '%s' properly: %v", fileName, err)
+	}
 }
