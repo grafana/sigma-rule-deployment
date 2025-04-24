@@ -164,59 +164,9 @@ func TestAddAlertToList(t *testing.T) {
 func TestUpdateAlert(t *testing.T) {
 	ctx := context.Background()
 
-	// Test cases:
-	// 1. Update an alert that exists: abcd123
-	// 2. Update an alert that doesn't exist: xyz123
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		validRequest := false
-
-		// Case for actually updating an alert
-		if r.Method == http.MethodPut {
-			if r.URL.Path == alertingAPIPrefix+"/abcd123" || r.URL.Path == alertingAPIPrefix+"/xyz123" {
-				validRequest = true
-			}
-		}
-		// Case for updating an alert that doesn't exist (anymore) with fallback to creation
-		if r.Method == http.MethodPost {
-			if r.URL.Path == alertingAPIPrefix {
-				validRequest = true
-			}
-		}
-
-		if !validRequest {
-			t.Errorf("Unexpected request %s (%s)", r.URL.Path, r.Method)
-		}
-		if r.Header.Get("Content-Type") != contentTypeJSON {
-			t.Errorf("Expected Content-Typet: application/json header, got: %s", r.Header.Get("Content-Type"))
-		}
-		if r.Header.Get("Authorization") != authToken {
-			t.Errorf("Invalid Authorization header")
-		}
-		defer r.Body.Close()
-		// Read the request body
-		body, err := io.ReadAll(r.Body)
-		assert.NoError(t, err)
-
-		switch r.URL.Path {
-		case alertingAPIPrefix + "/abcd123":
-			// Simulate a successful update
-			w.WriteHeader(http.StatusOK)
-		case alertingAPIPrefix + "/xyz123":
-			// Simulate a non-existing alert
-			w.WriteHeader(http.StatusNotFound)
-		case alertingAPIPrefix:
-			// Simulate a successful creation
-			w.WriteHeader(http.StatusCreated)
-		default:
-
-			w.WriteHeader(http.StatusInternalServerError)
-		}
-
-		if _, err := w.Write(body); err != nil {
-			t.Errorf("failed to write response body: %v", err)
-			return
-		}
-	}))
+	server := mockServerUpdate(t, []string{
+		`{"uid": "abcd123", "title": "Test alert", "folderUID": "efgh456", "orgID": 23}`,
+	})
 	defer server.Close()
 
 	d := Deployer{
@@ -241,32 +191,85 @@ func TestUpdateAlert(t *testing.T) {
 	assert.Equal(t, "xyz123", uid)
 }
 
-func TestCreateAlert(t *testing.T) {
-	ctx := context.Background()
+func mockServerUpdate(t *testing.T, existingAlerts []string) *httptest.Server {
+	// Create a map of UIDs to alert objects
+	alertsMap := make(map[string]string)
+	for _, alert := range existingAlerts {
+		newAlert, err := parseAlert(alert)
+		assert.NoError(t, err)
+		alertsMap[newAlert.UID] = alert
+	}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != alertingAPIPrefix {
-			t.Errorf("Expected to request '%s', got: %s", alertingAPIPrefix, r.URL.Path)
-		}
-		if r.Header.Get("Content-Type") != contentTypeJSON {
-			t.Errorf("Expected Content-Typet: application/json header, got: %s", r.Header.Get("Content-Type"))
-		}
-		if r.Method != http.MethodPost {
-			t.Errorf("Expected POST method, got: %s", r.Method)
-		}
-		if r.Header.Get("Authorization") != authToken {
-			t.Errorf("Invalid Authorization header")
-		}
+		// We mock several scenarios:
+		// 1. Normal update of an alert
+		// 2. Update of an alert that doesn't exist -> create it
+
 		defer r.Body.Close()
 		// Read the request body
 		body, err := io.ReadAll(r.Body)
 		assert.NoError(t, err)
-		w.WriteHeader(http.StatusCreated)
-		if _, err := w.Write(body); err != nil {
-			t.Errorf("failed to write response body: %v", err)
+
+		if r.Header.Get("Content-Type") != contentTypeJSON {
+			t.Errorf("Expected Content-Typet: application/json header, got: %s", r.Header.Get("Content-Type"))
 			return
 		}
+		if r.Header.Get("Authorization") != authToken {
+			t.Errorf("Invalid Authorization header")
+			return
+		}
+		if !strings.HasPrefix(r.URL.Path, alertingAPIPrefix) {
+			t.Errorf("Expected URL to start with '%s', got: %s", alertingAPIPrefix, r.URL.Path)
+			return
+		}
+
+		if r.Method == http.MethodPut {
+			// Alert update
+			// Check if alert exists
+			uid := strings.TrimPrefix(r.URL.Path, alertingAPIPrefix+"/")
+			if _, exists := alertsMap[uid]; !exists {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			} else {
+				w.WriteHeader(http.StatusOK)
+				if _, err := w.Write(body); err != nil {
+					t.Errorf("failed to write response body: %v", err)
+					return
+				}
+			}
+		} else if r.Method == http.MethodPost {
+			// Alert creation
+			uid := strings.TrimPrefix(r.URL.Path, alertingAPIPrefix+"/")
+			if _, exists := alertsMap[uid]; !exists {
+				// Simulate a successful creation
+				w.WriteHeader(http.StatusCreated)
+				if _, err := w.Write(body); err != nil {
+					t.Errorf("failed to write response body: %v", err)
+					return
+				}
+				return
+			} else {
+				w.WriteHeader(http.StatusConflict)
+				// Simulate a conflict
+				errMsg := `{"message":"Alert conflict"}`
+				if _, err := w.Write([]byte(errMsg)); err != nil {
+					t.Errorf("failed to write response body: %v", err)
+					return
+				}
+			}
+		}
 	}))
+
+	return server
+}
+
+func TestCreateAlert(t *testing.T) {
+	ctx := context.Background()
+
+	server := mockServerCreation(t, []string{
+		`{"uid":"xyz123","title":"Test alert", "folderUID": "efgh456", "orgID": 23}`,
+	})
+
 	defer server.Close()
 
 	d := Deployer{
@@ -278,9 +281,136 @@ func TestCreateAlert(t *testing.T) {
 		groupsToUpdate: map[string]bool{},
 	}
 
-	uid, err := d.createAlert(ctx, `{"uid":"abcd123","title":"Test alert", "folderUID": "efgh456", "orgID": 23}`)
+	// Create an alert
+	uid, updated, err := d.createAlert(ctx, `{"uid":"abcd123","title":"Test alert", "folderUID": "efgh456", "orgID": 23}`, true)
 	assert.NoError(t, err)
+	assert.Equal(t, false, updated)
 	assert.Equal(t, "abcd123", uid)
+
+	// Try to create an alert that already exists. This should lead to an update
+	uid, updated, err = d.createAlert(ctx, `{"uid":"xyz123","title":"Test alert", "folderUID": "efgh456", "orgID": 23}`, true)
+	assert.NoError(t, err)
+	assert.Equal(t, true, updated)
+	assert.Equal(t, "xyz123", uid)
+
+	// Simulate a conflict (same alert UID but different folder)
+	_, _, err = d.createAlert(ctx, `{"uid":"xyz123","title":"Test alert", "folderUID": "efgh789", "orgID": 23}`, true)
+	assert.NotNil(t, err)
+
+	// Simulate a conflict (same alert UID but different title)
+	_, _, err = d.createAlert(ctx, `{"uid":"xyz123","title":"Other alert", "folderUID": "efgh456", "orgID": 23}`, true)
+	assert.NotNil(t, err)
+
+	// Simulate a conflict (same alert UID but different org)
+	_, _, err = d.createAlert(ctx, `{"uid":"xyz123","title":"Test alert", "folderUID": "efgh456", "orgID": 45}`, true)
+	assert.NotNil(t, err)
+}
+
+func mockServerCreation(t *testing.T, existingAlerts []string) *httptest.Server {
+	// Create a map of UIDs to alert objects
+	alertsMap := make(map[string]string)
+	for _, alert := range existingAlerts {
+		newAlert, err := parseAlert(alert)
+		assert.NoError(t, err)
+		alertsMap[newAlert.UID] = alert
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+		// Read the request body
+		body, err := io.ReadAll(r.Body)
+		assert.NoError(t, err)
+
+		// Check that the request methods and URLs are what we expect
+		if r.Header.Get("Content-Type") != contentTypeJSON {
+			t.Errorf("Expected Content-Typet: application/json header, got: %s", r.Header.Get("Content-Type"))
+			return
+		}
+		if r.Header.Get("Authorization") != authToken {
+			t.Errorf("Invalid Authorization header")
+			return
+		}
+		if !strings.HasPrefix(r.URL.Path, alertingAPIPrefix) {
+			t.Errorf("Expected URL to start with '%s', got: %s", alertingAPIPrefix, r.URL.Path)
+			return
+		}
+
+		// We mock several scenarios:
+		// 1. Normal creation of an alert
+		// 2. Conflict when creating an alert (same UID but different folder)
+
+		// Creation of an alert
+		if r.Method == http.MethodPost {
+			// Parse alert content from request body
+			alertContent := string(body)
+			alert, err := parseAlert(alertContent)
+			if err != nil {
+				t.Errorf("failed to parse alert: %v", err)
+				return
+			}
+			// Check if the alert UID is present in the request
+			if alert.UID == "" {
+				t.Errorf("alert UID is missing in the request")
+				return
+			}
+
+			// Check if it's an existing alert
+			if _, exists := alertsMap[alert.UID]; exists {
+				// If the alert already exists, we simulate a conflict
+				w.WriteHeader(http.StatusConflict)
+				errMsg := `{"message":"Alert conflict"}`
+				if _, err := w.Write([]byte(errMsg)); err != nil {
+					t.Errorf("failed to write response body: %v", err)
+					return
+				}
+				return
+			}
+			// Otherwise, we simulate a successful creation
+			w.WriteHeader(http.StatusCreated)
+			if _, err := w.Write(body); err != nil {
+				t.Errorf("failed to write response body: %v", err)
+				return
+			}
+			return
+		} else if r.Method == http.MethodGet {
+			uid := strings.TrimPrefix(r.URL.Path, alertingAPIPrefix+"/")
+			// Check if it's an existing alert
+			if alert, exists := alertsMap[uid]; exists {
+				w.WriteHeader(http.StatusOK)
+				if _, err := w.Write([]byte(alert)); err != nil {
+					t.Errorf("failed to write response body: %v", err)
+					return
+				}
+				return
+			} else {
+				t.Errorf("alert UID '%s' not found in the mock server", uid)
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+		} else if r.Method == http.MethodPut {
+			// Simulate an update
+			uid := strings.TrimPrefix(r.URL.Path, alertingAPIPrefix+"/")
+			// Check if it's an existing alert
+			if _, exists := alertsMap[uid]; exists {
+				w.WriteHeader(http.StatusOK)
+				if _, err := w.Write([]byte(body)); err != nil {
+					t.Errorf("failed to write response body: %v", err)
+					return
+				}
+				return
+			} else {
+				t.Errorf("alert UID '%s' not found in the mock server", uid)
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+		} else {
+			t.Errorf("Unexpected method: %s", r.Method)
+			return
+		}
+
+	}))
+
+	return server
 }
 
 func TestDeleteAlert(t *testing.T) {
