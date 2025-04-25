@@ -11,10 +11,6 @@ inputs:
     description: "Service account token for Grafana for query testing"
     required: false
     default: ""
-  github_token:
-    description: "GitHub token to use for the action."
-    required: false
-    default: ${{ github.token }}
   pretty_print:
     description: "Pretty print the JSON output"
     required: false
