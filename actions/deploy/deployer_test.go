@@ -398,11 +398,10 @@ func mockServerCreation(t *testing.T, existingAlerts []string) *httptest.Server 
 					return
 				}
 				return
-			} else {
-				t.Errorf("alert UID '%s' not found in the mock server", uid)
-				w.WriteHeader(http.StatusNotFound)
-				return
 			}
+			t.Errorf("alert UID '%s' not found in the mock server", uid)
+			w.WriteHeader(http.StatusNotFound)
+			return
 		default:
 			t.Errorf("Unexpected method: %s", r.Method)
 			return
