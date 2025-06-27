@@ -13,6 +13,7 @@ permissions: {}
 
 jobs:
   security-scan:
+    name: "Run Zizmor Security Scan"
     runs-on: ubuntu-latest
     permissions:
       contents: read

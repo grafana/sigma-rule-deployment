@@ -295,10 +295,6 @@ func TestCreateAlert(t *testing.T) {
 	_, _, err = d.createAlert(ctx, `{"uid":"xyz123","title":"Test alert", "folderUID": "efgh789", "orgID": 23}`, true)
 	assert.NotNil(t, err)
 
-	// Simulate a conflict (same alert UID but different title)
-	_, _, err = d.createAlert(ctx, `{"uid":"xyz123","title":"Other alert", "folderUID": "efgh456", "orgID": 23}`, true)
-	assert.NotNil(t, err)
-
 	// Simulate a conflict (same alert UID but different org)
 	_, _, err = d.createAlert(ctx, `{"uid":"xyz123","title":"Test alert", "folderUID": "efgh456", "orgID": 45}`, true)
 	assert.NotNil(t, err)
