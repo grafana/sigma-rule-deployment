@@ -640,13 +640,7 @@ func (d *Deployer) checkAlertsMatch(a, b Alert) bool {
 	if a.UID != b.UID {
 		return false
 	}
-	if a.Title != b.Title {
-		return false
-	}
 	if a.FolderUID != b.FolderUID {
-		return false
-	}
-	if a.RuleGroup != b.RuleGroup {
 		return false
 	}
 	if a.OrgID != b.OrgID {
