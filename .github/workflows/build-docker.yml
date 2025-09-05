@@ -65,7 +65,7 @@ jobs:
 
       - name: Convert Sigma Rules
         id: converted-rules-output
-        uses: grafana/sigma-rule-deployment/actions/convert@latest
+        uses: grafana/sigma-rule-deployment/actions/convert@26cabace7fc16ec43be597c46f0f27ca26f0d125
         with:
           config_path: "./test/config.yml"
           pretty_print: true
@@ -74,7 +74,7 @@ jobs:
 
       - name: Integrate Converted Rules
         id: integrated-rules-output
-        uses: grafana/sigma-rule-deployment/actions/integrate@latest
+        uses: grafana/sigma-rule-deployment/actions/integrate@26cabace7fc16ec43be597c46f0f27ca26f0d125
         with:
           config_path: "./test/config.yml"
           pretty_print: true
