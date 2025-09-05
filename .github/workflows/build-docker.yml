@@ -49,6 +49,7 @@ jobs:
           push: true
 
   e2e-convert-and-integrate:
+    name: "E2E Test Actions"
     needs: build
     runs-on: ubuntu-latest
     permissions:
