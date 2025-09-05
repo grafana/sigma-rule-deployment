@@ -12,6 +12,7 @@ permissions: {}
 
 jobs:
   build:
+    name: "Build and Push Docker Image"
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -27,7 +28,7 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: "Build and Push"
+      - name: "Build and Push (PR)"
         uses: docker/build-push-action@471d1dc4e07e5cdedd4c2171150001c434f0b7a4 #v6.15.0
         if: github.event_name == 'pull_request'
         with:
@@ -37,7 +38,7 @@ jobs:
             ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${{ github.event.pull_request.head.sha }}
             ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:latest
           push: true
-      - name: "Build and Push"
+      - name: "Build and Push (Push)"
         uses: docker/build-push-action@471d1dc4e07e5cdedd4c2171150001c434f0b7a4 #v6.15.0
         if: github.event_name == 'push'
         with:

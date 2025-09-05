@@ -47,6 +47,7 @@ jobs:
           install-mode: "goinstall"
 
   convert-test:
+    name: Run unit tests for Sigma rule conversion
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -81,6 +82,7 @@ jobs:
           uv run --directory actions/convert pytest -v .
 
   integrate-test:
+    name: Run unit tests for Sigma rule integration
     needs: golangci-lint
     runs-on: ubuntu-latest
     permissions:
@@ -111,6 +113,7 @@ jobs:
           go test -v ./...
 
   deploy-test:
+    name: Run unit tests for Sigma rule deployment
     needs: golangci-lint
     runs-on: ubuntu-latest
     permissions:
