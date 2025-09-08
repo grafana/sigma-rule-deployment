@@ -29,7 +29,7 @@ function _convert() {
     if [ ${#valid_plugins[@]} -gt 0 ]; then
         # allow prerelease packages to be installed
         # TODO: remove this once we released a new version of sigma-rule-deployer
-        uv add --prerelease="allow" --directory /app/convert "${valid_plugins[@]}"
+        uv add --prerelease=allow --directory /app/convert "${valid_plugins[@]}"
     fi
 
     uv run --directory /app/convert main.py
