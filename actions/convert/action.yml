@@ -127,7 +127,7 @@ runs:
 
         echo all_changed_files=${CHANGED_FILES//\\n/} >> "$GITHUB_OUTPUT"
         echo deleted_files=${DELETED_FILES//\\n/} >> "$GITHUB_OUTPUT"
- 
+
     - name: Run Sigma Rule Converter
       id: convert
       shell: bash
@@ -164,9 +164,10 @@ runs:
       run: |
         CHANGED_FILES=$(git diff "$BASE_REF" --name-only --diff-filter=ACMR -- "$CONVERSION_PATH")
         DELETED_FILES=$(git diff "$BASE_REF" --name-only --diff-filter=D -- "$CONVERSION_PATH")
+        echo $CHANGED_FILES
+        echo $DELETED_FILES
         echo changed_files=${CHANGED_FILES//\\n/} >> $GITHUB_OUTPUT
         echo deleted_files=${DELETED_FILES//\\n/} >> $GITHUB_OUTPUT
-
 
     - name: Comment Conversions
       id: comment-conversions
@@ -218,7 +219,7 @@ runs:
                     ... on PullRequest {
                       number
                     }
-                  } 
+                  }
                 }
               }`
 
