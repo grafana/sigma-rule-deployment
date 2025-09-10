@@ -205,14 +205,11 @@ runs:
             console.log("No test results found");
           }
 
-          let resultTable = `| File name | Link | Result count | Errors |
-          | --- | --- | --- | --- |
-          `;
+          let resultTable = `| File name | Link | Result count | Errors |\n| --- | --- | --- | --- |\n`;
 
           for (const [key, value] of Object.entries(testResults)) {
             for (const result of value) {
-              resultTable += `| ${key} | [See in Explore](${result.link}) | ${result.stats.count} | ${result.stats.errors.length} |
-              `;
+              resultTable += `| ${key} | [See in Explore](${result.link}) | ${result.stats.count} | ${result.stats.errors.length} |\n`;
             }
           }
 
