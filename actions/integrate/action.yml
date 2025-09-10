@@ -150,7 +150,7 @@ runs:
         CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
         DELETED_FILES: ${{ steps.changed-files.outputs.deleted_files }}
         ALL_RULES: ${{ inputs.all_rules }}
-        ACTION_REF: ${{ github.action_ref }}
+        IMAGE_REF: ${{ github.action_ref == 'latest' && 'latest' || format('sha-{0}', github.action_ref) }}
       run: |
         docker run --rm \
             -v "$(pwd):/sigma-rules" \
@@ -162,7 +162,7 @@ runs:
             -e CHANGED_FILES="$CHANGED_FILES" \
             -e DELETED_FILES="$DELETED_FILES" \
             -e ALL_RULES="$ALL_RULES" \
-            "ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-$ACTION_REF" \
+            "ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:$IMAGE_REF" \
             integrate
     - name: Set output
       id: set-output
@@ -205,14 +205,11 @@ runs:
             console.log("No test results found");
           }
 
-          let resultTable = `| File name | Link | Result count | Errors |
-          | --- | --- | --- | --- |
-          `;
+          let resultTable = `| File name | Link | Result count | Errors |\n| --- | --- | --- | --- |\n`;
 
           for (const [key, value] of Object.entries(testResults)) {
             for (const result of value) {
-              resultTable += `| ${key} | [See in Explore](${result.link}) | ${result.stats.count} | ${result.stats.errors.length} |
-              `;
+              resultTable += `| ${key} | [See in Explore](${result.link}) | ${result.stats.count} | ${result.stats.errors.length} |\n`;
             }
           }
 
