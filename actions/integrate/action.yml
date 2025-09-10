@@ -177,17 +177,9 @@ runs:
         BASE_REF: ${{ steps.last-commit.outputs.result || steps.first-commit.outputs.result || github.base_ref || github.event.pull_request.base.ref || 'origin/HEAD' }}
         DEPLOYMENT_PATH: ${{ steps.config-paths.outputs.deployment_path }}
       run: |
-        pwd
-        ls -l .
-        ls -l "$DEPLOYMENT_PATH"
-        git status
-        git log
-
+        git add "$DEPLOYMENT_PATH"
         CHANGED_FILES=$(git diff "$BASE_REF" --name-only --diff-filter=ACMR -- "$DEPLOYMENT_PATH")
         DELETED_FILES=$(git diff "$BASE_REF" --name-only --diff-filter=D -- "$DEPLOYMENT_PATH")
-
-        echo $CHANGED_FILES
-        echo $DELETED_FILES
 
         echo changed_files=${CHANGED_FILES//\\n/} >> $GITHUB_OUTPUT
         echo deleted_files=${DELETED_FILES//\\n/} >> $GITHUB_OUTPUT
