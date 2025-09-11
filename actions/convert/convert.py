@@ -125,7 +125,7 @@ def convert_rules(
     default_backend_options = config.get("conversion_defaults.backend_options", {})
     default_without_pipeline = config.get("conversion_defaults.without_pipeline", False)
     default_pipelines = config.get("conversion_defaults.pipelines", [])
-    default_json_indent = config.get("conversion_defaults.json_indent", "0")
+    default_json_indent = config.get("conversion_defaults.json_indent", 0)
     verbose = config.get("verbose", False)
 
     conversions_to_delete = []

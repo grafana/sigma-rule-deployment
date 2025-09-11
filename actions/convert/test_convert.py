@@ -746,7 +746,7 @@ def test_load_rule_empty_file():
                     {
                         "name": "test_json_indent",
                         "input": ["test.yml"],
-                        "json_indent": "2",
+                        "json_indent": 2,
                     }
                 ],
             },

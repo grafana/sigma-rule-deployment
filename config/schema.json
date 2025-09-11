@@ -34,162 +34,15 @@
             "additionalProperties": false
         },
         "conversion_defaults": {
-            "type": "object",
-            "description": "Default settings applied to all conversions unless overridden",
-            "properties": {
-                "target": {
-                    "$ref": "#/$defs/backendType",
-                    "description": "Default target backend for rule conversion",
-                    "default": "loki",
-                    "examples": [
-                        "loki"
-                    ]
-                },
-                "format": {
-                    "type": "string",
-                    "description": "Default output format for converted rules",
-                    "default": "default",
-                    "examples": [
-                        "default",
-                        "json",
-                        "yaml"
-                    ]
-                },
-                "skip_unsupported": {
-                    "type": "boolean",
-                    "description": "Whether to skip unsupported rule features during conversion",
-                    "default": true,
-                    "examples": [
-                        true
-                    ]
-                },
-                "file_pattern": {
-                    "type": "string",
-                    "description": "Default file pattern to match when processing rules",
-                    "pattern": "^\\*\\.[a-zA-Z0-9]+$",
-                    "default": "*.yml",
-                    "examples": [
-                        "*.yml",
-                        "*.yaml"
-                    ]
-                },
-                "data_source": {
-                    "type": "string",
-                    "description": "Default data source identifier",
-                    "examples": [
-                        "loki-logs"
-                    ]
-                },
-                "fail_unsupported": {
-                    "type": "boolean",
-                    "description": "Whether to fail on unsupported rule features during conversion",
-                    "default": false
-                },
-                "encoding": {
-                    "type": "string",
-                    "description": "Default character encoding for input files",
-                    "enum": [
-                        "utf-8",
-                        "utf-16",
-                        "ascii",
-                        "latin1"
-                    ],
-                    "default": "utf-8"
-                },
-                "pipeline_check": {
-                    "type": "boolean",
-                    "description": "Whether to validate pipeline configurations by default",
-                    "default": true
-                },
-                "correlation_method": {
-                    "type": "string",
-                    "description": "Select method for generation of correlation queries. If not given the default method of the backend is used",
-                    "examples": [
-                        "default"
-                    ]
-                },
-                "filters": {
-                    "type": "array",
-                    "description": "Default filters to apply during conversion",
-                    "items": {
-                        "type": "string"
-                    },
-                    "default": []
-                },
-                "backend_options": {
-                    "type": "object",
-                    "description": "Default backend-specific options for rule conversion",
-                    "properties": {
-                        "case_sensitive": {
-                            "type": "boolean",
-                            "description": "Whether string matching should be case sensitive"
-                        },
-                        "add_line_filters": {
-                            "type": "boolean",
-                            "description": "Whether to add line-based filtering to queries"
-                        }
-                    },
-                    "additionalProperties": {
-                        "type": [
-                            "string",
-                            "number",
-                            "boolean",
-                            "array",
-                            "object"
-                        ]
-                    },
-                    "default": {}
-                },
-                "without_pipeline": {
-                    "type": "boolean",
-                    "description": "Skip pipeline processing by default",
-                    "default": false
-                },
-                "pipelines": {
-                    "type": "array",
-                    "description": "Default processing pipelines to apply during conversion",
-                    "items": {
-                        "type": "string",
-                        "description": "Path to pipeline configuration file, relative to the root of the repository"
-                    },
-                    "default": []
-                },
-                "json_indent": {
-                    "type": "string",
-                    "description": "Default JSON indentation for output formatting",
-                    "pattern": "^[0-9]+$",
-                    "default": "0",
-                    "examples": [
-                        "0",
-                        "2",
-                        "4"
-                    ]
-                },
-                "verbose": {
-                    "type": "boolean",
-                    "description": "Enable verbose output by default",
-                    "default": false
-                },
-                "data_source_type": {
-                    "$ref": "#/$defs/backendType",
-                    "description": "Default data source type for conversions"
-                },
-                "query_model": {
-                    "type": "string",
-                    "description": "Default custom sprintf format string for query model (refID, datasource, query)",
-                    "examples": [
-                        "{\"refId\":\"%s\",\"datasource\":{\"type\":\"loki\",\"uid\":\"%s\"},\"query\":\"%s\"}"
-                    ]
-                }
-            },
-            "additionalProperties": false
+            "$ref": "#/$defs/conversionConfigBase",
+            "description": "Default settings applied to all conversions unless overridden by conversions"
         },
         "conversions": {
             "type": "array",
             "description": "List of rule conversion configurations",
             "minItems": 1,
             "items": {
-                "type": "object",
+                "$ref": "#/$defs/conversionConfigBase",
                 "required": [
                     "name",
                     "input"
@@ -228,88 +81,6 @@
                             ]
                         ]
                     },
-                    "target": {
-                        "$ref": "#/$defs/backendType",
-                        "description": "Override target backend for this conversion"
-                    },
-                    "format": {
-                        "type": "string",
-                        "description": "Override output format for this conversion",
-                        "examples": [
-                            "default",
-                            "json",
-                            "yaml"
-                        ]
-                    },
-                    "data_source": {
-                        "type": "string",
-                        "description": "Override data source for this conversion"
-                    },
-                    "backend_options": {
-                        "type": "object",
-                        "description": "Backend-specific options for rule conversion",
-                        "properties": {
-                            "case_sensitive": {
-                                "type": "boolean",
-                                "description": "Whether string matching should be case sensitive"
-                            },
-                            "add_line_filters": {
-                                "type": "boolean",
-                                "description": "Whether to add line-based filtering to queries"
-                            }
-                        },
-                        "additionalProperties": {
-                            "type": [
-                                "string",
-                                "number",
-                                "boolean",
-                                "array",
-                                "object"
-                            ]
-                        }
-                    },
-                    "pipelines": {
-                        "type": "array",
-                        "description": "Processing pipelines to apply during conversion",
-                        "items": {
-                            "type": "string",
-                            "description": "Path to pipeline configuration file, relative to the root of the repository"
-                        },
-                        "examples": [
-                            [
-                                "pipelines/cloud/aws/cloudtrail/filter_permitted_aws_accounts.yml",
-                                "pipelines/datasources/aws_cloudtrail.yml"
-                            ]
-                        ]
-                    },
-                    "pipeline_check": {
-                        "type": "boolean",
-                        "description": "Whether to validate pipeline configurations",
-                        "default": true
-                    },
-                    "without_pipeline": {
-                        "type": "boolean",
-                        "description": "Skip pipeline processing for this conversion",
-                        "default": false
-                    },
-                    "encoding": {
-                        "type": "string",
-                        "description": "Character encoding for input files",
-                        "enum": [
-                            "utf-8",
-                            "utf-16",
-                            "ascii",
-                            "latin1"
-                        ],
-                        "default": "utf-8"
-                    },
-                    "correlation_method": {
-                        "type": "string",
-                        "description": "Select method for generation of correlation queries. If not given the default method of the backend is used",
-                        "examples": [
-                            "default"
-                        ]
-                    },
                     "rule_group": {
                         "type": "string",
                         "description": "Name of the alert rule group in Grafana",
@@ -328,58 +99,8 @@
                             "6h",
                             "30m"
                         ]
-                    },
-                    "file_pattern": {
-                        "type": "string",
-                        "description": "Pattern for file names to be included in recursion into directories (overrides conversion_defaults.file_pattern)",
-                        "pattern": "^\\*\\.[a-zA-Z0-9]+$",
-                        "examples": [
-                            "*.yml",
-                            "*.yaml"
-                        ]
-                    },
-                    "fail_unsupported": {
-                        "type": "boolean",
-                        "description": "Whether to fail on unsupported rule features for this conversion"
-                    },
-                    "skip_unsupported": {
-                        "type": "boolean",
-                        "description": "Whether to skip unsupported rule features for this conversion"
-                    },
-                    "json_indent": {
-                        "type": "string",
-                        "description": "JSON indentation for this conversion's output",
-                        "pattern": "^[0-9]+$",
-                        "examples": [
-                            "0",
-                            "2",
-                            "4"
-                        ]
-                    },
-                    "verbose": {
-                        "type": "boolean",
-                        "description": "Enable verbose output for this conversion"
-                    },
-                    "filters": {
-                        "type": "array",
-                        "description": "Filters to apply for this conversion",
-                        "items": {
-                            "type": "string"
-                        }
-                    },
-                    "data_source_type": {
-                        "$ref": "#/$defs/backendType",
-                        "description": "Type of data source backend for this conversion"
-                    },
-                    "query_model": {
-                        "type": "string",
-                        "description": "Custom sprintf format string for query model (refID, datasource, query)",
-                        "examples": [
-                            "{\"refId\":\"%s\",\"datasource\":{\"type\":\"loki\",\"uid\":\"%s\"},\"query\":\"%s\"}"
-                        ]
                     }
-                },
-                "additionalProperties": false
+                }
             }
         },
         "integration": {
@@ -476,8 +197,8 @@
         "urlPattern": {
             "type": "string",
             "format": "uri",
-            "pattern": "^https://",
-            "description": "HTTPS URL pattern"
+            "pattern": "^http[s]?://",
+            "description": "HTTP or HTTPS URL pattern"
         },
         "grafanaId": {
             "type": "string",
@@ -518,6 +239,134 @@
                 "uberagent"
             ],
             "description": "Supported Sigma backend types for rule conversion. Based on available pySigma backends from https://sigmahq.io/docs/digging-deeper/backends.html"
+        },
+        "conversionConfigBase": {
+            "type": "object",
+            "description": "Base configuration properties shared between conversion defaults and individual conversions",
+            "properties": {
+                "target": {
+                    "$ref": "#/$defs/backendType",
+                    "description": "Target backend for rule conversion"
+                },
+                "format": {
+                    "type": "string",
+                    "description": "Output format for converted rules",
+                    "examples": [
+                        "default",
+                        "json",
+                        "yaml"
+                    ]
+                },
+                "skip_unsupported": {
+                    "type": "boolean",
+                    "description": "Skip conversion of rules that can't be handled by the backend"
+                },
+                "file_pattern": {
+                    "type": "string",
+                    "description": "File pattern to match when processing rules",
+                    "pattern": "^\\*\\.[a-zA-Z0-9]+$",
+                    "examples": [
+                        "*.yml",
+                        "*.yaml"
+                    ]
+                },
+                "data_source": {
+                    "type": "string",
+                    "description": "Grafana data source identifier"
+                },
+                "fail_unsupported": {
+                    "type": "boolean",
+                    "description": "Whether to fail on unsupported rule features during conversion"
+                },
+                "encoding": {
+                    "type": "string",
+                    "description": "Output encoding for string backend outputs. This is ignored for backends that return binary output.",
+                    "enum": [
+                        "utf-8",
+                        "utf-16",
+                        "ascii",
+                        "latin1"
+                    ]
+                },
+                "pipeline_check": {
+                    "type": "boolean",
+                    "description": "Whether to validate pipeline configurations"
+                },
+                "correlation_method": {
+                    "type": "string",
+                    "description": "Select method for generation of correlation queries. If not given the default method of the backend is used",
+                    "examples": [
+                        "default"
+                    ]
+                },
+                "filters": {
+                    "type": "array",
+                    "description": "Filters to apply during conversion",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "backend_options": {
+                    "type": "object",
+                    "description": "Backend-specific options for rule conversion",
+                    "properties": {
+                        "case_sensitive": {
+                            "type": "boolean",
+                            "description": "Whether string matching should be case sensitive"
+                        },
+                        "add_line_filters": {
+                            "type": "boolean",
+                            "description": "Whether to add line-based filtering to queries"
+                        }
+                    },
+                    "additionalProperties": {
+                        "type": [
+                            "string",
+                            "number",
+                            "boolean",
+                            "array",
+                            "object"
+                        ]
+                    }
+                },
+                "without_pipeline": {
+                    "type": "boolean",
+                    "description": "Proceed with conversion without processing pipeline, even if it is mandatory for the target."
+                },
+                "pipelines": {
+                    "type": "array",
+                    "description": "Processing pipelines to apply during conversion",
+                    "items": {
+                        "type": "string",
+                        "description": "Name of the pipeline or path to pipeline configuration file, relative to the root of the repository"
+                    }
+                },
+                "json_indent": {
+                    "type": "integer",
+                    "description": "JSON indentation for output formatting",
+                    "minimum": 0,
+                    "examples": [
+                        0,
+                        2,
+                        4
+                    ]
+                },
+                "verbose": {
+                    "type": "boolean",
+                    "description": "Enable verbose output"
+                },
+                "data_source_type": {
+                    "$ref": "#/$defs/backendType",
+                    "description": "Data source type for conversions"
+                },
+                "query_model": {
+                    "type": "string",
+                    "description": "Custom sprintf format string for query model (refID, datasource, query)",
+                    "examples": [
+                        "{\"refId\":\"%s\",\"datasource\":{\"type\":\"loki\",\"uid\":\"%s\"},\"query\":\"%s\"}"
+                    ]
+                }
+            }
         }
     },
     "examples": [
