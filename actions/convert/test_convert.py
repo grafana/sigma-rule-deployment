@@ -16,7 +16,7 @@ def mock_config():
     """Mock configuration object."""
     return DynaconfDict(
         {
-            "defaults": {
+            "conversion_defaults": {
                 "target": "loki",
                 "format": "default",
                 "skip_unsupported": "true",
@@ -39,7 +39,7 @@ def mock_config_with_correlation_rule():
     """Mock configuration object with a correlation rule."""
     return DynaconfDict(
         {
-            "defaults": {
+            "conversion_defaults": {
                 "target": "loki",
                 "format": "default",
                 "skip_unsupported": "true",
@@ -951,11 +951,11 @@ def test_convert_rules_command_args(
                         == expected_args[expected_args.index("--target") + 1]
                     )
 
-                    # Format might be different due to defaults - don't assert strict equality
+                    # Format might be different due to conversion_defaults - don't assert strict equality
                     assert "--format" in call_args
 
 
-# Test handling of correlation_method when set in defaults but not in conversion
+# Test handling of correlation_method when set in conversion_defaults but not in conversion
 @patch("glob.glob")
 @patch("os.path.exists")
 @patch("pathlib.Path.is_absolute")
