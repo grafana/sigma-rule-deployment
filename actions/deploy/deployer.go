@@ -465,7 +465,7 @@ func (d *Deployer) createAlert(ctx context.Context, content string, updateIfExis
 
 		return uid, true, nil
 	default:
-		log.Printf("Can't create alert. Status: %d, Message: %s", res.StatusCode, resp.Message)
+		log.Printf("Can't create alert %s (%s). Status: %d, Message: %s", alert.UID, alert.Title, res.StatusCode, resp.Message)
 		return "", false, fmt.Errorf("error creating alert: returned status %s", res.Status)
 	}
 }
