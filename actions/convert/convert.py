@@ -162,9 +162,13 @@ def convert_rules(
                         glob.glob(str(path_prefix / pattern), recursive=True)
                     )
                     for deleted_file in deleted_files_set:
-                        if fnmatch.fnmatch(str(deleted_file), str(path_prefix / pattern)):
+                        if fnmatch.fnmatch(
+                            str(deleted_file), str(path_prefix / pattern)
+                        ):
                             output_filename = f"{name}_{deleted_file.stem}.json"
-                            output_path = path_prefix / conversions_output_dir / output_filename
+                            output_path = (
+                                path_prefix / conversions_output_dir / output_filename
+                            )
                             if output_path.exists():
                                 conversions_to_delete.append(output_path)
             case str():
@@ -172,22 +176,26 @@ def convert_rules(
                     glob.glob(str(path_prefix / conversion_input), recursive=True)
                 )
                 for deleted_file in deleted_files_set:
-                    if fnmatch.fnmatch(str(deleted_file), str(path_prefix / conversion_input)):
+                    if fnmatch.fnmatch(
+                        str(deleted_file), str(path_prefix / conversion_input)
+                    ):
                         output_filename = f"{name}_{deleted_file.stem}.json"
-                        output_path = path_prefix / conversions_output_dir / output_filename
+                        output_path = (
+                            path_prefix / conversions_output_dir / output_filename
+                        )
                         if output_path.exists():
                             conversions_to_delete.append(output_path)
             case _:
                 raise ValueError("Invalid input file type")
 
-        # Apply file-pattern filtering to exclude files that don't match the pattern
-        file_pattern = conversion.get("file-pattern", default_file_pattern)
+        # Apply file_pattern filtering to exclude files that don't match the pattern
+        file_pattern = conversion.get("file_pattern", default_file_pattern)
         filtered_files = [f for f in input_files if fnmatch.fnmatch(f, file_pattern)]
 
         # Skip conversion if no files match the pattern
         if not filtered_files:
             raise ValueError(
-                f"No files matched the patterns after applying file-pattern: {file_pattern}"
+                f"No files matched the patterns after applying file_pattern: {file_pattern}"
             )
 
         print(f"Total files: {len(filtered_files)}")

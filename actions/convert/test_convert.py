@@ -19,8 +19,8 @@ def mock_config():
             "defaults": {
                 "target": "loki",
                 "format": "default",
-                "skip-unsupported": "true",
-                "file-pattern": "*.yml",
+                "skip_unsupported": "true",
+                "file_pattern": "*.yml",
             },
             "conversions": [
                 {
@@ -42,8 +42,8 @@ def mock_config_with_correlation_rule():
             "defaults": {
                 "target": "loki",
                 "format": "default",
-                "skip-unsupported": "true",
-                "file-pattern": "*.yml",
+                "skip_unsupported": "true",
+                "file_pattern": "*.yml",
                 "encoding": "utf-8",
             },
             "conversions": [
