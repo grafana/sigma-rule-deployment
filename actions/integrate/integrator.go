@@ -412,7 +412,6 @@ func (i *Integrator) ConvertToAlert(rule *definitions.ProvisionedAlertRule, quer
 		rule.Annotations = make(map[string]string)
 	}
 
-	// todo: add Loopback?
 	rule.Annotations["Query"] = strings.Join(queries, " | ")
 	rule.Annotations["TimeWindow"] = timewindow
 
