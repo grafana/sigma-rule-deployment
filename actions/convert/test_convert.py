@@ -16,11 +16,11 @@ def mock_config():
     """Mock configuration object."""
     return DynaconfDict(
         {
-            "defaults": {
+            "conversion_defaults": {
                 "target": "loki",
                 "format": "default",
-                "skip-unsupported": "true",
-                "file-pattern": "*.yml",
+                "skip_unsupported": "true",
+                "file_pattern": "*.yml",
             },
             "conversions": [
                 {
@@ -39,11 +39,11 @@ def mock_config_with_correlation_rule():
     """Mock configuration object with a correlation rule."""
     return DynaconfDict(
         {
-            "defaults": {
+            "conversion_defaults": {
                 "target": "loki",
                 "format": "default",
-                "skip-unsupported": "true",
-                "file-pattern": "*.yml",
+                "skip_unsupported": "true",
+                "file_pattern": "*.yml",
                 "encoding": "utf-8",
             },
             "conversions": [
@@ -746,7 +746,7 @@ def test_load_rule_empty_file():
                     {
                         "name": "test_json_indent",
                         "input": ["test.yml"],
-                        "json_indent": "2",
+                        "json_indent": 2,
                     }
                 ],
             },
@@ -951,11 +951,11 @@ def test_convert_rules_command_args(
                         == expected_args[expected_args.index("--target") + 1]
                     )
 
-                    # Format might be different due to defaults - don't assert strict equality
+                    # Format might be different due to conversion_defaults - don't assert strict equality
                     assert "--format" in call_args
 
 
-# Test handling of correlation_method when set in defaults but not in conversion
+# Test handling of correlation_method when set in conversion_defaults but not in conversion
 @patch("glob.glob")
 @patch("os.path.exists")
 @patch("pathlib.Path.is_absolute")

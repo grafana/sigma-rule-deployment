@@ -1,0 +1,90 @@
+name: Config Validator
+description: "Validate configuration file against the JSON schema"
+branding:
+  icon: check-circle
+  color: green
+inputs:
+  config_file:
+    description: "Path to the configuration file to validate, relative to the root of the repository"
+    required: false
+    default: "config.yml"
+  schema_file:
+    description: "Path to the JSON schema file, relative to the root of the repository"
+    required: false
+    default: "config/schema.json"
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
+      with:
+        fetch-depth: 0
+        persist-credentials: false
+    - name: Set up Python
+      uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c #v6.0.0
+    - name: Install dependencies
+      shell: bash
+      run: pip install check-jsonschema==0.33.3
+    - name: Validate configuration
+      shell: bash
+      run: |
+        # Resolve config file path relative to workspace root
+        CONFIG_FILE="${INPUTS_CONFIG_FILE}"
+        CONFIG_PATH=$(realpath "${GITHUB_WORKSPACE}/$CONFIG_FILE" 2>/dev/null)
+
+        # Check if realpath succeeded
+        if [ -z "$CONFIG_PATH" ]; then
+          echo "Error: Failed to resolve config file path '$CONFIG_FILE'"
+          exit 1
+        fi
+
+        # Ensure the resolved config path is still within the workspace
+        WORKSPACE_REAL=$(realpath "$GITHUB_WORKSPACE")
+        if [[ "$CONFIG_PATH" != "$WORKSPACE_REAL"* ]]; then
+          echo "Error: Config file path '$CONFIG_FILE' resolves outside workspace boundaries"
+          exit 1
+        fi
+
+        echo "Validating configuration file: $CONFIG_PATH"
+
+        # Determine schema file path based on input
+        SCHEMA_FILE="${INPUTS_SCHEMA_FILE}"
+
+        # If schema_file is the default value, use action path
+        if [ "$SCHEMA_FILE" = "config/schema.json" ]; then
+          SCHEMA_PATH="${GITHUB_ACTION_PATH}/$SCHEMA_FILE"
+          echo "Using default schema from action: $SCHEMA_PATH"
+        else
+          # User provided custom schema path, resolve relative to workspace root
+          SCHEMA_PATH=$(realpath "${GITHUB_WORKSPACE}/$SCHEMA_FILE" 2>/dev/null)
+
+          # Check if realpath succeeded
+          if [ -z "$SCHEMA_PATH" ]; then
+            echo "Error: Failed to resolve schema file path '$SCHEMA_FILE'"
+            exit 1
+          fi
+
+          # Ensure the resolved path is still within the workspace
+          if [[ "$SCHEMA_PATH" != "$WORKSPACE_REAL"* ]]; then
+            echo "Error: Schema file path '$SCHEMA_FILE' resolves outside workspace boundaries"
+            exit 1
+          fi
+
+          echo "Using user-provided schema: $SCHEMA_PATH"
+        fi
+
+        # Validate both files exist
+        if [ ! -f "$CONFIG_PATH" ]; then
+          echo "Error: Config file not found at $CONFIG_PATH"
+          exit 1
+        fi
+
+        if [ ! -f "$SCHEMA_PATH" ]; then
+          echo "Error: Schema file not found at $SCHEMA_PATH"
+          exit 1
+        fi
+
+        # Run validation
+        check-jsonschema --schemafile "$SCHEMA_PATH" "$CONFIG_PATH"
+      env:
+        INPUTS_CONFIG_FILE: ${{ inputs.config_file }}
+        INPUTS_SCHEMA_FILE: ${{ inputs.schema_file }}
