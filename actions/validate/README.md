@@ -20,13 +20,9 @@ on:
   push:
     paths:
       - 'config.yml'
-      - '*.yml'
-      - '*.yaml'
   pull_request:
     paths:
       - 'config.yml'
-      - '*.yml'
-      - '*.yaml'
 
 jobs:
   validate-config:
