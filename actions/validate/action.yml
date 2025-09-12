@@ -52,7 +52,7 @@ runs:
         # If schema_file is the default value, use action path
         if [ "$SCHEMA_FILE" = "config/schema.json" ]; then
           # This is to get the schema file path relative to the action path
-          SCHEMA_PATH="${GITHUB_ACTION_PATH}/../../$SCHEMA_FILE"
+          SCHEMA_PATH=$(realpath "${GITHUB_ACTION_PATH}/../../$SCHEMA_FILE" 2>/dev/null)
           echo "Using default schema from action: $SCHEMA_PATH"
         else
           # User provided custom schema path, resolve relative to workspace root
