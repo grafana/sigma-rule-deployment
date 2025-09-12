@@ -216,6 +216,61 @@ func (i *Integrator) LoadConfig() error {
 	return nil
 }
 
+// cleanupOrphanedFiles removes conversion files that have no matching configuration
+//
+// todo: Make this generic for handling files in both the conversions and deployments path
+func (i *Integrator) cleanupOrphanedFiles() error {
+	// Get all conversion files in the conversion path
+	var conversionFiles []string
+	err := filepath.Walk(i.config.Folders.ConversionPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() && strings.HasSuffix(path, ".json") {
+			conversionFiles = append(conversionFiles, path)
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("failed to walk conversion directory: %w", err)
+	}
+
+	// Check each conversion file for orphaned status
+	for _, file := range conversionFiles {
+		// Read the conversion file to get its conversion name
+		content, err := ReadLocalFile(file)
+		if err != nil {
+			fmt.Printf("Warning: Could not read conversion file %s: %v\n", file, err)
+			continue
+		}
+
+		var conversionObject ConversionOutput
+		if err := json.Unmarshal([]byte(content), &conversionObject); err != nil {
+			fmt.Printf("Warning: Could not parse conversion file %s: %v\n", file, err)
+			continue
+		}
+
+		// Check if this conversion name has a matching configuration
+		hasMatchingConfig := false
+		for _, conf := range i.config.Conversions {
+			if conf.Name == conversionObject.ConversionName {
+				hasMatchingConfig = true
+				break
+			}
+		}
+
+		// If no matching configuration found, remove the orphaned file
+		if !hasMatchingConfig {
+			fmt.Printf("Removing orphaned conversion file: %s (conversion name: %s)\n", file, conversionObject.ConversionName)
+			if err := os.Remove(file); err != nil {
+				fmt.Printf("Warning: Could not remove orphaned file %s: %v\n", file, err)
+			}
+		}
+	}
+
+	return nil
+}
+
 func (i *Integrator) Run() error {
 	// Parse the timeout from configuration
 	timeoutDuration := 10 * time.Second // Default timeout
@@ -255,7 +310,8 @@ func (i *Integrator) Run() error {
 			}
 		}
 		if config.Name == "" {
-			return fmt.Errorf("no conversion configuration found for conversion name: %s", conversionObject.ConversionName)
+			fmt.Printf("Warning: No configuration found for conversion name: %s, skipping file: %s\n", conversionObject.ConversionName, inputFile)
+			continue
 		}
 
 		queries := conversionObject.Queries
@@ -328,6 +384,11 @@ func (i *Integrator) Run() error {
 				return fmt.Errorf("error when deleting deployment file %s: %v", file, err)
 			}
 		}
+	}
+
+	// Clean up orphaned files that have no matching configuration
+	if err := i.cleanupOrphanedFiles(); err != nil {
+		fmt.Printf("Warning: Error during orphaned file cleanup: %v\n", err)
 	}
 
 	rulesIntegrated := strings.Join(i.addedFiles, " ")

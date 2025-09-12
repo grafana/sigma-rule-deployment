@@ -576,6 +576,24 @@ func TestIntegratorRun(t *testing.T) {
 				"ConversionFile": "test_annotations.json",
 			},
 		},
+		{
+			name:           "handle orphaned conversion file",
+			conversionName: "orphaned_conv",
+			convOutput: ConversionOutput{
+				ConversionName: "orphaned_conv",
+				Queries:        []string{"{job=`orphaned`} | json"},
+				Rules: []SigmaRule{
+					{
+						ID:    "996f8884-9144-40e7-ac63-29090ccde9a0",
+						Title: "Orphaned Rule",
+					},
+				},
+			},
+			wantQueries:  []string{},
+			wantTitles:   "",
+			removedFiles: []string{},
+			wantError:    false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -600,6 +618,19 @@ func TestIntegratorRun(t *testing.T) {
 			assert.NoError(t, err)
 
 			// Create test configuration
+			conversions := []ConversionConfig{}
+
+			// For orphaned test case, don't include the conversion in config
+			if tt.name != "handle orphaned conversion file" {
+				conversions = []ConversionConfig{
+					{
+						Name:       tt.conversionName,
+						RuleGroup:  "Test Rules",
+						TimeWindow: "5m",
+					},
+				}
+			}
+
 			config := Configuration{
 				Folders: FoldersConfig{
 					ConversionPath: convPath,
@@ -609,13 +640,7 @@ func TestIntegratorRun(t *testing.T) {
 					Target:     "loki",
 					DataSource: "test-datasource",
 				},
-				Conversions: []ConversionConfig{
-					{
-						Name:       tt.conversionName,
-						RuleGroup:  "Test Rules",
-						TimeWindow: "5m",
-					},
-				},
+				Conversions: conversions,
 				IntegratorConfig: IntegrationConfig{
 					FolderID: "test-folder",
 					OrgID:    1,
@@ -660,6 +685,14 @@ func TestIntegratorRun(t *testing.T) {
 				return
 			}
 			assert.NoError(t, err)
+
+			// For orphaned file test case, verify the file was cleaned up
+			if tt.name == "handle orphaned conversion file" {
+				convFile := filepath.Join(convPath, tt.conversionName+".json")
+				_, err = os.Stat(convFile)
+				assert.True(t, os.IsNotExist(err), "Expected orphaned conversion file to be deleted but it still exists")
+				return
+			}
 
 			// For cases with no queries, just verify no files were created
 			if len(tt.wantQueries) == 0 {
