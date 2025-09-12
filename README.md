@@ -4,6 +4,7 @@ Automate the conversion, testing, and deployment of Sigma Rules to Grafana with 
 
 ## Available Actions
 
+- [Config Validator](./actions/validate/README.md): Validates configuration files against the JSON schema to ensure proper structure and required fields before processing.
 - [Sigma Rule Converter](./actions/convert/README.md): Converts Sigma rules to target query languages using `sigma-cli`. Supports dynamic plugin installation, custom configurations, and output management, producing a JSON output format that can be used by the integrator.
 - [Query Integrator](./actions/integrate/README.md): Given a folder of input query files (as produced by the converter), each file containing a list of queries and relevant metadata, convert each into a Grafana Managed Alerting alert rule, optionally testing the queries against a configured Grafana instance to validate that it works as expected.
 - [Rule Deployer](./actions/deploy/README.md): Given a folder of Grafana Managed Alerting alert rules (as produced by the integrator), deploy them to the configured Grafana instance, using Alerting's provisioning API.
@@ -31,11 +32,13 @@ Relevent conversion backends and data sources that can be used in Grafana includ
 - [SurrealQL](https://github.com/SigmaHQ/pySigma-backend-surrealql) and the [SurrealDB data source](https://grafana.com/grafana/plugins/grafana-surrealdb-datasource/)
 
 To ensure the data source plugin can execute your queries, you may need to provide a bespoke `query_model` in the conversion configuration. You do this by specifing a [fmt.Sprintf](https://pkg.go.dev/fmt#pkg-overview) formatted JSON string, which receives the following arguments:
+
 1. the ref ID for the query
 2. the UID for the data source
 3. the query, escaped as a JSON string
 
 An example query model would be:
+
 ```
 query_model: '{"refId":"%s","datasource":{"type":"my_data_source_type","uid":"%s"},"query":"%s","customKey":"customValue"}'
 ```

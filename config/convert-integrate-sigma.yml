@@ -72,10 +72,8 @@ jobs:
         uses: grafana/sigma-rule-deployment/actions/integrate@bb1e922e36c3a802a4c2db5e7dbeeddf85ae1c32
         with:
           config_path: "./config.yml"
-          github_token: ${{ secrets.CLONE_TOKEN }}
+          grafana_sa_token: ${{ secrets.SECOPS_DEV_GCP_SA }}
           pretty_print: true
-          changed_files: ${{ steps.converted-rules-output.outputs.changed_files }}
-          deleted_files: ${{ steps.converted-rules-output.outputs.deleted_files }}
 
       - name: Output Integrated Rules
         if: ${{ github.event_name == 'pull_request' }}

@@ -1,0 +1,413 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://github.com/grafana/sigma-rule-deployment",
+    "title": "Sigma Rule Deployment Configuration v1.0.0 (2025-09-10)",
+    "description": "Configuration schema for sigma rule conversion, integration, and deployment",
+    "type": "object",
+    "required": [
+        "folders"
+    ],
+    "properties": {
+        "folders": {
+            "type": "object",
+            "description": "Paths for conversion and deployment outputs",
+            "required": [
+                "conversion_path",
+                "deployment_path"
+            ],
+            "properties": {
+                "conversion_path": {
+                    "type": "string",
+                    "description": "Path where converted rules will be stored",
+                    "examples": [
+                        "./conversions"
+                    ]
+                },
+                "deployment_path": {
+                    "type": "string",
+                    "description": "Path where deployment configurations will be stored",
+                    "examples": [
+                        "./deployments"
+                    ]
+                }
+            },
+            "additionalProperties": false
+        },
+        "conversion_defaults": {
+            "$ref": "#/$defs/conversionConfigBase",
+            "description": "Default settings applied to all conversions unless overridden by conversions"
+        },
+        "conversions": {
+            "type": "array",
+            "description": "List of rule conversion configurations",
+            "minItems": 1,
+            "items": {
+                "$ref": "#/$defs/conversionConfigBase",
+                "required": [
+                    "name",
+                    "input"
+                ],
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "Unique identifier for this conversion configuration",
+                        "pattern": "^[a-zA-Z0-9_-]+$",
+                        "examples": [
+                            "aws_cloudtrail",
+                            "github_audit",
+                            "okta_audit"
+                        ]
+                    },
+                    "input": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "description": "Single input path pattern for sigma rules, relative to the root of the repository"
+                            },
+                            {
+                                "type": "array",
+                                "description": "Multiple input path patterns for sigma rules, relative to the root of the repository",
+                                "items": {
+                                    "type": "string"
+                                },
+                                "minItems": 1
+                            }
+                        ],
+                        "examples": [
+                            "rules-development/cloud/aws/cloudtrail/*",
+                            [
+                                "rules-private/grafana/grafana-com/file1.yml",
+                                "rules-correlation/grafana/grafana-com/file2.yml"
+                            ]
+                        ]
+                    },
+                    "rule_group": {
+                        "type": "string",
+                        "description": "Name of the alert rule group in Grafana",
+                        "examples": [
+                            "Every 5 Minutes",
+                            "Every 1 Hour",
+                            "Every 6 Hours"
+                        ]
+                    },
+                    "time_window": {
+                        "$ref": "#/$defs/timeWindow",
+                        "description": "Time window for alert evaluation",
+                        "examples": [
+                            "5m",
+                            "1h",
+                            "6h",
+                            "30m"
+                        ]
+                    }
+                }
+            }
+        },
+        "integration": {
+            "type": "object",
+            "description": "Settings for integrating with Grafana",
+            "required": [
+                "folder_id",
+                "org_id"
+            ],
+            "properties": {
+                "folder_id": {
+                    "$ref": "#/$defs/grafanaId",
+                    "description": "Grafana folder ID where alerts will be created",
+                    "examples": [
+                        "my48wfae9ojcgw",
+                        "XXXX"
+                    ]
+                },
+                "org_id": {
+                    "type": "integer",
+                    "description": "Grafana organization ID",
+                    "minimum": 1,
+                    "examples": [
+                        1
+                    ]
+                },
+                "test_queries": {
+                    "type": "boolean",
+                    "description": "Whether to test queries against the datasource before deployment",
+                    "default": true
+                },
+                "from": {
+                    "type": "string",
+                    "description": "Start time for query testing",
+                    "pattern": "^now(-[0-9]+[smhd])?$",
+                    "default": "now-1h",
+                    "examples": [
+                        "now-1h",
+                        "now-24h"
+                    ]
+                },
+                "to": {
+                    "type": "string",
+                    "description": "End time for query testing",
+                    "pattern": "^now(-[0-9]+[smhd])?$",
+                    "default": "now",
+                    "examples": [
+                        "now"
+                    ]
+                },
+                "show_log_lines": {
+                    "type": "boolean",
+                    "description": "Whether to include log line content in query test results",
+                    "default": false
+                }
+            },
+            "additionalProperties": false
+        },
+        "deployment": {
+            "type": "object",
+            "description": "Deployment configuration settings",
+            "required": [
+                "grafana_instance"
+            ],
+            "properties": {
+                "grafana_instance": {
+                    "$ref": "#/$defs/urlPattern",
+                    "description": "URL of the target Grafana instance",
+                    "examples": [
+                        "https://myinstance.grafana.com"
+                    ]
+                },
+                "timeout": {
+                    "$ref": "#/$defs/timeWindow",
+                    "description": "HTTP request timeout for testing queries",
+                    "default": "10s",
+                    "examples": [
+                        "10s",
+                        "30s",
+                        "1m"
+                    ]
+                }
+            },
+            "additionalProperties": false
+        }
+    },
+    "additionalProperties": false,
+    "$defs": {
+        "timeWindow": {
+            "type": "string",
+            "pattern": "^[0-9]+[smhd]$",
+            "description": "Time duration with units (s=seconds, m=minutes, h=hours, d=days)"
+        },
+        "urlPattern": {
+            "type": "string",
+            "format": "uri",
+            "pattern": "^http[s]?://",
+            "description": "HTTP or HTTPS URL pattern"
+        },
+        "grafanaId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]+$",
+            "description": "Grafana identifier pattern"
+        },
+        "backendType": {
+            "type": "string",
+            "enum": [
+                "ala-socprime",
+                "carbonblack",
+                "cortexxdr",
+                "crowdstrike",
+                "datadog",
+                "dictquery",
+                "elasticsearch",
+                "golangexpr",
+                "hawk",
+                "ibm-qradar-aql",
+                "insightidr",
+                "kusto",
+                "logpoint",
+                "loki",
+                "netwitness",
+                "opensearch",
+                "panther",
+                "powershell",
+                "qradar",
+                "quickwit",
+                "secops",
+                "sentinelone",
+                "sentinelone-pq",
+                "splunk",
+                "sqlite",
+                "stix",
+                "surrealql",
+                "trellix_helix",
+                "uberagent"
+            ],
+            "description": "Supported Sigma backend types for rule conversion. Based on available pySigma backends from https://sigmahq.io/docs/digging-deeper/backends.html"
+        },
+        "conversionConfigBase": {
+            "type": "object",
+            "description": "Base configuration properties shared between conversion defaults and individual conversions",
+            "properties": {
+                "target": {
+                    "$ref": "#/$defs/backendType",
+                    "description": "Target backend for rule conversion"
+                },
+                "format": {
+                    "type": "string",
+                    "description": "Output format for converted rules",
+                    "examples": [
+                        "default",
+                        "json",
+                        "yaml"
+                    ]
+                },
+                "skip_unsupported": {
+                    "type": "boolean",
+                    "description": "Skip conversion of rules that can't be handled by the backend"
+                },
+                "file_pattern": {
+                    "type": "string",
+                    "description": "File pattern to match when processing rules",
+                    "pattern": "^\\*\\.[a-zA-Z0-9]+$",
+                    "examples": [
+                        "*.yml",
+                        "*.yaml"
+                    ]
+                },
+                "data_source": {
+                    "type": "string",
+                    "description": "Grafana data source identifier"
+                },
+                "fail_unsupported": {
+                    "type": "boolean",
+                    "description": "Whether to fail on unsupported rule features during conversion"
+                },
+                "encoding": {
+                    "type": "string",
+                    "description": "Output encoding for string backend outputs. This is ignored for backends that return binary output.",
+                    "enum": [
+                        "utf-8",
+                        "utf-16",
+                        "ascii",
+                        "latin1"
+                    ]
+                },
+                "pipeline_check": {
+                    "type": "boolean",
+                    "description": "Whether to validate pipeline configurations"
+                },
+                "correlation_method": {
+                    "type": "string",
+                    "description": "Select method for generation of correlation queries. If not given the default method of the backend is used",
+                    "examples": [
+                        "default"
+                    ]
+                },
+                "filters": {
+                    "type": "array",
+                    "description": "Filters to apply during conversion",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "backend_options": {
+                    "type": "object",
+                    "description": "Backend-specific options for rule conversion",
+                    "properties": {
+                        "case_sensitive": {
+                            "type": "boolean",
+                            "description": "Whether string matching should be case sensitive"
+                        },
+                        "add_line_filters": {
+                            "type": "boolean",
+                            "description": "Whether to add line-based filtering to queries"
+                        }
+                    },
+                    "additionalProperties": {
+                        "type": [
+                            "string",
+                            "number",
+                            "boolean",
+                            "array",
+                            "object"
+                        ]
+                    }
+                },
+                "without_pipeline": {
+                    "type": "boolean",
+                    "description": "Proceed with conversion without processing pipeline, even if it is mandatory for the target."
+                },
+                "pipelines": {
+                    "type": "array",
+                    "description": "Processing pipelines to apply during conversion",
+                    "items": {
+                        "type": "string",
+                        "description": "Name of the pipeline or path to pipeline configuration file, relative to the root of the repository"
+                    }
+                },
+                "json_indent": {
+                    "type": "integer",
+                    "description": "JSON indentation for output formatting",
+                    "minimum": 0,
+                    "examples": [
+                        0,
+                        2,
+                        4
+                    ]
+                },
+                "verbose": {
+                    "type": "boolean",
+                    "description": "Enable verbose output"
+                },
+                "data_source_type": {
+                    "$ref": "#/$defs/backendType",
+                    "description": "Data source type for conversions"
+                },
+                "query_model": {
+                    "type": "string",
+                    "description": "Custom sprintf format string for query model (refID, datasource, query)",
+                    "examples": [
+                        "{\"refId\":\"%s\",\"datasource\":{\"type\":\"loki\",\"uid\":\"%s\"},\"query\":\"%s\"}"
+                    ]
+                }
+            }
+        }
+    },
+    "examples": [
+        {
+            "folders": {
+                "conversion_path": "./conversions",
+                "deployment_path": "./deployments"
+            },
+            "conversion_defaults": {
+                "target": "loki",
+                "format": "default",
+                "skip_unsupported": true,
+                "file_pattern": "*.yml",
+                "data_source": "loki-logs"
+            },
+            "conversions": [
+                {
+                    "name": "aws_cloudtrail",
+                    "input": "rules-development/cloud/aws/cloudtrail/*",
+                    "backend_options": {
+                        "case_sensitive": true
+                    },
+                    "pipelines": [
+                        "pipelines/cloud/aws/cloudtrail/filter_permitted_aws_accounts.yml",
+                        "pipelines/datasources/aws_cloudtrail.yml"
+                    ],
+                    "rule_group": "Every 5 Minutes",
+                    "time_window": "5m"
+                }
+            ],
+            "integration": {
+                "folder_id": "my48wfae9ojcgw",
+                "org_id": 1,
+                "test_queries": true,
+                "from": "now-1h",
+                "to": "now"
+            },
+            "deployment": {
+                "grafana_instance": "https://myinstance.grafana.com",
+                "timeout": "10s"
+            }
+        }
+    ]
+}

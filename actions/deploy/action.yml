@@ -61,7 +61,7 @@ runs:
         MODIFIED_FILES: ${{ steps.changed-files.outputs.modified_files }}
         DELETED_FILES: ${{ steps.changed-files.outputs.deleted_files }}
         COPIED_FILES: ${{ steps.changed-files.outputs.copied_files }}
-        ACTION_REF: ${{ github.action_ref }}
+        IMAGE_REF: ${{ github.action_ref == 'latest' && 'latest' || format('sha-{0}', github.action_ref) }}
       run: |
         docker run --rm \
             -v "$(pwd):/sigma-rules" \
@@ -74,7 +74,7 @@ runs:
             -e MODIFIED_FILES="$MODIFIED_FILES" \
             -e DELETED_FILES="$DELETED_FILES" \
             -e COPIED_FILES="$COPIED_FILES" \
-            "ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-$ACTION_REF" \
+            "ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:$IMAGE_REF" \
             deploy
     - name: Move Output
       id: output
@@ -89,7 +89,7 @@ runs:
         CONFIG_PATH: ${{ inputs.config_path }}
       run: |
         sudo apt-get install -y yq
-        GRAFANA_INSTANCE=$(yq '.deployment.grafana_instance' "${CONFIG_PATH}")
+        GRAFANA_INSTANCE=$(yq --raw-output '.deployment.grafana_instance' "${CONFIG_PATH}")
         echo "grafana_instance=${GRAFANA_INSTANCE}" >> $GITHUB_OUTPUT
     - name: Comment Status
       if: success() && github.event_name == 'push'
