@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "dynaconf>=3.2.10",
-    "pysigma-backend-loki@git+https://github.com/grafana/pySigma-backend-loki.git@update-pysigma-1.0.0rc",
+    "pysigma-backend-loki>=0.13.0rc1",
     "pyyaml>=6.0.2",
     "sigma-cli>=1.0.5",
     "orjson>=3.10.0",

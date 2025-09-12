@@ -100,7 +100,7 @@ dev = [
 requires-dist = [
     { name = "dynaconf", specifier = ">=3.2.10" },
     { name = "orjson", specifier = ">=3.10.0" },
-    { name = "pysigma-backend-loki", git = "https://github.com/grafana/pySigma-backend-loki.git?rev=update-pysigma-1.0.0rc" },
+    { name = "pysigma-backend-loki", specifier = ">=0.13.0rc1" },
     { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "sigma-cli", specifier = ">=1.0.5" },
 ]
@@ -356,10 +356,14 @@ wheels = [
 
 [[package]]
 name = "pysigma-backend-loki"
-version = "0.12.4"
-source = { git = "https://github.com/grafana/pySigma-backend-loki.git?rev=update-pysigma-1.0.0rc#49e2260cb628d12b0ae803b56068118c22b413d8" }
+version = "0.13.0rc1"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pysigma" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/fe/36/9be58c904c715fa47b7a98f802f57cc445a08fc3bb581af2579be0065530/pysigma_backend_loki-0.13.0rc1.tar.gz", hash = "sha256:85746e61373b00d8d4a4f0e298bdbb7f038df8d6986d0a58d917587c263bb511", size = 24071 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5b/60/9685067acae8c40a940a0a688552a4496b98bc15784d8e22321c613c8fa8/pysigma_backend_loki-0.13.0rc1-py3-none-any.whl", hash = "sha256:2a15d49e645835e8702d6473902bf73f18b4c57f6c7a9a2b0802791cb71936fe", size = 24307 },
 ]
 
 [[package]]
