@@ -178,7 +178,7 @@ func TestConvertToAlert(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			i := NewIntegrator()
 			originalTimestamp := tt.rule.Updated
-			err := i.ConvertToAlert(tt.rule, tt.queries, tt.titles, tt.config)
+			err := i.ConvertToAlert(tt.rule, tt.queries, tt.titles, tt.config, "test_conversion_file.json")
 			if tt.wantError {
 				assert.NotNil(t, err)
 			} else {
@@ -460,13 +460,14 @@ func TestSummariseSigmaRules(t *testing.T) {
 
 func TestIntegratorRun(t *testing.T) {
 	tests := []struct {
-		name           string
-		conversionName string
-		convOutput     ConversionOutput
-		wantQueries    []string
-		wantTitles     string
-		removedFiles   []string
-		wantError      bool
+		name            string
+		conversionName  string
+		convOutput      ConversionOutput
+		wantQueries     []string
+		wantTitles      string
+		removedFiles    []string
+		wantError       bool
+		wantAnnotations bool
 	}{
 		{
 			name:           "single rule single query",
@@ -548,6 +549,25 @@ func TestIntegratorRun(t *testing.T) {
 			wantTitles:   "Test Rule",
 			removedFiles: []string{"testdata/test_conv5.json"},
 			wantError:    false,
+		},
+		{
+			name:           "verify annotations are added",
+			conversionName: "test_annotations",
+			convOutput: ConversionOutput{
+				ConversionName: "test_annotations",
+				Queries:        []string{"{job=`test`} | json", "{service=`api`} | json"},
+				Rules: []SigmaRule{
+					{
+						ID:    "996f8884-9144-40e7-ac63-29090ccde9a0",
+						Title: "Test Annotations Rule",
+					},
+				},
+			},
+			wantQueries:     []string{"sum(count_over_time({job=`test`} | json[$__auto]))", "sum(count_over_time({service=`api`} | json[$__auto]))"},
+			wantTitles:      "Test Annotations Rule",
+			removedFiles:    []string{},
+			wantError:       false,
+			wantAnnotations: true,
 		},
 	}
 
@@ -670,6 +690,16 @@ func TestIntegratorRun(t *testing.T) {
 			assert.Equal(t, tt.wantTitles, rule.Title)
 			assert.Equal(t, "Test Rules", rule.RuleGroup)
 			assert.Equal(t, "test-datasource", rule.Data[0].DatasourceUID)
+
+			// Verify annotations if this test expects them
+			if tt.wantAnnotations {
+				assert.NotNil(t, rule.Annotations, "Annotations should be present")
+				assert.Equal(t, "{job=`test`} | json | {service=`api`} | json", rule.Annotations["Query"], "Query annotation should contain all queries")
+				assert.Equal(t, "5m", rule.Annotations["TimeWindow"], "TimeWindow should use default value")
+				assert.Equal(t, "test-datasource", rule.Annotations["LogSourceUid"], "LogSourceUid should use config data source")
+				assert.Equal(t, "loki", rule.Annotations["LogSourceType"], "LogSourceType should use target")
+				assert.Contains(t, rule.Annotations["ConversionFile"], "test_annotations.json", "ConversionFile should contain the conversion file path")
+			}
 
 			// Verify queries
 			for qIdx, query := range tt.convOutput.Queries {
