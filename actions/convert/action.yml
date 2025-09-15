@@ -85,6 +85,7 @@ runs:
           };
     - name: Select Commit
       id: previous-commit
+      if: ${{ github.event_name == 'pull_request' && inputs.changed_files_from_base == 'false' }}
       uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea #v7.0.1
       env:
         COMMIT: ${{ steps.commits.outputs.result }}
@@ -96,6 +97,7 @@ runs:
         result-encoding: string
     - name: Select First Commit
       id: first-commit
+      if: ${{ github.event_name == 'pull_request' && inputs.changed_files_from_base == 'false' }}
       uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea #v7.0.1
       env:
         COMMIT: ${{ steps.commits.outputs.result }}
@@ -107,6 +109,7 @@ runs:
         result-encoding: string
     - name: Select Last Commit
       id: last-commit
+      if: ${{ github.event_name == 'pull_request' && inputs.changed_files_from_base == 'false' }}
       uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea #v7.0.1
       env:
         COMMIT: ${{ steps.commits.outputs.result }}
@@ -127,7 +130,7 @@ runs:
 
         echo all_changed_files=${CHANGED_FILES//\\n/} >> "$GITHUB_OUTPUT"
         echo deleted_files=${DELETED_FILES//\\n/} >> "$GITHUB_OUTPUT"
- 
+
     - name: Run Sigma Rule Converter
       id: convert
       shell: bash
