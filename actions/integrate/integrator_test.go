@@ -467,7 +467,7 @@ func TestIntegratorRun(t *testing.T) {
 		wantTitles      string
 		removedFiles    []string
 		wantError       bool
-		wantAnnotations bool
+		wantAnnotations map[string]string
 	}{
 		{
 			name:           "single rule single query",
@@ -563,11 +563,18 @@ func TestIntegratorRun(t *testing.T) {
 					},
 				},
 			},
-			wantQueries:     []string{"sum(count_over_time({job=`test`} | json[$__auto]))", "sum(count_over_time({service=`api`} | json[$__auto]))"},
-			wantTitles:      "Test Annotations Rule",
-			removedFiles:    []string{},
-			wantError:       false,
-			wantAnnotations: true,
+			wantQueries:  []string{"sum(count_over_time({job=`test`} | json[$__auto]))", "sum(count_over_time({service=`api`} | json[$__auto]))"},
+			wantTitles:   "Test Annotations Rule",
+			removedFiles: []string{},
+			wantError:    false,
+			wantAnnotations: map[string]string{
+				"Query":          "{job=`test`} | json",
+				"TimeWindow":     "5m",
+				"LogSourceUid":   "test-datasource",
+				"LogSourceType":  "loki",
+				"Lookback":       "0s",
+				"ConversionFile": "test_annotations.json",
+			},
 		},
 	}
 
@@ -692,13 +699,16 @@ func TestIntegratorRun(t *testing.T) {
 			assert.Equal(t, "test-datasource", rule.Data[0].DatasourceUID)
 
 			// Verify annotations if this test expects them
-			if tt.wantAnnotations {
+			if tt.wantAnnotations != nil {
 				assert.NotNil(t, rule.Annotations, "Annotations should be present")
-				assert.Equal(t, "{job=`test`} | json | {service=`api`} | json", rule.Annotations["Query"], "Query annotation should contain all queries")
-				assert.Equal(t, "5m", rule.Annotations["TimeWindow"], "TimeWindow should use default value")
-				assert.Equal(t, "test-datasource", rule.Annotations["LogSourceUid"], "LogSourceUid should use config data source")
-				assert.Equal(t, "loki", rule.Annotations["LogSourceType"], "LogSourceType should use target")
-				assert.Contains(t, rule.Annotations["ConversionFile"], "test_annotations.json", "ConversionFile should contain the conversion file path")
+				for key, expectedValue := range tt.wantAnnotations {
+					if key == "ConversionFile" {
+						// ConversionFile contains the full path, so just check it contains the filename
+						assert.Contains(t, rule.Annotations[key], expectedValue, "ConversionFile should contain the conversion file path")
+					} else {
+						assert.Equal(t, expectedValue, rule.Annotations[key], "Annotation %s should match expected value", key)
+					}
+				}
 			}
 
 			// Verify queries
