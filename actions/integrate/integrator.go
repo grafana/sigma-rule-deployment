@@ -412,7 +412,7 @@ func (i *Integrator) ConvertToAlert(rule *definitions.ProvisionedAlertRule, quer
 		rule.Annotations = make(map[string]string)
 	}
 
-	rule.Annotations["Query"] = strings.Join(queries, " | ")
+	rule.Annotations["Query"] = queries[0]
 	rule.Annotations["TimeWindow"] = timewindow
 
 	// todo: add Lookback to conversion config
