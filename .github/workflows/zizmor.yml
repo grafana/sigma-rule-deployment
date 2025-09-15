@@ -1,4 +1,4 @@
-name: Security Scan with Zizmor
+name: Zizmor Security Scan
 
 on:
   push:
@@ -7,27 +7,22 @@ on:
   pull_request:
     branches:
       - main
-  workflow_dispatch:
 
 permissions: {}
 
 jobs:
   security-scan:
-    name: "Run Zizmor Security Scan"
+    name: Run Zizmor Security Scan
     runs-on: ubuntu-latest
     permissions:
+      checks: write # Required for reporting test results and creating check runs
       contents: read
-      checks: write
+      actions: read # Needed for private repos
     steps:
       - name: Checkout repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 #v4.2.2
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
           persist-credentials: false
 
-      - name: Install zizmor
-        run: |
-          pip install zizmor
-
       - name: Run zizmor on all files
-        run: |
-          zizmor -p .
+        uses: zizmorcore/zizmor-action@e673c3917a1aef3c65c972347ed84ccd013ecda4 # v0.2.0
