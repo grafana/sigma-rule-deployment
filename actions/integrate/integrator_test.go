@@ -178,7 +178,7 @@ func TestConvertToAlert(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			i := NewIntegrator()
 			originalTimestamp := tt.rule.Updated
-			err := i.ConvertToAlert(tt.rule, tt.queries, tt.titles, tt.config)
+			err := i.ConvertToAlert(tt.rule, tt.queries, tt.titles, tt.config, "test_conversion_file.json")
 			if tt.wantError {
 				assert.NotNil(t, err)
 			} else {
@@ -460,13 +460,14 @@ func TestSummariseSigmaRules(t *testing.T) {
 
 func TestIntegratorRun(t *testing.T) {
 	tests := []struct {
-		name           string
-		conversionName string
-		convOutput     ConversionOutput
-		wantQueries    []string
-		wantTitles     string
-		removedFiles   []string
-		wantError      bool
+		name            string
+		conversionName  string
+		convOutput      ConversionOutput
+		wantQueries     []string
+		wantTitles      string
+		removedFiles    []string
+		wantError       bool
+		wantAnnotations map[string]string
 	}{
 		{
 			name:           "single rule single query",
@@ -548,6 +549,32 @@ func TestIntegratorRun(t *testing.T) {
 			wantTitles:   "Test Rule",
 			removedFiles: []string{"testdata/test_conv5.json"},
 			wantError:    false,
+		},
+		{
+			name:           "verify annotations are added",
+			conversionName: "test_annotations",
+			convOutput: ConversionOutput{
+				ConversionName: "test_annotations",
+				Queries:        []string{"{job=`test`} | json", "{service=`api`} | json"},
+				Rules: []SigmaRule{
+					{
+						ID:    "996f8884-9144-40e7-ac63-29090ccde9a0",
+						Title: "Test Annotations Rule",
+					},
+				},
+			},
+			wantQueries:  []string{"sum(count_over_time({job=`test`} | json[$__auto]))", "sum(count_over_time({service=`api`} | json[$__auto]))"},
+			wantTitles:   "Test Annotations Rule",
+			removedFiles: []string{},
+			wantError:    false,
+			wantAnnotations: map[string]string{
+				"Query":          "{job=`test`} | json",
+				"TimeWindow":     "5m",
+				"LogSourceUid":   "test-datasource",
+				"LogSourceType":  "loki",
+				"Lookback":       "0s",
+				"ConversionFile": "test_annotations.json",
+			},
 		},
 	}
 
@@ -670,6 +697,19 @@ func TestIntegratorRun(t *testing.T) {
 			assert.Equal(t, tt.wantTitles, rule.Title)
 			assert.Equal(t, "Test Rules", rule.RuleGroup)
 			assert.Equal(t, "test-datasource", rule.Data[0].DatasourceUID)
+
+			// Verify annotations if this test expects them
+			if tt.wantAnnotations != nil {
+				assert.NotNil(t, rule.Annotations, "Annotations should be present")
+				for key, expectedValue := range tt.wantAnnotations {
+					if key == "ConversionFile" {
+						// ConversionFile contains the full path, so just check it contains the filename
+						assert.Contains(t, rule.Annotations[key], expectedValue, "ConversionFile should contain the conversion file path")
+					} else {
+						assert.Equal(t, expectedValue, rule.Annotations[key], "Annotation %s should match expected value", key)
+					}
+				}
+			}
 
 			// Verify queries
 			for qIdx, query := range tt.convOutput.Queries {

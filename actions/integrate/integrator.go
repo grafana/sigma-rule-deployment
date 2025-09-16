@@ -281,7 +281,7 @@ func (i *Integrator) Run() error {
 		if err != nil {
 			return err
 		}
-		err = i.ConvertToAlert(rule, queries, titles, config)
+		err = i.ConvertToAlert(rule, queries, titles, config, inputFile)
 		if err != nil {
 			return err
 		}
@@ -342,7 +342,7 @@ func (i *Integrator) Run() error {
 	return nil
 }
 
-func (i *Integrator) ConvertToAlert(rule *definitions.ProvisionedAlertRule, queries []string, titles string, config ConversionConfig) error {
+func (i *Integrator) ConvertToAlert(rule *definitions.ProvisionedAlertRule, queries []string, titles string, config ConversionConfig, conversionFile string) error {
 	datasource := getC(config.DataSource, i.config.ConversionDefaults.DataSource, "nil")
 	timewindow := getC(config.TimeWindow, i.config.ConversionDefaults.TimeWindow, "1m")
 	duration, err := time.ParseDuration(timewindow)
@@ -406,6 +406,27 @@ func (i *Integrator) ConvertToAlert(rule *definitions.ProvisionedAlertRule, quer
 	rule.Updated = time.Now()
 	rule.Title = titles
 	rule.Condition = "C"
+
+	// Add annotations for context
+	if rule.Annotations == nil {
+		rule.Annotations = make(map[string]string)
+	}
+
+	rule.Annotations["Query"] = queries[0]
+	rule.Annotations["TimeWindow"] = timewindow
+
+	// todo: add Lookback to conversion config
+	rule.Annotations["Lookback"] = "0s"
+
+	// LogSourceUid annotation (data source)
+	rule.Annotations["LogSourceUid"] = datasource
+
+	// LogSourceType annotation (target)
+	logSourceType := getC(config.Target, i.config.ConversionDefaults.Target, "loki")
+	rule.Annotations["LogSourceType"] = logSourceType
+
+	// Path to associated conversion file
+	rule.Annotations["ConversionFile"] = conversionFile
 
 	return nil
 }
