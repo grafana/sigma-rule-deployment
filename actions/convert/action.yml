@@ -188,7 +188,7 @@ runs:
             repo: context.repo.repo,
             pull_number: process.env.PULL_REQUEST_NUMBER,
           });
-          if (prData.data.length == 0) {
+          if (!prData.data) {
             console.log(`No pull request found for ${context.repo.owner}/${context.repo.repo}#${process.env.PULL_REQUEST_NUMBER}`);
             return '';
           }
@@ -204,7 +204,7 @@ runs:
 
           ### Changed Files
 
-          ${changedFiles.length ? changedFiles.map(file => `- [${file}](https://github.com/${context.repo.owner}/${context.repo.repo}/blob/${process.env.BASE_REF}/${file})`).join("\n") : "No files changed"}
+          ${changedFiles.length ? changedFiles.map(file => `- [${file}](https://github.com/${context.repo.owner}/${context.repo.repo}/blob/${prData.data.head.ref}/${file})`).join("\n") : "No files changed"}
 
           ### Deleted Files
 
