@@ -214,6 +214,18 @@ runs:
             }
           }
 
+          const prData = await github.rest.pulls.get({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            pull_number: process.env.PULL_REQUEST_NUMBER,
+          });
+          if (prData.data.length == 0) {
+            console.log(`No pull request found for ${context.repo.owner}/${context.repo.repo}#${process.env.PULL_REQUEST_NUMBER}`);
+            return '';
+          }
+
+          const nodeId = prData.data.node_id;
+
           const comment = `
           ### Sigma Rule Integrations
 
@@ -233,8 +245,6 @@ runs:
 
           ${resultTable}
           `;
-
-          const nodeId = process.env.PULL_REQUEST_NUMBER;
 
           const query = `mutation AddComment($body: String!, $subjectId: ID!) {
             addComment(input: {

@@ -183,6 +183,18 @@ runs:
           const changedFiles = process.env.CHANGED_FILES.split(' ').filter(file => file.trim() !== '');
           const deletedFiles = process.env.DELETED_FILES.split(' ').filter(file => file.trim() !== '');
 
+          const prData = await github.rest.pulls.get({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            pull_number: process.env.PULL_REQUEST_NUMBER,
+          });
+          if (prData.data.length == 0) {
+            console.log(`No pull request found for ${context.repo.owner}/${context.repo.repo}#${process.env.PULL_REQUEST_NUMBER}`);
+            return '';
+          }
+
+          const nodeId = prData.data.node_id;
+
           const comment = `
           ### Sigma Rule Conversions
 
@@ -199,8 +211,6 @@ runs:
           ${deletedFiles.length ? deletedFiles.map(file => `- ${file}`).join("\n") : "No files deleted"}
 
           `;
-
-          const nodeId = process.env.PULL_REQUEST_NUMBER;
 
           const query = `mutation AddComment($body: String!, $subjectId: ID!) {
             addComment(input: {
