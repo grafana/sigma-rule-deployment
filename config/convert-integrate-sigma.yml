@@ -27,7 +27,7 @@ jobs:
           config_path: "./config.yml"
           github_token: ${{ secrets.CLONE_TOKEN }}
           pretty_print: true
-          plugin_packages: pysigma-backend-loki,pysigma-backend-splunk
+          plugin_packages: pysigma-backend-loki
 
       - name: Output Converted Rules
         id: converted-rules-output

@@ -27,10 +27,14 @@ function _convert() {
     shopt -u nocasematch
 
     if [ ${#valid_plugins[@]} -gt 0 ]; then
-        uv add --directory /app/convert "${valid_plugins[@]}"
+        # allow prerelease packages to be installed
+        # TODO: remove this once we released a new version of sigma-rule-deployer
+        uv add --prerelease=allow --directory /app/convert "${valid_plugins[@]}"
     fi
 
-    uv run --directory /app/convert main.py
+    # allow prerelease packages to be installed
+    # TODO: remove this once we released a new version of sigma-rule-deployer
+    uv run --prerelease=allow --directory /app/convert main.py
 }
 
 set -euo pipefail

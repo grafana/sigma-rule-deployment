@@ -20,7 +20,8 @@ COPY --from=builder /build/integrate /usr/local/bin/integrate
 COPY ./convert ./convert
 
 WORKDIR /app/convert
-RUN apk add --no-cache bash=5.2.37-r0 && \
+# TODO: remove git once we released a new version of sigma-rule-deployer
+RUN apk add --no-cache bash=5.2.37-r0 git=2.49.1-r0 && \
     python -m pip install --no-cache-dir --upgrade pip==25.0.1 && \
     pip install --no-cache-dir uv==0.6.13
 
