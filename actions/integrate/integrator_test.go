@@ -460,14 +460,15 @@ func TestSummariseSigmaRules(t *testing.T) {
 
 func TestIntegratorRun(t *testing.T) {
 	tests := []struct {
-		name            string
-		conversionName  string
-		convOutput      ConversionOutput
-		wantQueries     []string
-		wantTitles      string
-		removedFiles    []string
-		wantError       bool
-		wantAnnotations map[string]string
+		name                string
+		conversionName      string
+		convOutput          ConversionOutput
+		wantQueries         []string
+		wantTitles          string
+		removedFiles        []string
+		wantError           bool
+		wantAnnotations     map[string]string
+		wantOrphanedCleanup bool
 	}{
 		{
 			name:           "single rule single query",
@@ -577,22 +578,22 @@ func TestIntegratorRun(t *testing.T) {
 			},
 		},
 		{
-			name:           "handle orphaned conversion file",
-			conversionName: "orphaned_conv",
+			name:           "cleanup orphaned files",
+			conversionName: "orphaned_test",
 			convOutput: ConversionOutput{
-				ConversionName: "orphaned_conv",
+				ConversionName: "orphaned_test",
 				Queries:        []string{"{job=`orphaned`} | json"},
 				Rules: []SigmaRule{
 					{
 						ID:    "996f8884-9144-40e7-ac63-29090ccde9a0",
-						Title: "Orphaned Rule",
+						Title: "Orphaned Test Rule",
 					},
 				},
 			},
-			wantQueries:  []string{},
-			wantTitles:   "",
-			removedFiles: []string{},
-			wantError:    false,
+			wantQueries:         []string{},
+			wantTitles:          "",
+			removedFiles:        []string{},
+			wantOrphanedCleanup: true,
 		},
 	}
 
@@ -620,8 +621,8 @@ func TestIntegratorRun(t *testing.T) {
 			// Create test configuration
 			conversions := []ConversionConfig{}
 
-			// For orphaned test case, don't include the conversion in config
-			if tt.name != "handle orphaned conversion file" {
+			// For orphaned cleanup test cases, don't include the conversion in config
+			if !tt.wantOrphanedCleanup {
 				conversions = []ConversionConfig{
 					{
 						Name:       tt.conversionName,
@@ -653,6 +654,26 @@ func TestIntegratorRun(t *testing.T) {
 			convFile := filepath.Join(convPath, tt.conversionName+".json")
 			err = os.WriteFile(convFile, convBytes, 0o600)
 			assert.NoError(t, err)
+
+			// For orphaned cleanup test, create a deployment file that references a missing conversion file
+			if tt.wantOrphanedCleanup {
+				convID, _, err := summariseSigmaRules(tt.convOutput.Rules)
+				assert.NoError(t, err)
+				ruleUID := getRuleUID(tt.conversionName, convID)
+				deployFile := filepath.Join(deployPath, fmt.Sprintf("alert_rule_%s_%s.json", tt.conversionName, ruleUID))
+
+				// Create a deployment file that references a non-existent conversion file
+				dummyRule := &definitions.ProvisionedAlertRule{
+					UID:       ruleUID,
+					Title:     tt.wantTitles,
+					RuleGroup: "Test Rules",
+					Annotations: map[string]string{
+						"ConversionFile": "/path/to/non/existent/conversion.json", // References missing file
+					},
+				}
+				err = writeRuleToFile(dummyRule, deployFile, false)
+				assert.NoError(t, err)
+			}
 
 			// For the remove test case, create a deployment file that should be removed
 			if len(tt.removedFiles) > 0 {
@@ -686,11 +707,20 @@ func TestIntegratorRun(t *testing.T) {
 			}
 			assert.NoError(t, err)
 
-			// For orphaned file test case, verify the file was cleaned up
-			if tt.name == "handle orphaned conversion file" {
+			// For orphaned cleanup test cases, verify files were cleaned up
+			if tt.wantOrphanedCleanup {
+				// Check that conversion file was cleaned up
 				convFile := filepath.Join(convPath, tt.conversionName+".json")
 				_, err = os.Stat(convFile)
 				assert.True(t, os.IsNotExist(err), "Expected orphaned conversion file to be deleted but it still exists")
+
+				// Check that deployment file was also cleaned up
+				convID, _, err := summariseSigmaRules(tt.convOutput.Rules)
+				assert.NoError(t, err)
+				ruleUID := getRuleUID(tt.conversionName, convID)
+				deployFile := filepath.Join(deployPath, fmt.Sprintf("alert_rule_%s_%s.json", tt.conversionName, ruleUID))
+				_, err = os.Stat(deployFile)
+				assert.True(t, os.IsNotExist(err), "Expected orphaned deployment file to be deleted but it still exists")
 				return
 			}
 
