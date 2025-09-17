@@ -17,9 +17,8 @@ on:
         description: "A Grafana service account token for provisioning the alerts, with at least the following roles: Alerting:Access to alert rules provisioning API, Alerting:Rules Reader, Alerting:Rules Writer, Alerting:Set provisioning status"
         required: true
       github_token:
-        description: "GitHub token to use for the action"
+        description: "GitHub token to use for the action, using github.token by default"
         required: false
-        default: ${{ github.token }}
 
 jobs:
   deploy:
@@ -32,4 +31,4 @@ jobs:
           config_path: ${{ inputs.config_path }}
           fresh_deploy: ${{ inputs.fresh_deploy }}
           grafana_sa_token: ${{ secrets.grafana_sa_token }}
-          github_token: ${{ secrets.github_token }}
+          github_token: ${{ secrets.github_token || github.token }}
