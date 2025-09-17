@@ -1,0 +1,36 @@
+name: Deploy Sigma rules
+
+on:
+  workflow_call:
+    inputs:
+      config_path:
+        description: "Path to the configuration file for the Sigma Rule Deployer"
+        required: true
+        type: string
+      fresh_deploy:
+        description: "If true, ALL the alert rules in the Grafana Alert folder specified in the config will be deleted, and the alerts in the deployment folder will be created from scratch. ⚠️ Warning: destructive action"
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      grafana_sa_token:
+        description: "A Grafana service account token for provisioning the alerts, with at least the following roles: Alerting:Access to alert rules provisioning API, Alerting:Rules Reader, Alerting:Rules Writer, Alerting:Set provisioning status"
+Data sources:Reader
+        required: true
+      github_token:
+        description: "GitHub token to use for the action"
+        required: false
+        default: ${{ github.token }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy alert rules to Grafana
+        id: deploy
+        uses: grafana/sigma-rule-deployment/actions/deploy@be667ceacd7cb4b2a4383a79af8f9837a7d8a55a
+        with:
+          config_path: ${{ inputs.config_path }}
+          fresh_deploy: ${{ inputs.fresh_deploy }}
+          grafana_sa_token: ${{ secrets.grafana_sa_token }}
+          github_token: ${{ secrets.github_token }}
