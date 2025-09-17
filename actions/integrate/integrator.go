@@ -17,6 +17,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const TRUE = "true"
+
 type SigmaRule struct {
 	Title   string `json:"title"`
 	ID      string `json:"id"`
@@ -141,12 +143,12 @@ func (i *Integrator) LoadConfig() error {
 		return fmt.Errorf("error unmarshalling config file: %v", err)
 	}
 	i.config = config
-	i.prettyPrint = strings.ToLower(os.Getenv("PRETTY_PRINT")) == "true"
-	i.allRules = strings.ToLower(os.Getenv("ALL_RULES")) == "true"
+	i.prettyPrint = strings.ToLower(os.Getenv("PRETTY_PRINT")) == TRUE
+	i.allRules = strings.ToLower(os.Getenv("ALL_RULES")) == TRUE
 
 	// Override config with environment variable if set
 	if os.Getenv("CONTINUE_ON_QUERY_TESTING_ERRORS") != "" {
-		i.config.IntegratorConfig.ContinueOnQueryTestingErrors = strings.ToLower(os.Getenv("CONTINUE_ON_QUERY_TESTING_ERRORS")) == "true"
+		i.config.IntegratorConfig.ContinueOnQueryTestingErrors = strings.ToLower(os.Getenv("CONTINUE_ON_QUERY_TESTING_ERRORS")) == TRUE
 	}
 
 	if !filepath.IsLocal(i.config.Folders.ConversionPath) {
