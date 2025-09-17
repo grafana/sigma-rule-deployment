@@ -52,9 +52,9 @@ jobs:
     if: github.event_name == 'pull_request' || (github.event_name == 'issue_comment' && github.event.issue.pull_request && github.event.action == 'created')
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      pull-requests: write
-      packages: read
+      contents: write # to read Sigma rules and write intermediary files
+      packages: read # to pull the Action docker image
+      pull-requests: write # to update the relevant pull request
     steps:
       - name: Get PR branch for comments
         if: github.event_name == 'issue_comment'

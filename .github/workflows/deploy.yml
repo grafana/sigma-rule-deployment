@@ -23,6 +23,10 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read # to read alert rule files
+      packages: read # to pull the Action docker image
+      pull-requests: write # to update the relevant pull request
     steps:
       - name: Deploy alert rules to Grafana
         id: deploy
