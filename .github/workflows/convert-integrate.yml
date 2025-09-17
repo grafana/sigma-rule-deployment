@@ -48,7 +48,7 @@ on:
         required: false
 
 jobs:
-  convert:
+  convert-integrate:
     if: github.event_name == 'pull_request' || (github.event_name == 'issue_comment' && github.event.issue.pull_request && github.event.action == 'created')
     runs-on: ubuntu-latest
     permissions:
@@ -99,7 +99,7 @@ jobs:
           ref: ${{ github.event_name == 'issue_comment' && steps.get-pr-branch.outputs.result || github.head_ref }}
           fetch-depth: 0
 
-      - name: Convert Sigma Rules
+      - name: Convert Sigma rules
         uses: grafana/sigma-rule-deployment/actions/convert@be667ceacd7cb4b2a4383a79af8f9837a7d8a55a
         with:
           config_path: ${{ inputs.config_path }}
@@ -110,7 +110,7 @@ jobs:
           actions_username: ${{ inputs.actions_username }}
           changed_files_from_base: ${{ inputs.changed_files_from_base }}
 
-      - name: Integrate Converted Rules
+      - name: Integrate queries into alert rules
         uses: grafana/sigma-rule-deployment/actions/integrate@be667ceacd7cb4b2a4383a79af8f9837a7d8a55a
         with:
           config_path: ${{ inputs.config_path }}
@@ -121,7 +121,7 @@ jobs:
           actions_username: ${{ inputs.actions_username }}
           changed_files_from_base: ${{ inputs.changed_files_from_base }}
 
-      - name: Commit integrated alert rules
+      - name: Commit queries and alert rules
         uses: stefanzweifel/git-auto-commit-action@e348103e9026cc0eee72ae06630dbe30c8bf7a79 # v5.1.0
         with:
           commit_message: "Sigma Rules Deployment"
