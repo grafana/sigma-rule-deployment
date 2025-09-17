@@ -6,35 +6,42 @@ on:
       config_path:
         description: "Path to the Sigma conversion config file"
         required: true
-        default: "./config.yaml"
+        type: string
       plugin_packages:
         description: "Comma-separated list of Sigma CLI plugin packages to install"
         required: false
+        type: string
         default: ""
       render_traceback:
         description: "Whether to render the traceback in the output"
         required: false
-        default: "false"
+        type: boolean
+        default: false
       pretty_print:
         description: "Pretty print the JSON output"
         required: false
-        default: "false"
+        type: boolean
+        default: false
       output_log_lines:
         description: "Output log lines to the outputs of the test_query_results"
         required: false
-        default: "false"
+        type: boolean
+        default: false
       all_rules:
         description: "Convert all rules specified in the config file, can be controlled by commenting `sigma convert all` in a PR"
         required: false
-        default: "false"
+        type: boolean
+        default: false
       actions_username:
         description: "Username of the automation that commits conversions"
         required: false
+        type: string
         default: "github-actions[bot]"
       changed_files_from_base:
         description: "Whether to use the changed files from the base branch"
         required: false
-        default: "false"
+        type: boolean
+        default: false
     secrets:
       grafana_sa_token:
         description: "A Grafana service account token for testing queries, with at least the following role: Data sources:Reader"
@@ -97,7 +104,7 @@ jobs:
         with:
           config_path: ${{ inputs.config_path }}
           plugin_packages: ${{ inputs.plugin_packages }}
-          render_traceback: ${{ inputs.render_traceback }
+          render_traceback: ${{ inputs.render_traceback }}
           pretty_print: ${{ inputs.pretty_print }}
           all_rules: ${{ steps.convert_all.outputs.convert_all }}
           actions_username: ${{ inputs.actions_username }}
