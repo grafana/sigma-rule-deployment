@@ -32,7 +32,7 @@ inputs:
     required: false
     default: "github-actions[bot]"
   continue_on_query_testing_errors:
-    description: "Continue integration process even when query testing fails, but collect errors and fail the action"
+    description: "Continue integration process even when query testing fails, but print errors and continue the action"
     required: false
     default: "false"
 
