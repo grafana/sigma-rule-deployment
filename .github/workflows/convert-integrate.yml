@@ -44,6 +44,7 @@ on:
         default: false
       vault_path:
         description: "A path to the Grafana service account token described in secrets.grafana_sa_token, but stored in Grafana's internal Vault"
+        required: false
         type: string
         default: ""
     secrets:
