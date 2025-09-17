@@ -572,7 +572,7 @@ func TestIntegratorRun(t *testing.T) {
 				"TimeWindow":     "5m",
 				"LogSourceUid":   "test-datasource",
 				"LogSourceType":  "loki",
-				"Lookback":       "0s",
+				"Lookback":       "2m",
 				"ConversionFile": "test_annotations.json",
 			},
 		},
@@ -614,6 +614,7 @@ func TestIntegratorRun(t *testing.T) {
 						Name:       tt.conversionName,
 						RuleGroup:  "Test Rules",
 						TimeWindow: "5m",
+						Lookback:   "2m",
 					},
 				},
 				IntegratorConfig: IntegrationConfig{

@@ -415,8 +415,9 @@ func (i *Integrator) ConvertToAlert(rule *definitions.ProvisionedAlertRule, quer
 	rule.Annotations["Query"] = queries[0]
 	rule.Annotations["TimeWindow"] = timewindow
 
-	// todo: add Lookback to conversion config
-	rule.Annotations["Lookback"] = "0s"
+	// Lookback annotation (defaults to 0s if not specified)
+	lookback := getC(config.Lookback, i.config.ConversionDefaults.Lookback, "0s")
+	rule.Annotations["Lookback"] = lookback
 
 	// LogSourceUid annotation (data source)
 	rule.Annotations["LogSourceUid"] = datasource
