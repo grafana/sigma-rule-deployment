@@ -61,7 +61,7 @@ jobs:
       packages: read # to pull the Action docker image
       pull-requests: write # to update the relevant pull request
     steps:
-      - name: Get service account token for instancea from Vault
+      - name: Get service account token for instance from Vault
         if: ${{ inputs.vault_path != '' }}
         uses: grafana/shared-workflows/actions/get-vault-secrets@main
         with:
