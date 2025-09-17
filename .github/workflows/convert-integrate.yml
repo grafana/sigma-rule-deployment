@@ -42,10 +42,14 @@ on:
         required: false
         type: boolean
         default: false
+      vault_path:
+        description: "A path to the Grafana service account token described in secrets.grafana_sa_token, but stored in Grafana's internal Vault"
+        type: string
+        default: ""
+    secrets:
       grafana_sa_token:
         description: "A Grafana service account token for testing queries, with at least the following role: Data sources:Reader"
         required: false
-        type: string
 
 jobs:
   convert-integrate:
@@ -53,9 +57,16 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write # to read Sigma rules and write intermediary files
+      id-token: write # to get vault secrets
       packages: read # to pull the Action docker image
       pull-requests: write # to update the relevant pull request
     steps:
+      - name: Get service account token for instancea from Vault
+        if: ${{ inputs.vault_path != '' }}
+        uses: grafana/shared-workflows/actions/get-vault-secrets@main
+        with:
+          repo_secrets: ${{ format('GRAFANA_SA_TOKEN={0}', inputs.vault_path) }}
+
       - name: Get PR branch for comments
         if: github.event_name == 'issue_comment'
         id: get-pr-branch
@@ -114,7 +125,7 @@ jobs:
         uses: grafana/sigma-rule-deployment/actions/integrate@be667ceacd7cb4b2a4383a79af8f9837a7d8a55a
         with:
           config_path: ${{ inputs.config_path }}
-          grafana_sa_token: ${{ inputs.grafana_sa_token }}
+          grafana_sa_token: ${{ secrets.grafana_sa_token || env.GRAFANA_SA_TOKEN }}
           pretty_print: ${{ inputs.pretty_print }}
           output_log_lines: ${{ inputs.output_log_lines }}
           all_rules: ${{ steps.convert_all.outputs.convert_all }}
