@@ -1,0 +1,123 @@
+name: Convert and Integrate Sigma Rules
+
+on:
+  workflow_call:
+    inputs:
+      config_path:
+        description: "Path to the Sigma conversion config file"
+        required: true
+        default: "./config.yaml"
+      plugin_packages:
+        description: "Comma-separated list of Sigma CLI plugin packages to install"
+        required: false
+        default: ""
+      render_traceback:
+        description: "Whether to render the traceback in the output"
+        required: false
+        default: "false"
+      pretty_print:
+        description: "Pretty print the JSON output"
+        required: false
+        default: "false"
+      output_log_lines:
+        description: "Output log lines to the outputs of the test_query_results"
+        required: false
+        default: "false"
+      all_rules:
+        description: "Convert all rules specified in the config file, can be controlled by commenting `sigma convert all` in a PR"
+        required: false
+        default: "false"
+      actions_username:
+        description: "Username of the automation that commits conversions"
+        required: false
+        default: "github-actions[bot]"
+      changed_files_from_base:
+        description: "Whether to use the changed files from the base branch"
+        required: false
+        default: "false"
+    secrets:
+      grafana_sa_token:
+        description: "A Grafana service account token for testing queries, with at least the following role: Data sources:Reader"
+        required: false
+
+jobs:
+  convert:
+    if: github.event_name == 'pull_request' || (github.event_name == 'issue_comment' && github.event.issue.pull_request && github.event.action == 'created')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      packages: read
+    steps:
+      - name: Get PR branch for comments
+        if: github.event_name == 'issue_comment'
+        id: get-pr-branch
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
+        with:
+          script: |
+            const { data: pullRequest } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.issue.number
+            });
+            console.log(`PR head branch: ${pullRequest.head.ref}`);
+            return pullRequest.head.ref;
+          result-encoding: string
+
+      - name: Check whether to convert all rules
+        shell: bash
+        id: convert_all
+        env:
+          PULL_REQUEST_NUMBER: ${{ github.event.issue.number }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          ALL_RULES: ${{ inputs.pretty_print }}
+        run: |
+          if [ -z "$COMMENT_BODY" ]; then
+            echo "No comment body found"
+            echo "convert_all=$ALL_RULES" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ $COMMENT_BODY == "sigma"* ]]; then
+              if [[ $COMMENT_BODY == *"convert all"* ]]; then
+                  echo "convert_all=true" >> "$GITHUB_OUTPUT"
+              else
+                  echo "convert_all=$ALL_RULES" >> "$GITHUB_OUTPUT"
+              fi
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'issue_comment' && steps.get-pr-branch.outputs.result || github.head_ref }}
+          fetch-depth: 0
+
+      - name: Convert Sigma Rules
+        uses: grafana/sigma-rule-deployment/actions/convert@be667ceacd7cb4b2a4383a79af8f9837a7d8a55a
+        with:
+          config_path: ${{ inputs.config_path }}
+          plugin_packages: ${{ inputs.plugin_packages }}
+          render_traceback: ${{ inputs.render_traceback }
+          pretty_print: ${{ inputs.pretty_print }}
+          all_rules: ${{ steps.convert_all.outputs.convert_all }}
+          actions_username: ${{ inputs.actions_username }}
+          changed_files_from_base: ${{ inputs.changed_files_from_base }}
+
+      - name: Integrate Converted Rules
+        uses: grafana/sigma-rule-deployment/actions/integrate@be667ceacd7cb4b2a4383a79af8f9837a7d8a55a
+        with:
+          config_path: ${{ inputs.config_path }}
+          grafana_sa_token: ${{ secrets.grafana_sa_token }}
+          pretty_print: ${{ inputs.pretty_print }}
+          output_log_lines: ${{ inputs.output_log_lines }}
+          all_rules: ${{ steps.convert_all.outputs.convert_all }}
+          actions_username: ${{ inputs.actions_username }}
+          changed_files_from_base: ${{ inputs.changed_files_from_base }}
+
+      - name: Commit integrated alert rules
+        uses: stefanzweifel/git-auto-commit-action@e348103e9026cc0eee72ae06630dbe30c8bf7a79 # v5.1.0
+        with:
+          commit_message: "Sigma Rules Deployment"
+          branch: ${{ github.event_name == 'issue_comment' && steps.get-pr-branch.outputs.result || github.head_ref }}
+          skip_checkout: true
+          skip_fetch: true
