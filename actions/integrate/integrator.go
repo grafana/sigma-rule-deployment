@@ -144,6 +144,11 @@ func (i *Integrator) LoadConfig() error {
 	i.prettyPrint = strings.ToLower(os.Getenv("PRETTY_PRINT")) == "true"
 	i.allRules = strings.ToLower(os.Getenv("ALL_RULES")) == "true"
 
+	// Override config with environment variable if set
+	if os.Getenv("CONTINUE_ON_QUERY_TESTING_ERRORS") != "" {
+		i.config.IntegratorConfig.ContinueOnQueryTestingErrors = strings.ToLower(os.Getenv("CONTINUE_ON_QUERY_TESTING_ERRORS")) == "true"
+	}
+
 	if !filepath.IsLocal(i.config.Folders.ConversionPath) {
 		return fmt.Errorf("conversion path is not local: %s", i.config.Folders.ConversionPath)
 	}
@@ -295,7 +300,23 @@ func (i *Integrator) Run() error {
 			// Test all queries against the datasource
 			queryResults, err := i.TestQueries(queries, config, i.config.ConversionDefaults, timeoutDuration)
 			if err != nil {
-				return err
+				fmt.Printf("Error testing queries: %v\n", err)
+
+				// Check if any query results have errors
+				for _, result := range queryResults {
+					if len(result.Stats.Errors) > 0 {
+						fmt.Printf("Query testing errors occurred for file %s\n", inputFile)
+						fmt.Printf("Datasource: %s\n", result.Datasource)
+						for _, error := range result.Stats.Errors {
+							fmt.Printf("Error: %s\n", error)
+						}
+					}
+				}
+
+				// Return error if continue on query testing errors is not enabled
+				if !i.config.IntegratorConfig.ContinueOnQueryTestingErrors {
+					return err
+				}
 			}
 
 			queryTestResults[inputFile] = queryResults

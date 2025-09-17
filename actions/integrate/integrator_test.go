@@ -1018,3 +1018,192 @@ func TestIntegratorWithQueryTesting(t *testing.T) {
 		})
 	}
 }
+
+// Enhanced testDatasourceQuery to support error injection for testing continue_on_query_testing_errors
+type testDatasourceQueryWithErrors struct {
+	*testDatasourceQuery
+	mockErrors map[string]error
+}
+
+func newTestDatasourceQueryWithErrors() *testDatasourceQueryWithErrors {
+	return &testDatasourceQueryWithErrors{
+		testDatasourceQuery: newTestDatasourceQuery(),
+		mockErrors:          make(map[string]error),
+	}
+}
+
+func (t *testDatasourceQueryWithErrors) AddMockError(query string, err error) {
+	t.mockErrors[query] = err
+}
+
+func (t *testDatasourceQueryWithErrors) ExecuteQuery(query, dsName, baseURL, apiKey, from, to string, timeout time.Duration) ([]byte, error) {
+	// Check if we should return an error for this query
+	if err, exists := t.mockErrors[query]; exists {
+		return nil, err
+	}
+
+	// Otherwise use the parent implementation
+	return t.testDatasourceQuery.ExecuteQuery(query, dsName, baseURL, apiKey, from, to, timeout)
+}
+
+// TestIntegrationWithQueryTestingErrors tests the core behavior of continue_on_query_testing_errors
+func TestIntegrationWithQueryTestingErrors(t *testing.T) {
+	tests := []struct {
+		name                     string
+		continueOnErrors         bool
+		queryErrors              map[string]error
+		expectIntegrationFailure bool
+		expectAlertRuleCreated   bool
+	}{
+		{
+			name:                     "query error with continue disabled should fail integration immediately",
+			continueOnErrors:         false,
+			queryErrors:              map[string]error{"{job=\"test\"} |= \"error\"": fmt.Errorf("datasource not found")},
+			expectIntegrationFailure: true,
+			expectAlertRuleCreated:   true, // Alert rule is created before query testing
+		},
+		{
+			name:                     "query error with continue enabled should complete integration successfully",
+			continueOnErrors:         true,
+			queryErrors:              map[string]error{"{job=\"test\"} |= \"error\"": fmt.Errorf("datasource not found")},
+			expectIntegrationFailure: false, // Integration should succeed when continue is enabled
+			expectAlertRuleCreated:   true,  // Alert rule should still be created
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create temporary test directory
+			testDir := filepath.Join("testdata", "test_continue_errors", tt.name)
+			err := os.MkdirAll(testDir, 0o755)
+			assert.NoError(t, err)
+			defer os.RemoveAll(testDir)
+
+			// Set up the github output file
+			oldGithubOutput := os.Getenv("GITHUB_OUTPUT")
+			os.Setenv("GITHUB_OUTPUT", filepath.Join(testDir, "github-output"))
+			defer os.Setenv("GITHUB_OUTPUT", oldGithubOutput)
+
+			// Create conversion and deployment subdirectories
+			convPath := filepath.Join(testDir, "conv")
+			deployPath := filepath.Join(testDir, "deploy")
+			err = os.MkdirAll(convPath, 0o755)
+			assert.NoError(t, err)
+			err = os.MkdirAll(deployPath, 0o755)
+			assert.NoError(t, err)
+
+			// Create test conversion output
+			convOutput := ConversionOutput{
+				ConversionName: "test_continue",
+				Queries:        []string{"{job=\"test\"} |= \"error\"", "{job=\"test\"} |= \"info\""},
+				Rules: []SigmaRule{
+					{
+						ID:    "996f8884-9144-40e7-ac63-29090ccde9a0",
+						Title: "Test Continue Rule",
+					},
+				},
+			}
+
+			// Create test configuration with query testing enabled
+			config := Configuration{
+				Folders: FoldersConfig{
+					ConversionPath: convPath,
+					DeploymentPath: deployPath,
+				},
+				ConversionDefaults: ConversionConfig{
+					Target:     "loki",
+					DataSource: "test-datasource",
+				},
+				Conversions: []ConversionConfig{
+					{
+						Name:       "test_continue",
+						RuleGroup:  "Test Rules",
+						TimeWindow: "5m",
+						DataSource: "test-datasource",
+					},
+				},
+				IntegratorConfig: IntegrationConfig{
+					FolderID:                     "test-folder",
+					OrgID:                        1,
+					TestQueries:                  true,
+					From:                         "now-1h",
+					To:                           "now",
+					ContinueOnQueryTestingErrors: tt.continueOnErrors,
+				},
+				DeployerConfig: DeploymentConfig{
+					GrafanaInstance: "https://test.grafana.com",
+					Timeout:         "5s",
+				},
+			}
+
+			// Create test conversion output file
+			convBytes, err := json.Marshal(convOutput)
+			assert.NoError(t, err)
+			convFile := filepath.Join(convPath, "test_continue.json")
+			err = os.WriteFile(convFile, convBytes, 0o600)
+			assert.NoError(t, err)
+
+			// Create mock query executor with error injection
+			mockDatasourceQuery := newTestDatasourceQueryWithErrors()
+
+			// Add query errors
+			for query, queryErr := range tt.queryErrors {
+				mockDatasourceQuery.AddMockError(query, queryErr)
+			}
+
+			// Add successful responses for queries that don't have errors
+			mockDatasourceQuery.AddMockResponse("{job=\"test\"} |= \"info\"", []byte(`{
+				"results": {
+					"A": {
+						"frames": [{
+							"schema": {"fields": [{"name": "Time", "type": "time"}, {"name": "Line", "type": "string"}]},
+							"data": {"values": [[1625126400000], ["info log"]]}
+						}]
+					}
+				}
+			}`))
+
+			// Save original executor and restore after test
+			originalDatasourceQuery := DefaultDatasourceQuery
+			DefaultDatasourceQuery = mockDatasourceQuery
+			defer func() {
+				DefaultDatasourceQuery = originalDatasourceQuery
+			}()
+
+			// Set environment variable for API token
+			os.Setenv("INTEGRATOR_GRAFANA_SA_TOKEN", "test-api-token")
+			defer os.Unsetenv("INTEGRATOR_GRAFANA_SA_TOKEN")
+
+			// Set up integrator
+			integrator := &Integrator{
+				config:       config,
+				addedFiles:   []string{convFile},
+				removedFiles: []string{},
+			}
+
+			// Run integration
+			err = integrator.Run()
+
+			// Verify integration failure expectation
+			if tt.expectIntegrationFailure {
+				assert.Error(t, err, "Expected integration to fail but it succeeded")
+			} else {
+				assert.NoError(t, err, "Expected integration to succeed but it failed")
+			}
+
+			// Verify alert rule creation expectation - this is the key test
+			convID, _, err := summariseSigmaRules(convOutput.Rules)
+			assert.NoError(t, err)
+			ruleUID := getRuleUID("test_continue", convID)
+			expectedFile := filepath.Join(deployPath, fmt.Sprintf("alert_rule_test_continue_test_continue_%s.json", ruleUID))
+
+			if tt.expectAlertRuleCreated {
+				_, err = os.Stat(expectedFile)
+				assert.NoError(t, err, "Expected alert rule file to be created but it wasn't")
+			} else {
+				_, err = os.Stat(expectedFile)
+				assert.True(t, os.IsNotExist(err), "Expected alert rule file to not be created but it was")
+			}
+		})
+	}
+}
