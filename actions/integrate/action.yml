@@ -34,7 +34,7 @@ inputs:
   continue_on_query_testing_errors:
     description: "Continue integration process even when query testing fails, but print errors and continue the action"
     required: false
-    default: "false"
+    default: "true"
 
 outputs:
   rules_integrated:
