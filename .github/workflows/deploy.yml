@@ -1,0 +1,50 @@
+name: Deploy Sigma rules
+
+on:
+  workflow_call:
+    inputs:
+      config_path:
+        description: "Path to the configuration file for the Sigma Rule Deployer"
+        required: true
+        type: string
+      fresh_deploy:
+        description: "If true, ALL the alert rules in the Grafana Alert folder specified in the config will be deleted, and the alerts in the deployment folder will be created from scratch. ⚠️ Warning: destructive action"
+        required: false
+        type: boolean
+        default: false
+      vault_path:
+        description: "A path to the Grafana service account token described in secrets.grafana_sa_token, but stored in Grafana's internal Vault"
+        required: false
+        type: string
+        default: ""
+    secrets:
+      grafana_sa_token:
+        description: "A Grafana service account token for provisioning the alerts, with at least the following roles: Alerting:Access to alert rules provisioning API, Alerting:Rules Reader, Alerting:Rules Writer, Alerting:Set provisioning status"
+        required: true
+      github_token:
+        description: "GitHub token to use for the action, using github.token by default"
+        required: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # to read alert rule files
+      id-token: write # to get vault secrets
+      packages: read # to pull the Action docker image
+      pull-requests: write # to update the relevant pull request
+    steps:
+      - name: Get service account token for instance from Vault
+        if: ${{ inputs.vault_path != '' }}
+        uses: grafana/shared-workflows/actions/get-vault-secrets@main
+        with:
+          repo_secrets: ${{ format('GRAFANA_SA_TOKEN={0}', inputs.vault_path) }}
+
+      - name: Deploy alert rules to Grafana
+        id: deploy
+        uses: grafana/sigma-rule-deployment/actions/deploy@be667ceacd7cb4b2a4383a79af8f9837a7d8a55a
+        with:
+          config_path: ${{ inputs.config_path }}
+          fresh_deploy: ${{ inputs.fresh_deploy }}
+          grafana_sa_token: ${{ secrets.grafana_sa_token || env.GRAFANA_SA_TOKEN }}
+          github_token: ${{ secrets.github_token || github.token }}
