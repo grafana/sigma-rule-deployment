@@ -15,17 +15,18 @@ Automate the conversion, testing, and deployment of [Sigma rules](https://github
    - Following the main [SigmaHQ/sigma](https://github.com/SigmaHQ/sigma) convention, we put our rules into folders starting with `rules`, and we put our Sigma pipelines in a `pipelines` folder
    - Note that any correlation rules you want to convert must have the rules they reference in the same file (see [the FAQ](#faq))
 2. Create a [Grafana service account token](https://grafana.com/docs/grafana/latest/administration/service-accounts/) and [add it as a secret](https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions) to your GitHub repository
-   - Ensure the service account is either an Editor and/or has [RBAC roles](https://grafana.com/docs/grafana/latest/administration/service-accounts/#assign-roles-to-a-service-account-in-grafana) that allow it to:
-     - Access the alert rules provisioning API
-     - Read and write alert rules
-     - Set provisioning status
-     - Read data sources
+   - Ensure the service account is either an Editor and/or has the following [RBAC roles](https://grafana.com/docs/grafana/latest/administration/service-accounts/#assign-roles-to-a-service-account-in-grafana):
+     - Alerting: Access to alert rules provisioning API
+     - Alerting: Rules Reader
+     - Alerting: Rules Writer
+     - Alerting: Set provisioning status
+     - Data sources: Reader
 3. Create a configuration file that defines one or more conversions
    - See the sample [configuration file](config/config-example.yml)
 4. Add a workflow to run the conversion/integration Actions
-   - See the sample [workflow-convert-integrate-sigma.yml](config/workflow-convert-integrate-sigma.yml)
+   - See the reusable workflow [convert-integrate.yml](.github/workflow/convert-integrate.yml)
 5. Add a workflow to run the deployment Action
-   - See the sample [workflow-deploy.yml](config/workflow-deploy.yml)
+   - See the reusable workflow [deploy.yml](.github/workflow/deploy.yml)
 6. Create a PR that add or modify a converted Sigma rule, and try adding a comment `sigma convert all` to the PR to see the conversion and integration process in action
 7. Once you're happy with the results, merge the PR into main to provision the rules to your Grafana instance
 8. With the alert rules successfully provisioned, set up [Alerting notifications](https://grafana.com/docs/grafana/latest/alerting/configure-notifications/) for the relevant folder and/or groups to directly contact affected users. Alternatively you can connect them to [Grafana IRM](https://grafana.com/docs/grafana-cloud/alerting-and-irm/irm/) and use it to manage on-call rotas and simplify alert routing
