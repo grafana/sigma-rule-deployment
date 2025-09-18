@@ -24,6 +24,7 @@ func TestConvertToAlert(t *testing.T) {
 		wantQueryText string
 		wantDuration  definitions.Duration
 		wantError     bool
+		wantUnchanged bool
 	}{
 		{
 			name:    "valid new loki query",
@@ -89,6 +90,54 @@ func TestConvertToAlert(t *testing.T) {
 			wantError:    true,
 		},
 		{
+			name:    "skip unchanged queries",
+			queries: []string{"{job=\".+\"} | json | test=\"true\""},
+			titles:  "New Alert Rule Title", // This should be ignored
+			rule: &definitions.ProvisionedAlertRule{
+				UID:   "5c1c217a",
+				Title: "Unchanged Alert Rule",
+				Data: []definitions.AlertQuery{
+					{
+						Model: json.RawMessage(`{"refId":"A0","datasource":{"type":"loki","uid":"nil"},"hide":false,"expr":"sum(count_over_time({job=\".+\"} | json | test=\"true\"[$__auto]))","queryType":"instant","editorMode":"code"}`),
+					},
+					{
+						Model: json.RawMessage(`{"refId":"B","hide":false,"type":"reduce","datasource":{"uid":"__expr__","type":"__expr__"},"conditions":[{"type":"query","evaluator":{"params":[],"type":"gt"},"operator":{"type":"and"},"query":{"params":["B"]},"reducer":{"params":[],"type":"last"}}],"reducer":"last","expression":"A0"}`),
+					},
+					{
+						Model: json.RawMessage(`{"refId":"C","hide":false,"type":"threshold","datasource":{"uid":"__expr__","type":"__expr__"},"conditions":[{"type":"query","evaluator":{"params":[1],"type":"gt"},"operator":{"type":"and"},"query":{"params":["C"]},"reducer":{"params":[],"type":"last"}}],"expression":"B"}`),
+					},
+				},
+			},
+			wantUnchanged: true,
+		},
+		{
+			name:    "process changed queries",
+			queries: []string{"{job=\".+\"} | json | test=\"true\""},
+			titles:  "New Alert Rule Title", // This should *not* be ignored
+			config: ConversionConfig{
+				TimeWindow: "1m",
+				RuleGroup:  "Default",
+				DataSource: "nil",
+			},
+			rule: &definitions.ProvisionedAlertRule{
+				UID:   "5c1c217a",
+				Title: "Unchanged Alert Rule",
+				Data: []definitions.AlertQuery{
+					{
+						Model: json.RawMessage(`{"refId":"A","datasource":{"type":"loki","uid":"nil"},"hide":false,"expr":"sum(count_over_time({job=\".+\"} | json | test=\"true\"[$__auto]))","queryType":"instant","editorMode":"code"}`),
+					},
+					{
+						Model: json.RawMessage(`{"refId":"B","hide":false,"type":"reduce","datasource":{"uid":"__expr__","type":"__expr__"},"conditions":[{"type":"query","evaluator":{"params":[],"type":"gt"},"operator":{"type":"and"},"query":{"params":["B"]},"reducer":{"params":[],"type":"last"}}],"reducer":"last","expression":"A0"}`),
+					},
+					{
+						Model: json.RawMessage(`{"refId":"C","hide":false,"type":"threshold","datasource":{"uid":"__expr__","type":"__expr__"},"conditions":[{"type":"query","evaluator":{"params":[1],"type":"gt"},"operator":{"type":"and"},"query":{"params":["C"]},"reducer":{"params":[],"type":"last"}}],"expression":"B"}`),
+					},
+				},
+			},
+			wantDuration:  definitions.Duration(1 * time.Minute),
+			wantUnchanged: false,
+		},
+		{
 			name:    "valid query with a custom query model",
 			queries: []string{"DO MY QUERY"},
 			titles:  "Alert Rule 7",
@@ -135,11 +184,16 @@ func TestConvertToAlert(t *testing.T) {
 				assert.NotNil(t, err)
 			} else {
 				assert.NoError(t, err)
-				assert.Contains(t, string(tt.rule.Data[0].Model), tt.wantQueryText)
-				assert.Equal(t, tt.wantDuration, tt.rule.Data[0].RelativeTimeRange.From)
-				assert.Equal(t, tt.config.RuleGroup, tt.rule.RuleGroup)
-				assert.Equal(t, tt.config.DataSource, tt.rule.Data[0].DatasourceUID)
-				assert.Equal(t, tt.titles, tt.rule.Title)
+				if tt.wantUnchanged {
+					// The rule should not be changed as the generated alert rule was identical
+					assert.NotEqual(t, tt.titles, tt.rule.Title)
+				} else {
+					assert.Contains(t, string(tt.rule.Data[0].Model), tt.wantQueryText)
+					assert.Equal(t, tt.wantDuration, tt.rule.Data[0].RelativeTimeRange.From)
+					assert.Equal(t, tt.config.RuleGroup, tt.rule.RuleGroup)
+					assert.Equal(t, tt.config.DataSource, tt.rule.Data[0].DatasourceUID)
+					assert.Equal(t, tt.titles, tt.rule.Title)
+				}
 			}
 		})
 	}
