@@ -46,6 +46,5 @@ jobs:
         with:
           config_path: ${{ inputs.config_path }}
           fresh_deploy: ${{ inputs.fresh_deploy }}
-        secrets:
           grafana_sa_token: ${{ secrets.grafana_sa_token || env.GRAFANA_SA_TOKEN }}
           github_token: ${{ secrets.custom_github_token || github.token }}
