@@ -1,6 +1,6 @@
 # Sigma Rule Deployment GitHub Actions Suite
 
-Automate the conversion, testing, and deployment of Sigma Rules to Grafana with GitHub Actions.
+Automate the conversion, testing, and deployment of [Sigma rules](https://github.com/SigmaHQ/sigma) to [Grafana Alerting](https://grafana.com/docs/grafana/latest/alerting/) rules with GitHub Actions.
 
 ## Available Actions
 
@@ -11,7 +11,23 @@ Automate the conversion, testing, and deployment of Sigma Rules to Grafana with 
 
 ## Usage
 
-We include two sample workflow configurations ([convert-integrate-sigma.yml](config/convert-integrate-sigma.yml) and [deploy.yml](config/deploy.yml)) to show how these Actions can be combined together to achieve a full end-to-end Sigma rule to deployed Grafana Alert, and a sample [configuration file](config/sigma-convert.example.yml) for the conversions.
+1. Create a repository that contains the Sigma rules you want to convert
+   - Following the main [SigmaHQ/sigma](https://github.com/SigmaHQ/sigma) convention, we put our rules into folders starting with `rules`, and we put our Sigma pipelines in a `pipelines` folder
+   - Note that any correlation rules you want to convert must have the rules they reference in the same file (see [the FAQ](#faq))
+2. Create a [Grafana service account token](https://grafana.com/docs/grafana/latest/administration/service-accounts/) and [add it as a secret](https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions) to your GitHub repository
+   - Ensure the service account is either an Editor and/or has [RBAC roles](https://grafana.com/docs/grafana/latest/administration/service-accounts/#assign-roles-to-a-service-account-in-grafana) that allow it to:
+     - Access the alert rules provisioning API
+     - Read and write alert rules
+     - Set provisioning status
+     - Read data sources
+3. Create a configuration file that defines one or more conversions
+   - See the sample [configuration file](config/config-example.yml)
+4. Add a workflow to run the conversion/integration Actions
+   - See the sample [workflow-convert-integrate-sigma.yml](config/workflow-convert-integrate-sigma.yml)
+5. Add a workflow to run the deployment Action
+   - See the sample [workflow-deploy.yml](config/workflow-deploy.yml)
+6. Create a PR that add or modify a converted Sigma rule, and try adding a comment `sigma convert all` to the PR to see the conversion and integration process in action
+7. Once you're happy with the results, merge the PR into main to provision the rules to your Grafana instance
 
 ## FAQ
 
