@@ -1,0 +1,27 @@
+name: Convert and Integrate Sigma rules
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "conversions/*.json"
+      - "config.yml"
+      - "pipelines/**.yml"
+      - "rules*/**.yml"
+  issue_comment:
+    types: [created]
+
+jobs:
+  convert-integrate:
+    permissions:
+      contents: write # to read Sigma rules and write intermediary files
+      id-token: write # to get vault secrets
+      packages: read # to pull the Action docker image
+      pull-requests: write # to update the relevant pull request
+    uses: grafana/sigma-rule-deployment/.github/workflows/convert-integrate.yml@00595f30b410d688dd9dbd4b69b683da1a5f4800
+    with:
+      config_path: ./config.yml
+      pretty_print: true
+    secrets:
+      grafana_sa_token: ${{ secrets.GRAFANA_SA_TOKEN }}
