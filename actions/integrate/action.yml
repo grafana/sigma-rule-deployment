@@ -61,7 +61,7 @@ runs:
         registry: ghcr.io
         username: ${{ github.actor }}
         password: ${{ github.token }}
-    - name: Get Last Commit or base_ref
+    - name: Identify relevant commits
       if: ${{ github.event_name == 'pull_request' && inputs.changed_files_from_base == 'false' }}
       id: commits
       uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea #v7.0.1
@@ -88,54 +88,24 @@ runs:
               last_commit = remote_commit.sha;
             }
           }
+          console.log(`Last commit or base ref: ${commit}`);
+          core.setOutput('previous-commit', commit);
+          console.log(`PR First Commit: ${first_commit}`);
+          core.setOutput('first-commit', first_commit);
+          console.log(`PR Last Commit by automation: ${last_commit}`);
+          core.setOutput('last-commit', last_commit);
 
           return {
             commit,
             first_commit,
             last_commit
           };
-    - name: Select Commit
-      id: previous-commit
-      if: ${{ github.event_name == 'pull_request' && inputs.changed_files_from_base == 'false' }}
-      uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea #v7.0.1
-      env:
-        COMMIT: ${{ steps.commits.outputs.result }}
-      with:
-        script: |
-          const output = JSON.parse(process.env.COMMIT);
-          console.log(`Last commit or base ref: ${output.commit}`);
-          return output.commit;
-        result-encoding: string
-    - name: Select First Commit
-      id: first-commit
-      if: ${{ github.event_name == 'pull_request' && inputs.changed_files_from_base == 'false' }}
-      uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea #v7.0.1
-      env:
-        COMMIT: ${{ steps.commits.outputs.result }}
-      with:
-        script: |
-          const output = JSON.parse(process.env.COMMIT);
-          console.log(`PR First Commit: ${output.first_commit}`);
-          return output.first_commit;
-        result-encoding: string
-    - name: Select Last Commit
-      id: last-commit
-      if: ${{ github.event_name == 'pull_request' && inputs.changed_files_from_base == 'false' }}
-      uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea #v7.0.1
-      env:
-        COMMIT: ${{ steps.commits.outputs.result }}
-      with:
-        script: |
-          const output = JSON.parse(process.env.COMMIT);
-          console.log(`PR Last Commit by automation: ${output.last_commit}`);
-          return output.last_commit;
-        result-encoding: string
     - name: Calculate Change Files
       id: changed-files
       shell: bash
       env:
         CONVERSION_PATH: ${{ steps.config-paths.outputs.conversion_path }}
-        BASE_REF: ${{ steps.previous-commit.outputs.result || github.base_ref || github.event.pull_request.base.ref || format('origin/{0}', github.event.repository.default_branch) }}
+        BASE_REF: ${{ steps.commits.outputs.previous-commit || github.base_ref || github.event.pull_request.base.ref || format('origin/{0}', github.event.repository.default_branch) }}
       run: |
         git fetch
         CHANGED_FILES=$(git diff "$BASE_REF" --name-only --diff-filter=ACMR -- "$CONVERSION_PATH")
@@ -177,7 +147,7 @@ runs:
       id: generate-comment-data
       shell: bash
       env:
-        BASE_REF: ${{ steps.last-commit.outputs.result || steps.first-commit.outputs.result || github.base_ref || github.event.pull_request.base.ref || format('origin/{0}', github.event.repository.default_branch) }}
+        BASE_REF: ${{ steps.commits.outputs.last-commit || steps.commits.outputs.first-commit || github.base_ref || github.event.pull_request.base.ref || format('origin/{0}', github.event.repository.default_branch) }}
         DEPLOYMENT_PATH: ${{ steps.config-paths.outputs.deployment_path }}
       run: |
         git add "$DEPLOYMENT_PATH"
