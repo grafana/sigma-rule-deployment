@@ -101,7 +101,7 @@
                         ]
                     },
                     "lookback": {
-                        "$ref": "#/$defs/timeWindow",
+                        "$ref": "#/$defs/lookback",
                         "description": "Lookback period to account for log delays. Adjusts the alert query time range backwards by this duration",
                         "examples": [
                             "1m",
@@ -375,16 +375,6 @@
                     "examples": [
                         "{\"refId\":\"%s\",\"datasource\":{\"type\":\"loki\",\"uid\":\"%s\"},\"query\":\"%s\"}"
                     ]
-                },
-                "lookback": {
-                    "$ref": "#/$defs/timeWindow",
-                    "description": "Lookback period to account for log delays. Adjusts the alert query time range backwards by this duration (e.g., now-5m to now with 1m lookback becomes now-6m to now-1m)",
-                    "examples": [
-                        "1m",
-                        "2m",
-                        "5m",
-                        "10m"
-                    ]
                 }
             }
         }
@@ -414,7 +404,8 @@
                         "pipelines/datasources/aws_cloudtrail.yml"
                     ],
                     "rule_group": "Every 5 Minutes",
-                    "time_window": "5m"
+                    "time_window": "5m",
+                    "lookback": "2m"
                 }
             ],
             "integration": {
