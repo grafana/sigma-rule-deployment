@@ -94,7 +94,7 @@ jobs:
         env:
           PULL_REQUEST_NUMBER: ${{ github.event.issue.number }}
           COMMENT_BODY: ${{ github.event.comment.body }}
-          ALL_RULES: ${{ inputs.pretty_print }}
+          ALL_RULES: ${{ inputs.all_rules }}
         run: |
           if [ -z "$COMMENT_BODY" ]; then
             echo "No comment body found"
