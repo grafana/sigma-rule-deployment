@@ -42,6 +42,11 @@ on:
         required: false
         type: boolean
         default: false
+      continue_on_query_testing_errors:
+        description: "Continue integration process even when query testing fails, but print errors and continue the action"
+        required: false
+        type: boolean
+        default: true
       vault_path:
         description: "A path to the Grafana service account token described in secrets.grafana_sa_token, but stored in Grafana's internal Vault"
         required: false
