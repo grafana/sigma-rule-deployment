@@ -20,7 +20,7 @@ on:
     secrets:
       grafana_sa_token:
         description: "A Grafana service account token for provisioning the alerts, with at least the following roles: Alerting:Access to alert rules provisioning API, Alerting:Rules Reader, Alerting:Rules Writer, Alerting:Set provisioning status"
-        required: true
+        required: false
       custom_github_token:
         description: "GitHub token to use for the action, using github.token by default"
         required: false
