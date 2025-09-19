@@ -441,8 +441,8 @@ func (i *Integrator) ConvertToAlert(rule *definitions.ProvisionedAlertRule, quer
 		return fmt.Errorf("error parsing time window: %v", err)
 	}
 
-	lookbackStr := getC(config.Lookback, i.config.ConversionDefaults.Lookback, "0s")
-	lookbackDuration, err := time.ParseDuration(lookbackStr)
+	lookback := getC(config.Lookback, i.config.ConversionDefaults.Lookback, "0s")
+	lookbackDuration, err := time.ParseDuration(lookback)
 	if err != nil {
 		return fmt.Errorf("error parsing lookback: %v", err)
 	}
@@ -515,8 +515,6 @@ func (i *Integrator) ConvertToAlert(rule *definitions.ProvisionedAlertRule, quer
 
 	rule.Annotations["Query"] = queries[0]
 	rule.Annotations["TimeWindow"] = timewindow
-
-	lookback := getC(config.Lookback, i.config.ConversionDefaults.Lookback, "0s")
 	rule.Annotations["Lookback"] = lookback
 
 	// LogSourceUid annotation (data source)
