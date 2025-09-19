@@ -99,6 +99,16 @@
                             "6h",
                             "30m"
                         ]
+                    },
+                    "lookback": {
+                        "$ref": "#/$defs/lookback",
+                        "description": "Lookback period to account for log delays. Adjusts the alert query time range backwards by this duration",
+                        "examples": [
+                            "1m",
+                            "2m",
+                            "10m",
+                            "1h"
+                        ]
                     }
                 }
             }
@@ -394,7 +404,8 @@
                         "pipelines/datasources/aws_cloudtrail.yml"
                     ],
                     "rule_group": "Every 5 Minutes",
-                    "time_window": "5m"
+                    "time_window": "5m",
+                    "lookback": "2m"
                 }
             ],
             "integration": {

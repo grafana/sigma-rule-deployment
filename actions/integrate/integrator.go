@@ -459,7 +459,17 @@ func (i *Integrator) ConvertToAlert(rule *definitions.ProvisionedAlertRule, quer
 	if err != nil {
 		return fmt.Errorf("error parsing time window: %v", err)
 	}
-	timerange := definitions.RelativeTimeRange{From: definitions.Duration(duration), To: definitions.Duration(time.Duration(0))}
+
+	lookback := getC(config.Lookback, i.config.ConversionDefaults.Lookback, "0s")
+	lookbackDuration, err := time.ParseDuration(lookback)
+	if err != nil {
+		return fmt.Errorf("error parsing lookback: %v", err)
+	}
+
+	// Apply lookback to time range: now-5m to now with 1m lookback becomes now-6m to now-1m
+	fromDuration := duration + lookbackDuration
+	toDuration := lookbackDuration
+	timerange := definitions.RelativeTimeRange{From: definitions.Duration(fromDuration), To: definitions.Duration(toDuration)}
 
 	queryData := make([]definitions.AlertQuery, 0, len(queries)+2)
 	refIDs := make([]string, len(queries))
@@ -524,9 +534,7 @@ func (i *Integrator) ConvertToAlert(rule *definitions.ProvisionedAlertRule, quer
 
 	rule.Annotations["Query"] = queries[0]
 	rule.Annotations["TimeWindow"] = timewindow
-
-	// todo: add Lookback to conversion config
-	rule.Annotations["Lookback"] = "0s"
+	rule.Annotations["Lookback"] = lookback
 
 	// LogSourceUid annotation (data source)
 	rule.Annotations["LogSourceUid"] = datasource
