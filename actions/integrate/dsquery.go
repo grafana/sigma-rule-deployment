@@ -47,10 +47,10 @@ type GrafanaDatasource struct {
 
 // BucketAgg represents a bucket aggregation for Elasticsearch queries
 type BucketAgg struct {
-	Type     string                 `json:"type"`
-	ID       string                 `json:"id"`
-	Settings map[string]interface{} `json:"settings,omitempty"`
-	Field    string                 `json:"field,omitempty"`
+	Type     string         `json:"type"`
+	ID       string         `json:"id"`
+	Settings map[string]any `json:"settings,omitempty"`
+	Field    string         `json:"field,omitempty"`
 }
 
 // Metric represents a metric for Elasticsearch queries
