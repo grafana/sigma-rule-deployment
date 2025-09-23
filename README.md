@@ -1,6 +1,6 @@
 # Sigma Rule Deployment GitHub Actions Suite
 
-Automate the conversion, testing, and deployment of [Sigma rules](https://github.com/SigmaHQ/sigma) to [Grafana Alerting](https://grafana.com/docs/grafana/latest/alerting/) rules with GitHub Actions.
+Automate the conversion, testing, and deployment of [Sigma rules](https://sigmahq.io/) to [Grafana Alerting](https://grafana.com/docs/grafana/latest/alerting/) rules with GitHub Actions.
 
 ## Available Actions
 
@@ -11,9 +11,9 @@ Automate the conversion, testing, and deployment of [Sigma rules](https://github
 
 ## Usage
 
-1. Create a GitHub repository and add the Sigma rules and pipelines you want to convert
+1. Create a GitHub repository and add the [Sigma rules](https://sigmahq.io/docs/basics/rules.html) and [pipelines](https://sigmahq.io/docs/digging-deeper/pipelines.html) you want to convert
    - Following the main [SigmaHQ/sigma](https://github.com/SigmaHQ/sigma) convention, we put our rules into folders starting with `rules`, and we put our Sigma pipelines in a `pipelines` folder
-   - Note that any correlation rules you want to convert must have the rules they reference in the same file (see [the FAQ](#faq))
+   - Note that any [Sigma correlation rules](https://sigmahq.io/docs/meta/correlations.html) you want to convert must have the rules they reference in the same file (see [the FAQ](#faq))
 2. Create a [Grafana service account token](https://grafana.com/docs/grafana/latest/administration/service-accounts/) and [add it as a secret](https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions) to your GitHub repository
    - Ensure the service account is either an Editor and/or has the following [RBAC roles](https://grafana.com/docs/grafana/latest/administration/service-accounts/#assign-roles-to-a-service-account-in-grafana):
      - Alerting: Access to alert rules provisioning API
@@ -23,12 +23,13 @@ Automate the conversion, testing, and deployment of [Sigma rules](https://github
      - Data sources: Reader
 3. Create a configuration file that defines one or more conversions and add it to the repository
    - See the sample [configuration file](config/config-example.yml)
+   - See also the [configuration file schema](https://github.com/grafana/sigma-rule-deployment/blob/main/config/schema.json) for more details
 4. Add a workflow to run the conversion/integration Actions on a PR commit or issue comment
    - See the reusable workflow [convert-integrate.yml](.github/workflow/convert-integrate.yml)
 5. Add a workflow to run the deployment Action on a push to main
    - See the reusable workflow [deploy.yml](.github/workflow/deploy.yml)
-6. Create a PR that adds or modify a converted Sigma rule, and try adding a comment `sigma convert all` to the PR to see the conversion and integration process in action
-7. Once you're happy with the results, merge the PR into main to provision the rules to your Grafana instance
+6. Create a PR that adds or modify a converted Sigma rule, and add a comment `sigma convert all` to the PR to see the conversion and integration process in action
+7. Once you're happy with the results, merge the PR into main, which will trigger the deployer to provision the rules to your Grafana instance
 8. With the alert rules successfully provisioned, set up [Alerting notifications](https://grafana.com/docs/grafana/latest/alerting/configure-notifications/) for the relevant folder and/or groups to directly contact affected users. Alternatively you can connect them to [Grafana IRM](https://grafana.com/docs/grafana-cloud/alerting-and-irm/irm/) and use it to manage on-call rotas and simplify alert routing
 
 ## FAQ
