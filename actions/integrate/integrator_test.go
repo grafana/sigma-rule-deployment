@@ -124,7 +124,8 @@ func TestConvertToAlert(t *testing.T) {
 				Title: "Unchanged Alert Rule",
 				Data: []definitions.AlertQuery{
 					{
-						Model: json.RawMessage(`{"refId":"A","datasource":{"type":"loki","uid":"nil"},"hide":false,"expr":"sum(count_over_time({job=\".+\"} | json | test=\"true\"[$__auto]))","queryType":"instant","editorMode":"code"}`),
+						// old query, which doesn't match the new query
+						Model: json.RawMessage(`{"refId":"A0","datasource":{"type":"loki","uid":"nil"},"hide":false,"expr":"sum(count_over_time({old_job=\".+\"} | logfmt | test=\"old_query\"[$__auto]))","queryType":"instant","editorMode":"code"}`),
 					},
 					{
 						Model: json.RawMessage(`{"refId":"B","hide":false,"type":"reduce","datasource":{"uid":"__expr__","type":"__expr__"},"conditions":[{"type":"query","evaluator":{"params":[],"type":"gt"},"operator":{"type":"and"},"query":{"params":["B"]},"reducer":{"params":[],"type":"last"}}],"reducer":"last","expression":"A0"}`),
