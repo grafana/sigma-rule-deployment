@@ -91,7 +91,7 @@ func TestConvertToAlert(t *testing.T) {
 		},
 		{
 			name:    "skip unchanged queries",
-			queries: []string{"{job=\".+\"} | json | test=\"true\""},
+			queries: []string{`{job=".+"} | json | test="true"`},
 			titles:  "New Alert Rule Title", // This should be ignored
 			rule: &definitions.ProvisionedAlertRule{
 				UID:   "5c1c217a",
@@ -112,7 +112,7 @@ func TestConvertToAlert(t *testing.T) {
 		},
 		{
 			name:    "process changed queries",
-			queries: []string{"{job=\".+\"} | json | test=\"true\""},
+			queries: []string{`{job=".+"} | json | test="true"`},
 			titles:  "New Alert Rule Title", // This should *not* be ignored
 			config: ConversionConfig{
 				TimeWindow: "1m",
