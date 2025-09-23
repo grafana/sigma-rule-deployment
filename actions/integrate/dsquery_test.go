@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -49,8 +50,15 @@ func (m *MockDatasourceQuery) GetDatasource(dsName, _, _ string, _ time.Duration
 	}, nil
 }
 
-func (m *MockDatasourceQuery) ExecuteQuery(query, _, _, _, _, _ string, _ time.Duration) ([]byte, error) {
+func (m *MockDatasourceQuery) ExecuteQuery(query, dsName, _, _, _, _ string, _ time.Duration) ([]byte, error) {
 	m.execQueries = append(m.execQueries, query)
+
+	// Check if this is an unsupported datasource type
+	if ds, exists := m.mockDatasources[dsName]; exists {
+		if ds.Type != Loki && ds.Type != Elasticsearch {
+			return nil, fmt.Errorf("unsupported datasource type: %s", ds.Type)
+		}
+	}
 
 	if response, exists := m.mockResponses[query]; exists {
 		return response, nil
@@ -280,8 +288,6 @@ func TestTestQueryElasticsearch(t *testing.T) {
 }
 
 func TestElasticsearchQueryStructure(t *testing.T) {
-	// Test that the query structure is correctly built for Elasticsearch
-
 	// Create a mock datasource
 	ds := &GrafanaDatasource{
 		ID:   71,
@@ -389,4 +395,40 @@ func TestElasticsearchQueryStructure(t *testing.T) {
 
 	_, hasFormat := query["format"]
 	assert.False(t, hasFormat, "Elasticsearch query should not have 'format' field")
+}
+
+func TestTestQueryUnsupportedDatasourceType(t *testing.T) {
+	// Set up test mock
+	mockQuery := NewMockDatasourceQuery()
+
+	// Add mock datasource with unsupported type
+	mockQuery.AddMockDatasource("test-unsupported", &GrafanaDatasource{
+		ID:     1,
+		UID:    "unsupported123",
+		OrgID:  1,
+		Name:   "test-unsupported",
+		Type:   "prometheus", // Unsupported datasource type
+		Access: "proxy",
+		URL:    "http://prometheus:9090",
+	})
+
+	// Save and restore the default executor
+	originalQuery := DefaultDatasourceQuery
+	DefaultDatasourceQuery = mockQuery
+	defer func() {
+		DefaultDatasourceQuery = originalQuery
+	}()
+
+	// Test that ExecuteQuery returns an error for unsupported datasource type
+	result, err := TestQuery("up", "test-unsupported", "http://grafana:3000", "test-api-key", "now-1h", "now", 5*time.Second)
+
+	// Verify that an error is returned
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported datasource type: prometheus")
+
+	// Verify that no result is returned
+	assert.Nil(t, result)
+
+	// Verify that ExecuteQuery was called (it should fail after getting datasource info)
+	assert.Contains(t, mockQuery.execQueries, "up")
 }
