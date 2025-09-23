@@ -126,6 +126,7 @@ def convert_rules(
     default_without_pipeline = config.get("conversion_defaults.without_pipeline", False)
     default_pipelines = config.get("conversion_defaults.pipelines", [])
     default_json_indent = config.get("conversion_defaults.json_indent", 0)
+    default_required_rule_fields = config.get("conversion_defaults.required_rule_fields", [])
     verbose = config.get("verbose", False)
 
     conversions_to_delete = []

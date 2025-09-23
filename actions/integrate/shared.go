@@ -28,17 +28,20 @@ type ConversionConfig struct {
 	DataSourceType string `yaml:"data_source_type,omitempty"`
 	// Use a sprintf format string to populate a bespoke query model
 	// refID, datasource, query
-	QueryModel string `yaml:"query_model,omitempty"`
+	QueryModel         string   `yaml:"query_model,omitempty"`
+	RequiredRuleFields []string `yaml:"required_rule_fields,omitempty"`
 }
 
 type IntegrationConfig struct {
-	FolderID                     string `yaml:"folder_id"`
-	OrgID                        int64  `yaml:"org_id"`
-	TestQueries                  bool   `yaml:"test_queries"`
-	From                         string `yaml:"from"`
-	To                           string `yaml:"to"`
-	ShowLogLines                 bool   `yaml:"show_log_lines"`
-	ContinueOnQueryTestingErrors bool   `yaml:"continue_on_query_testing_errors"`
+	FolderID                     string            `yaml:"folder_id"`
+	OrgID                        int64             `yaml:"org_id"`
+	TestQueries                  bool              `yaml:"test_queries"`
+	From                         string            `yaml:"from"`
+	To                           string            `yaml:"to"`
+	ShowLogLines                 bool              `yaml:"show_log_lines"`
+	ContinueOnQueryTestingErrors bool              `yaml:"continue_on_query_testing_errors"`
+	Labels                       map[string]string `yaml:"labels"`
+	Annotations                  map[string]string `yaml:"annotations"`
 }
 
 type DeploymentConfig struct {
