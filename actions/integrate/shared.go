@@ -23,6 +23,7 @@ type ConversionConfig struct {
 	Pipeline        []string `yaml:"pipelines"`
 	RuleGroup       string   `yaml:"rule_group"`
 	TimeWindow      string   `yaml:"time_window"`
+	Lookback        string   `yaml:"lookback"`
 	// the data source type to use for the query, if unspecified, uses the target
 	DataSourceType string `yaml:"data_source_type,omitempty"`
 	// Use a sprintf format string to populate a bespoke query model
@@ -31,12 +32,13 @@ type ConversionConfig struct {
 }
 
 type IntegrationConfig struct {
-	FolderID     string `yaml:"folder_id"`
-	OrgID        int64  `yaml:"org_id"`
-	TestQueries  bool   `yaml:"test_queries"`
-	From         string `yaml:"from"`
-	To           string `yaml:"to"`
-	ShowLogLines bool   `yaml:"show_log_lines"`
+	FolderID                     string `yaml:"folder_id"`
+	OrgID                        int64  `yaml:"org_id"`
+	TestQueries                  bool   `yaml:"test_queries"`
+	From                         string `yaml:"from"`
+	To                           string `yaml:"to"`
+	ShowLogLines                 bool   `yaml:"show_log_lines"`
+	ContinueOnQueryTestingErrors bool   `yaml:"continue_on_query_testing_errors"`
 }
 
 type DeploymentConfig struct {

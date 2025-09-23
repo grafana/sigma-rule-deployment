@@ -172,6 +172,26 @@ func TestConvertToAlert(t *testing.T) {
 			wantUpdated:   nil, // expect timestamp update
 			wantError:     false,
 		},
+		{
+			name:    "valid query with lookback",
+			queries: []string{"{job=`.+`} | json | test=`true`"},
+			titles:  "Alert Rule with Lookback",
+			rule: &definitions.ProvisionedAlertRule{
+				UID: "5c1c217a",
+			},
+			config: ConversionConfig{
+				Name:       "conv",
+				Target:     "loki",
+				DataSource: "my_data_source",
+				RuleGroup:  "Every 5 Minutes",
+				TimeWindow: "5m",
+				Lookback:   "2m",
+			},
+			wantQueryText: "sum(count_over_time({job=`.+`} | json | test=`true`[$__auto]))",
+			wantDuration:  definitions.Duration(420 * time.Second), // 5m + 2m lookback = 7 * time.Minute
+			wantUpdated:   nil,                                     // expect timestamp update
+			wantError:     false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -193,6 +213,16 @@ func TestConvertToAlert(t *testing.T) {
 					assert.Equal(t, tt.config.RuleGroup, tt.rule.RuleGroup)
 					assert.Equal(t, tt.config.DataSource, tt.rule.Data[0].DatasourceUID)
 					assert.Equal(t, tt.titles, tt.rule.Title)
+
+					if tt.config.Lookback != "" {
+						lookbackDuration, err := time.ParseDuration(tt.config.Lookback)
+						assert.NoError(t, err)
+						expectedTo := definitions.Duration(lookbackDuration)
+						assert.Equal(t, tt.wantDuration, tt.rule.Data[0].RelativeTimeRange.From, "From should match expected duration (time window + lookback)")
+						assert.Equal(t, expectedTo, tt.rule.Data[0].RelativeTimeRange.To, "To should be lookback duration")
+					} else {
+						assert.Equal(t, definitions.Duration(0), tt.rule.Data[0].RelativeTimeRange.To, "To should be 0 when no lookback")
+					}
 				}
 			}
 		})
@@ -460,14 +490,15 @@ func TestSummariseSigmaRules(t *testing.T) {
 
 func TestIntegratorRun(t *testing.T) {
 	tests := []struct {
-		name            string
-		conversionName  string
-		convOutput      ConversionOutput
-		wantQueries     []string
-		wantTitles      string
-		removedFiles    []string
-		wantError       bool
-		wantAnnotations map[string]string
+		name                string
+		conversionName      string
+		convOutput          ConversionOutput
+		wantQueries         []string
+		wantTitles          string
+		removedFiles        []string
+		wantError           bool
+		wantAnnotations     map[string]string
+		wantOrphanedCleanup bool
 	}{
 		{
 			name:           "single rule single query",
@@ -572,9 +603,27 @@ func TestIntegratorRun(t *testing.T) {
 				"TimeWindow":     "5m",
 				"LogSourceUid":   "test-datasource",
 				"LogSourceType":  "loki",
-				"Lookback":       "0s",
+				"Lookback":       "2m",
 				"ConversionFile": "test_annotations.json",
 			},
+		},
+		{
+			name:           "cleanup orphaned files",
+			conversionName: "orphaned_test",
+			convOutput: ConversionOutput{
+				ConversionName: "orphaned_test",
+				Queries:        []string{"{job=`orphaned`} | json"},
+				Rules: []SigmaRule{
+					{
+						ID:    "996f8884-9144-40e7-ac63-29090ccde9a0",
+						Title: "Orphaned Test Rule",
+					},
+				},
+			},
+			wantQueries:         []string{},
+			wantTitles:          "",
+			removedFiles:        []string{},
+			wantOrphanedCleanup: true,
 		},
 	}
 
@@ -600,6 +649,20 @@ func TestIntegratorRun(t *testing.T) {
 			assert.NoError(t, err)
 
 			// Create test configuration
+			conversions := []ConversionConfig{}
+
+			// For orphaned cleanup test cases, don't include the conversion in config
+			if !tt.wantOrphanedCleanup {
+				conversions = []ConversionConfig{
+					{
+						Name:       tt.conversionName,
+						RuleGroup:  "Test Rules",
+						TimeWindow: "5m",
+						Lookback:   "2m",
+					},
+				}
+			}
+
 			config := Configuration{
 				Folders: FoldersConfig{
 					ConversionPath: convPath,
@@ -609,13 +672,7 @@ func TestIntegratorRun(t *testing.T) {
 					Target:     "loki",
 					DataSource: "test-datasource",
 				},
-				Conversions: []ConversionConfig{
-					{
-						Name:       tt.conversionName,
-						RuleGroup:  "Test Rules",
-						TimeWindow: "5m",
-					},
-				},
+				Conversions: conversions,
 				IntegratorConfig: IntegrationConfig{
 					FolderID: "test-folder",
 					OrgID:    1,
@@ -628,6 +685,26 @@ func TestIntegratorRun(t *testing.T) {
 			convFile := filepath.Join(convPath, tt.conversionName+".json")
 			err = os.WriteFile(convFile, convBytes, 0o600)
 			assert.NoError(t, err)
+
+			// For orphaned cleanup test, create a deployment file that references a missing conversion file
+			if tt.wantOrphanedCleanup {
+				convID, _, err := summariseSigmaRules(tt.convOutput.Rules)
+				assert.NoError(t, err)
+				ruleUID := getRuleUID(tt.conversionName, convID)
+				deployFile := filepath.Join(deployPath, fmt.Sprintf("alert_rule_%s_%s.json", tt.conversionName, ruleUID))
+
+				// Create a deployment file that references a non-existent conversion file
+				dummyRule := &definitions.ProvisionedAlertRule{
+					UID:       ruleUID,
+					Title:     tt.wantTitles,
+					RuleGroup: "Test Rules",
+					Annotations: map[string]string{
+						"ConversionFile": "/path/to/non/existent/conversion.json", // References missing file
+					},
+				}
+				err = writeRuleToFile(dummyRule, deployFile, false)
+				assert.NoError(t, err)
+			}
 
 			// For the remove test case, create a deployment file that should be removed
 			if len(tt.removedFiles) > 0 {
@@ -660,6 +737,23 @@ func TestIntegratorRun(t *testing.T) {
 				return
 			}
 			assert.NoError(t, err)
+
+			// For orphaned cleanup test cases, verify files were cleaned up
+			if tt.wantOrphanedCleanup {
+				// Check that conversion file was cleaned up
+				convFile := filepath.Join(convPath, tt.conversionName+".json")
+				_, err = os.Stat(convFile)
+				assert.True(t, os.IsNotExist(err), "Expected orphaned conversion file to be deleted but it still exists")
+
+				// Check that deployment file was also cleaned up
+				convID, _, err := summariseSigmaRules(tt.convOutput.Rules)
+				assert.NoError(t, err)
+				ruleUID := getRuleUID(tt.conversionName, convID)
+				deployFile := filepath.Join(deployPath, fmt.Sprintf("alert_rule_%s_%s.json", tt.conversionName, ruleUID))
+				_, err = os.Stat(deployFile)
+				assert.True(t, os.IsNotExist(err), "Expected orphaned deployment file to be deleted but it still exists")
+				return
+			}
 
 			// For cases with no queries, just verify no files were created
 			if len(tt.wantQueries) == 0 {
@@ -1014,6 +1108,195 @@ func TestIntegratorWithQueryTesting(t *testing.T) {
 						assert.Equal(t, "warning", stats.Fields["level"])
 					}
 				}
+			}
+		})
+	}
+}
+
+// Enhanced testDatasourceQuery to support error injection for testing continue_on_query_testing_errors
+type testDatasourceQueryWithErrors struct {
+	*testDatasourceQuery
+	mockErrors map[string]error
+}
+
+func newTestDatasourceQueryWithErrors() *testDatasourceQueryWithErrors {
+	return &testDatasourceQueryWithErrors{
+		testDatasourceQuery: newTestDatasourceQuery(),
+		mockErrors:          make(map[string]error),
+	}
+}
+
+func (t *testDatasourceQueryWithErrors) AddMockError(query string, err error) {
+	t.mockErrors[query] = err
+}
+
+func (t *testDatasourceQueryWithErrors) ExecuteQuery(query, dsName, baseURL, apiKey, from, to string, timeout time.Duration) ([]byte, error) {
+	// Check if we should return an error for this query
+	if err, exists := t.mockErrors[query]; exists {
+		return nil, err
+	}
+
+	// Otherwise use the parent implementation
+	return t.testDatasourceQuery.ExecuteQuery(query, dsName, baseURL, apiKey, from, to, timeout)
+}
+
+// TestIntegrationWithQueryTestingErrors tests the core behavior of continue_on_query_testing_errors
+func TestIntegrationWithQueryTestingErrors(t *testing.T) {
+	tests := []struct {
+		name                     string
+		continueOnErrors         bool
+		queryErrors              map[string]error
+		expectIntegrationFailure bool
+		expectAlertRuleCreated   bool
+	}{
+		{
+			name:                     "query error with continue disabled should fail integration immediately",
+			continueOnErrors:         false,
+			queryErrors:              map[string]error{"{job=\"test\"} |= \"error\"": fmt.Errorf("datasource not found")},
+			expectIntegrationFailure: true,
+			expectAlertRuleCreated:   true, // Alert rule is created before query testing
+		},
+		{
+			name:                     "query error with continue enabled should complete integration successfully",
+			continueOnErrors:         true,
+			queryErrors:              map[string]error{"{job=\"test\"} |= \"error\"": fmt.Errorf("datasource not found")},
+			expectIntegrationFailure: false, // Integration should succeed when continue is enabled
+			expectAlertRuleCreated:   true,  // Alert rule should still be created
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create temporary test directory
+			testDir := filepath.Join("testdata", "test_continue_errors", tt.name)
+			err := os.MkdirAll(testDir, 0o755)
+			assert.NoError(t, err)
+			defer os.RemoveAll(testDir)
+
+			// Set up the github output file
+			oldGithubOutput := os.Getenv("GITHUB_OUTPUT")
+			os.Setenv("GITHUB_OUTPUT", filepath.Join(testDir, "github-output"))
+			defer os.Setenv("GITHUB_OUTPUT", oldGithubOutput)
+
+			// Create conversion and deployment subdirectories
+			convPath := filepath.Join(testDir, "conv")
+			deployPath := filepath.Join(testDir, "deploy")
+			err = os.MkdirAll(convPath, 0o755)
+			assert.NoError(t, err)
+			err = os.MkdirAll(deployPath, 0o755)
+			assert.NoError(t, err)
+
+			// Create test conversion output
+			convOutput := ConversionOutput{
+				ConversionName: "test_continue",
+				Queries:        []string{"{job=\"test\"} |= \"error\"", "{job=\"test\"} |= \"info\""},
+				Rules: []SigmaRule{
+					{
+						ID:    "996f8884-9144-40e7-ac63-29090ccde9a0",
+						Title: "Test Continue Rule",
+					},
+				},
+			}
+
+			// Create test configuration with query testing enabled
+			config := Configuration{
+				Folders: FoldersConfig{
+					ConversionPath: convPath,
+					DeploymentPath: deployPath,
+				},
+				ConversionDefaults: ConversionConfig{
+					Target:     "loki",
+					DataSource: "test-datasource",
+				},
+				Conversions: []ConversionConfig{
+					{
+						Name:       "test_continue",
+						RuleGroup:  "Test Rules",
+						TimeWindow: "5m",
+						DataSource: "test-datasource",
+					},
+				},
+				IntegratorConfig: IntegrationConfig{
+					FolderID:                     "test-folder",
+					OrgID:                        1,
+					TestQueries:                  true,
+					From:                         "now-1h",
+					To:                           "now",
+					ContinueOnQueryTestingErrors: tt.continueOnErrors,
+				},
+				DeployerConfig: DeploymentConfig{
+					GrafanaInstance: "https://test.grafana.com",
+					Timeout:         "5s",
+				},
+			}
+
+			// Create test conversion output file
+			convBytes, err := json.Marshal(convOutput)
+			assert.NoError(t, err)
+			convFile := filepath.Join(convPath, "test_continue.json")
+			err = os.WriteFile(convFile, convBytes, 0o600)
+			assert.NoError(t, err)
+
+			// Create mock query executor with error injection
+			mockDatasourceQuery := newTestDatasourceQueryWithErrors()
+
+			// Add query errors
+			for query, queryErr := range tt.queryErrors {
+				mockDatasourceQuery.AddMockError(query, queryErr)
+			}
+
+			// Add successful responses for queries that don't have errors
+			mockDatasourceQuery.AddMockResponse("{job=\"test\"} |= \"info\"", []byte(`{
+				"results": {
+					"A": {
+						"frames": [{
+							"schema": {"fields": [{"name": "Time", "type": "time"}, {"name": "Line", "type": "string"}]},
+							"data": {"values": [[1625126400000], ["info log"]]}
+						}]
+					}
+				}
+			}`))
+
+			// Save original executor and restore after test
+			originalDatasourceQuery := DefaultDatasourceQuery
+			DefaultDatasourceQuery = mockDatasourceQuery
+			defer func() {
+				DefaultDatasourceQuery = originalDatasourceQuery
+			}()
+
+			// Set environment variable for API token
+			os.Setenv("INTEGRATOR_GRAFANA_SA_TOKEN", "test-api-token")
+			defer os.Unsetenv("INTEGRATOR_GRAFANA_SA_TOKEN")
+
+			// Set up integrator
+			integrator := &Integrator{
+				config:       config,
+				addedFiles:   []string{convFile},
+				removedFiles: []string{},
+			}
+
+			// Run integration
+			err = integrator.Run()
+
+			// Verify integration failure expectation
+			if tt.expectIntegrationFailure {
+				assert.Error(t, err, "Expected integration to fail but it succeeded")
+			} else {
+				assert.NoError(t, err, "Expected integration to succeed but it failed")
+			}
+
+			// Verify alert rule creation expectation - this is the key test
+			convID, _, err := summariseSigmaRules(convOutput.Rules)
+			assert.NoError(t, err)
+			ruleUID := getRuleUID("test_continue", convID)
+			expectedFile := filepath.Join(deployPath, fmt.Sprintf("alert_rule_test_continue_test_continue_%s.json", ruleUID))
+
+			if tt.expectAlertRuleCreated {
+				_, err = os.Stat(expectedFile)
+				assert.NoError(t, err, "Expected alert rule file to be created but it wasn't")
+			} else {
+				_, err = os.Stat(expectedFile)
+				assert.True(t, os.IsNotExist(err), "Expected alert rule file to not be created but it was")
 			}
 		})
 	}

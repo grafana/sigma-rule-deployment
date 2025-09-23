@@ -42,6 +42,11 @@ on:
         required: false
         type: boolean
         default: false
+      continue_on_query_testing_errors:
+        description: "Continue integration process even when query testing fails, but print errors and continue the action"
+        required: false
+        type: boolean
+        default: true
       vault_path:
         description: "A path to the Grafana service account token described in secrets.grafana_sa_token, but stored in Grafana's internal Vault"
         required: false
@@ -87,9 +92,8 @@ jobs:
         shell: bash
         id: convert_all
         env:
-          PULL_REQUEST_NUMBER: ${{ github.event.issue.number }}
           COMMENT_BODY: ${{ github.event.comment.body }}
-          ALL_RULES: ${{ inputs.pretty_print }}
+          ALL_RULES: ${{ inputs.all_rules }}
         run: |
           if [ -z "$COMMENT_BODY" ]; then
             echo "No comment body found"

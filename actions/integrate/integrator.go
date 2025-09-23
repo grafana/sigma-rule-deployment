@@ -17,6 +17,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const TRUE = "true"
+
 type SigmaRule struct {
 	Title   string `json:"title"`
 	ID      string `json:"id"`
@@ -141,8 +143,10 @@ func (i *Integrator) LoadConfig() error {
 		return fmt.Errorf("error unmarshalling config file: %v", err)
 	}
 	i.config = config
-	i.prettyPrint = strings.ToLower(os.Getenv("PRETTY_PRINT")) == "true"
-	i.allRules = strings.ToLower(os.Getenv("ALL_RULES")) == "true"
+	i.prettyPrint = strings.ToLower(os.Getenv("PRETTY_PRINT")) == TRUE
+	i.allRules = strings.ToLower(os.Getenv("ALL_RULES")) == TRUE
+
+	i.config.IntegratorConfig.ContinueOnQueryTestingErrors = strings.ToLower(os.Getenv("CONTINUE_ON_QUERY_TESTING_ERRORS")) == TRUE
 
 	if !filepath.IsLocal(i.config.Folders.ConversionPath) {
 		return fmt.Errorf("conversion path is not local: %s", i.config.Folders.ConversionPath)
@@ -216,6 +220,86 @@ func (i *Integrator) LoadConfig() error {
 	return nil
 }
 
+// cleanupOrphanedFilesInPath removes orphaned files in the specified path
+func (i *Integrator) cleanupOrphanedFilesInPath(searchPath string, isOrphaned func(string) (bool, error)) error {
+	// Get all JSON files in the path
+	var files []string
+	err := filepath.Walk(searchPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() && strings.HasSuffix(path, ".json") {
+			files = append(files, path)
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("failed to walk directory %s: %w", searchPath, err)
+	}
+
+	// Check each file for orphaned status
+	for _, file := range files {
+		orphaned, err := isOrphaned(file)
+		if err != nil {
+			fmt.Printf("Warning: Could not check file %s: %v\n", file, err)
+			continue
+		}
+
+		if orphaned {
+			fmt.Printf("Removing orphaned file: %s\n", file)
+			if err := os.Remove(file); err != nil {
+				fmt.Printf("Warning: Could not remove orphaned file %s: %v\n", file, err)
+			}
+		}
+	}
+
+	return nil
+}
+
+// isConversionFileOrphaned checks if a conversion file has no matching configuration
+func (i *Integrator) isConversionFileOrphaned(file string) (bool, error) {
+	content, err := ReadLocalFile(file)
+	if err != nil {
+		return false, err
+	}
+
+	var conversionObject ConversionOutput
+	if err := json.Unmarshal([]byte(content), &conversionObject); err != nil {
+		return false, err
+	}
+
+	// Check if this conversion name has a matching configuration
+	for _, conf := range i.config.Conversions {
+		if conf.Name == conversionObject.ConversionName {
+			return false, nil
+		}
+	}
+
+	return true, nil
+}
+
+// isDeploymentFileOrphaned checks if a deployment file references a missing conversion file
+func (i *Integrator) isDeploymentFileOrphaned(file string) (bool, error) {
+	content, err := ReadLocalFile(file)
+	if err != nil {
+		return false, err
+	}
+
+	var deploymentRule definitions.ProvisionedAlertRule
+	if err := json.Unmarshal([]byte(content), &deploymentRule); err != nil {
+		return false, err
+	}
+
+	// Check if the referenced conversion file still exists
+	if conversionFile := deploymentRule.Annotations["ConversionFile"]; conversionFile != "" {
+		if _, err := os.Stat(conversionFile); os.IsNotExist(err) {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
 func (i *Integrator) Run() error {
 	// Parse the timeout from configuration
 	timeoutDuration := 10 * time.Second // Default timeout
@@ -255,7 +339,8 @@ func (i *Integrator) Run() error {
 			}
 		}
 		if config.Name == "" {
-			return fmt.Errorf("no conversion configuration found for conversion name: %s", conversionObject.ConversionName)
+			fmt.Printf("Warning: No configuration found for conversion name: %s, skipping file: %s\n", conversionObject.ConversionName, inputFile)
+			continue
 		}
 
 		queries := conversionObject.Queries
@@ -295,7 +380,22 @@ func (i *Integrator) Run() error {
 			// Test all queries against the datasource
 			queryResults, err := i.TestQueries(queries, config, i.config.ConversionDefaults, timeoutDuration)
 			if err != nil {
-				return err
+				fmt.Printf("Error testing queries for file %s: %v\n", inputFile, err)
+				// Return error if continue on query testing errors is not enabled
+				if !i.config.IntegratorConfig.ContinueOnQueryTestingErrors {
+					return err
+				}
+			}
+
+			// Check if any query results have errors
+			for _, result := range queryResults {
+				if len(result.Stats.Errors) > 0 {
+					fmt.Printf("Query testing errors occurred for file %s\n", inputFile)
+					fmt.Printf("Datasource: %s\n", result.Datasource)
+					for _, error := range result.Stats.Errors {
+						fmt.Printf("Error: %s\n", error)
+					}
+				}
 			}
 
 			queryTestResults[inputFile] = queryResults
@@ -330,6 +430,16 @@ func (i *Integrator) Run() error {
 		}
 	}
 
+	// Clean up orphaned conversion files
+	if err := i.cleanupOrphanedFilesInPath(i.config.Folders.ConversionPath, i.isConversionFileOrphaned); err != nil {
+		fmt.Printf("Warning: Error during orphaned conversion file cleanup: %v\n", err)
+	}
+
+	// Clean up orphaned deployment files
+	if err := i.cleanupOrphanedFilesInPath(i.config.Folders.DeploymentPath, i.isDeploymentFileOrphaned); err != nil {
+		fmt.Printf("Warning: Error during orphaned deployment file cleanup: %v\n", err)
+	}
+
 	rulesIntegrated := strings.Join(i.addedFiles, " ")
 	if len(i.addedFiles) > 0 {
 		rulesIntegrated += " "
@@ -349,7 +459,17 @@ func (i *Integrator) ConvertToAlert(rule *definitions.ProvisionedAlertRule, quer
 	if err != nil {
 		return fmt.Errorf("error parsing time window: %v", err)
 	}
-	timerange := definitions.RelativeTimeRange{From: definitions.Duration(duration), To: definitions.Duration(time.Duration(0))}
+
+	lookback := getC(config.Lookback, i.config.ConversionDefaults.Lookback, "0s")
+	lookbackDuration, err := time.ParseDuration(lookback)
+	if err != nil {
+		return fmt.Errorf("error parsing lookback: %v", err)
+	}
+
+	// Apply lookback to time range: now-5m to now with 1m lookback becomes now-6m to now-1m
+	fromDuration := duration + lookbackDuration
+	toDuration := lookbackDuration
+	timerange := definitions.RelativeTimeRange{From: definitions.Duration(fromDuration), To: definitions.Duration(toDuration)}
 
 	queryData := make([]definitions.AlertQuery, 0, len(queries)+2)
 	refIDs := make([]string, len(queries))
@@ -414,9 +534,7 @@ func (i *Integrator) ConvertToAlert(rule *definitions.ProvisionedAlertRule, quer
 
 	rule.Annotations["Query"] = queries[0]
 	rule.Annotations["TimeWindow"] = timewindow
-
-	// todo: add Lookback to conversion config
-	rule.Annotations["Lookback"] = "0s"
+	rule.Annotations["Lookback"] = lookback
 
 	// LogSourceUid annotation (data source)
 	rule.Annotations["LogSourceUid"] = datasource
