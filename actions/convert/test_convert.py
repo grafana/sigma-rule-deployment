@@ -1056,6 +1056,7 @@ def test_filter_rule_fields():
     """Test that the filter_rule_fields function filters the rule fields correctly."""
     rule_dicts = [
         {
+            "id": "1",
             "title": "Test Rule",
             "description": "Test Description",
             "severity": "Test Severity",
@@ -1064,6 +1065,7 @@ def test_filter_rule_fields():
             "fields": ["Test Field"]
         },
         {
+            "id": "2",
             "title": "Test Rule 2",
             "severity": "Test Severity 2",
             "logsource": {"category": "Test Category 2", "product": "Test Product 2", "service": "Test Service 2", "definition": "Test Definition 2"},
@@ -1075,11 +1077,13 @@ def test_filter_rule_fields():
     filtered_rule_dicts = filter_rule_fields(rule_dicts, required_fields)
     assert filtered_rule_dicts == [
         {
+            "id": "1",
             "title": "Test Rule",
             "description": "Test Description",
             "logsource": {"category": "Test Category", "product": "Test Product", "service": "Test Service", "definition": "Test Definition"}
         },
         {
+            "id": "2",
             "title": "Test Rule 2",
             "logsource": {"category": "Test Category 2", "product": "Test Product 2", "service": "Test Service 2", "definition": "Test Definition 2"}
         }

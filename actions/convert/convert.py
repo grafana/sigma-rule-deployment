@@ -433,18 +433,21 @@ def load_rules(rule_file: str) -> list[dict[str, Any]]:
         print(f"{e.__class__.__name__}: Error loading rule file {rule_file}: {str(e)}")
         raise ValueError(f"Error loading rule file {rule_file}") from e
 
-def filter_rule_fields(rule_dicts: list[dict[str, Any]], required_fields: list[str]) -> list[dict[str, Any]]:
+def filter_rule_fields(rule_dicts: list[dict[str, Any]], desired_fields: list[str]) -> list[dict[str, Any]]:
     """Filter the fields of the rules to only include the specified fields.
-    If no required fields are specified, return the full rule dictionaries.
+    If no desired fields are specified, return the full rule dictionaries.
 
     Args:
         rule_dicts (list[dict[str, Any]]): The list of rule dictionaries.
-        required_fields (list[str]): The list of required fields.
+        desired_fields (list[str]): The list of desired fields. The id and title fields will always be included.
 
     Returns:
         Iterator[dict[str, Any]]: The filtered Sigma rule files as a list of dictionaries.
     """
-    if not required_fields:
+    if not desired_fields:
         return rule_dicts
+    else:
+        # Ensure desired_fields contains at least the id and title fields
+        necessary_fields = set(["id", "title"] + desired_fields)
 
-    return [dict((field, rule_dict[field]) for field in required_fields if field in rule_dict) for rule_dict in rule_dicts]
+    return [dict((field, rule_dict[field]) for field in necessary_fields if field in rule_dict) for rule_dict in rule_dicts]
