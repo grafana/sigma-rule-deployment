@@ -701,9 +701,34 @@ func (i *Integrator) processFrame(frame Frame, result *QueryTestResult) error {
 	return nil
 }
 
+// generateExploreLink creates a Grafana explore link based on the datasource type
+func (i *Integrator) generateExploreLink(query, datasource, datasourceType string) (string, error) {
+	jsonQuery, err := json.Marshal(query)
+	if err != nil {
+		return "", fmt.Errorf("error marshalling query %s: %v", query, err)
+	}
+
+	var pane string
+	switch datasourceType {
+	case Loki:
+		pane = fmt.Sprintf(`{"yyz":{"datasource":"%[1]s","queries":[{"refId":"A","expr":%[2]s,"queryType":"range","datasource":{"type":"loki","uid":"%[1]s"},"editorMode":"code","direction":"backward"}],"range":{"from":"%[3]s","to":"%[4]s"}}}`, datasource, string(jsonQuery), i.config.IntegratorConfig.From, i.config.IntegratorConfig.To)
+	case Elasticsearch:
+		// For Elasticsearch, we need to include the full query structure with metrics and bucketAggs
+		pane = fmt.Sprintf(`{"yyz":{"datasource":"%[1]s","queries":[{"refId":"A","datasource":{"type":"elasticsearch","uid":"%[1]s"},"query":%[2]s,"alias":"","metrics":[{"type":"count","id":"1"}],"bucketAggs":[{"type":"date_histogram","id":"2","settings":{"interval":"auto"},"field":"@timestamp"}],"timeField":"@timestamp"}],"range":{"from":"%[3]s","to":"%[4]s"},"compact":false}}`, datasource, string(jsonQuery), i.config.IntegratorConfig.From, i.config.IntegratorConfig.To)
+	default:
+		// Fallback to a generic structure
+		pane = fmt.Sprintf(`{"yyz":{"datasource":"%[1]s","queries":[{"refId":"A","query":%[2]s,"datasource":{"type":"%[3]s","uid":"%[1]s"}}],"range":{"from":"%[4]s","to":"%[5]s"}}}`, datasource, string(jsonQuery), datasourceType, i.config.IntegratorConfig.From, i.config.IntegratorConfig.To)
+	}
+
+	return fmt.Sprintf("%s/explore?schemaVersion=1&panes=%s&orgId=%d", i.config.DeployerConfig.GrafanaInstance, url.QueryEscape(pane), i.config.IntegratorConfig.OrgID), nil
+}
+
 func (i *Integrator) TestQueries(queries []string, config, defaultConf ConversionConfig, timeoutDuration time.Duration) ([]QueryTestResult, error) {
 	queryResults := make([]QueryTestResult, 0, len(queries))
 	datasource := getC(config.DataSource, defaultConf.DataSource, "")
+	// Determine datasource type using the same logic as createAlertQuery
+	datasourceType := getC(config.DataSourceType, defaultConf.DataSourceType, getC(config.Target, defaultConf.Target, Loki))
+
 	for _, query := range queries {
 		resp, err := TestQuery(
 			query,
@@ -718,16 +743,15 @@ func (i *Integrator) TestQueries(queries []string, config, defaultConf Conversio
 			return nil, fmt.Errorf("error testing query %s: %v", query, err)
 		}
 
-		jsonQuery, err := json.Marshal(query)
+		// Generate explore link based on datasource type
+		exploreLink, err := i.generateExploreLink(query, datasource, datasourceType)
 		if err != nil {
-			return nil, fmt.Errorf("error marshalling query %s: %v", query, err)
+			return nil, fmt.Errorf("error generating explore link: %v", err)
 		}
-
-		pane := fmt.Sprintf(`{"yyz":{"datasource":"%[1]s","queries":[{"refId":"A","expr":%[2]s,"queryType":"range","datasource":{"type":"loki","uid":"%[1]s"},"editorMode":"code","direction":"backward"}],"range":{"from":"%[3]s","to":"%[4]s"}}}`, datasource, string(jsonQuery), i.config.IntegratorConfig.From, i.config.IntegratorConfig.To)
 		// Parse the response to extract statistics
 		result := QueryTestResult{
 			Datasource: datasource,
-			Link:       fmt.Sprintf("%s/explore?schemaVersion=1&panes=%s&orgId=%d", i.config.DeployerConfig.GrafanaInstance, url.QueryEscape(pane), i.config.IntegratorConfig.OrgID),
+			Link:       exploreLink,
 			Stats: Stats{
 				Fields: make(map[string]string),
 				Errors: make([]string, 0),
