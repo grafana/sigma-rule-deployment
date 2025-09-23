@@ -175,6 +175,26 @@ func TestConvertToAlert(t *testing.T) {
 			wantDuration:  definitions.Duration(30 * time.Minute),
 			wantError:     false,
 		},
+		{
+			name:    "valid query with lookback",
+			queries: []string{"{job=`.+`} | json | test=`true`"},
+			titles:  "Alert Rule with Lookback",
+			rule: &definitions.ProvisionedAlertRule{
+				UID: "5c1c217a",
+			},
+			config: ConversionConfig{
+				Name:       "conv",
+				Target:     "loki",
+				DataSource: "my_data_source",
+				RuleGroup:  "Every 5 Minutes",
+				TimeWindow: "5m",
+				Lookback:   "2m",
+			},
+			wantQueryText: "sum(count_over_time({job=`.+`} | json | test=`true`[$__auto]))",
+			wantDuration:  definitions.Duration(420 * time.Second), // 5m + 2m lookback = 7 * time.Minute
+			wantUpdated:   nil,                                     // expect timestamp update
+			wantError:     false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -194,6 +214,16 @@ func TestConvertToAlert(t *testing.T) {
 					assert.Equal(t, tt.config.RuleGroup, tt.rule.RuleGroup)
 					assert.Equal(t, tt.config.DataSource, tt.rule.Data[0].DatasourceUID)
 					assert.Equal(t, tt.titles, tt.rule.Title)
+
+					if tt.config.Lookback != "" {
+						lookbackDuration, err := time.ParseDuration(tt.config.Lookback)
+						assert.NoError(t, err)
+						expectedTo := definitions.Duration(lookbackDuration)
+						assert.Equal(t, tt.wantDuration, tt.rule.Data[0].RelativeTimeRange.From, "From should match expected duration (time window + lookback)")
+						assert.Equal(t, expectedTo, tt.rule.Data[0].RelativeTimeRange.To, "To should be lookback duration")
+					} else {
+						assert.Equal(t, definitions.Duration(0), tt.rule.Data[0].RelativeTimeRange.To, "To should be 0 when no lookback")
+					}
 				}
 			}
 		})
@@ -574,7 +604,7 @@ func TestIntegratorRun(t *testing.T) {
 				"TimeWindow":     "5m",
 				"LogSourceUid":   "test-datasource",
 				"LogSourceType":  "loki",
-				"Lookback":       "0s",
+				"Lookback":       "2m",
 				"ConversionFile": "test_annotations.json",
 			},
 		},
@@ -629,6 +659,7 @@ func TestIntegratorRun(t *testing.T) {
 						Name:       tt.conversionName,
 						RuleGroup:  "Test Rules",
 						TimeWindow: "5m",
+						Lookback:   "2m",
 					},
 				}
 			}
