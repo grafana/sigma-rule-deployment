@@ -540,7 +540,7 @@ func (i *Integrator) ConvertToAlert(rule *definitions.ProvisionedAlertRule, quer
 	rule.Annotations["LogSourceUid"] = datasource
 
 	// LogSourceType annotation (target)
-	logSourceType := getC(config.Target, i.config.ConversionDefaults.Target, "loki")
+	logSourceType := getC(config.Target, i.config.ConversionDefaults.Target, Loki)
 	rule.Annotations["LogSourceType"] = logSourceType
 
 	// Path to associated conversion file
@@ -768,11 +768,11 @@ func getRuleUID(conversionName string, conversionID uuid.UUID) string {
 
 // createAlertQuery creates an AlertQuery based on the target data source and configuration
 func createAlertQuery(query string, refID string, datasource string, timerange definitions.RelativeTimeRange, config ConversionConfig, defaultConf ConversionConfig) (definitions.AlertQuery, error) {
-	datasourceType := getC(config.DataSourceType, defaultConf.DataSourceType, getC(config.Target, defaultConf.Target, "loki"))
+	datasourceType := getC(config.DataSourceType, defaultConf.DataSourceType, getC(config.Target, defaultConf.Target, Loki))
 	customModel := getC(config.QueryModel, defaultConf.QueryModel, "")
 
 	// Modify query based on target data source
-	if datasourceType == "loki" {
+	if datasourceType == Loki {
 		// if the query is not a metric query, we need to add a sum aggregation to it
 		if !strings.HasPrefix(query, "sum") {
 			query = fmt.Sprintf("sum(count_over_time(%s[$__auto]))", query)
@@ -797,10 +797,10 @@ func createAlertQuery(query string, refID string, datasource string, timerange d
 	switch {
 	case customModel != "":
 		alertQuery.Model = json.RawMessage(fmt.Sprintf(customModel, refID, datasource, escapedQuery))
-	case datasourceType == "loki":
+	case datasourceType == Loki:
 		alertQuery.QueryType = "instant"
 		alertQuery.Model = json.RawMessage(fmt.Sprintf(`{"refId":"%s","datasource":{"type":"loki","uid":"%s"},"hide":false,"expr":"%s","queryType":"instant","editorMode":"code"}`, refID, datasource, escapedQuery))
-	case datasourceType == "elasticsearch":
+	case datasourceType == Elasticsearch:
 		// Based on the Elasticsearch data source plugin
 		// https://github.com/grafana/grafana/blob/main/public/app/plugins/datasource/elasticsearch/dataquery.gen.ts
 		alertQuery.Model = json.RawMessage(fmt.Sprintf(`{"refId":"%s","datasource":{"type":"elasticsearch","uid":"%s"},"query":"%s","alias":"","metrics":[{"type":"count","id":"1"}],"bucketAggs":[{"type":"date_histogram","id":"2","settings":{"interval":"auto"}}],"intervalMs":2000,"maxDataPoints":1354,"timeField":"@timestamp"}`, refID, datasource, escapedQuery))

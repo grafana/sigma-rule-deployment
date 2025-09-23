@@ -44,7 +44,7 @@ func (m *MockDatasourceQuery) GetDatasource(dsName, _, _ string, _ time.Duration
 	// Default response if not mocked specifically
 	return &GrafanaDatasource{
 		UID:  "default-uid",
-		Type: "loki",
+		Type: Loki,
 		Name: dsName,
 	}, nil
 }
@@ -70,7 +70,7 @@ func TestGetDatasourceByName(t *testing.T) {
 		UID:    "abc123",
 		OrgID:  1,
 		Name:   "test-datasource",
-		Type:   "loki",
+		Type:   Loki,
 		Access: "proxy",
 		URL:    "http://loki:3100",
 	})
@@ -86,7 +86,7 @@ func TestGetDatasourceByName(t *testing.T) {
 	ds, err := GetDatasourceByName("test-datasource", "http://grafana:3000", "test-api-key", 5*time.Second)
 	require.NoError(t, err)
 	assert.Equal(t, "abc123", ds.UID)
-	assert.Equal(t, "loki", ds.Type)
+	assert.Equal(t, Loki, ds.Type)
 	assert.Equal(t, "test-datasource", ds.Name)
 
 	// Verify the query was made
@@ -103,7 +103,7 @@ func TestTestQuery(t *testing.T) {
 		UID:    "xyz789",
 		OrgID:  1,
 		Name:   "test-datasource",
-		Type:   "loki",
+		Type:   Loki,
 		Access: "proxy",
 		URL:    "http://loki:3100",
 	})
@@ -181,7 +181,7 @@ func TestTestQueryElasticsearch(t *testing.T) {
 		UID:    "dej6qd07cf8cgc",
 		OrgID:  1,
 		Name:   "test-elasticsearch",
-		Type:   "elasticsearch",
+		Type:   Elasticsearch,
 		Access: "proxy",
 		URL:    "http://elasticsearch:9200",
 	})
@@ -286,7 +286,7 @@ func TestElasticsearchQueryStructure(t *testing.T) {
 	ds := &GrafanaDatasource{
 		ID:   71,
 		UID:  "dej6qd07cf8cgc",
-		Type: "elasticsearch",
+		Type: Elasticsearch,
 	}
 
 	// Test the query structure by examining what would be sent

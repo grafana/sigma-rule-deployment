@@ -111,7 +111,8 @@ func (h *HTTPDatasourceQuery) ExecuteQuery(
 	var queryObj Query
 
 	// Configure query based on datasource type
-	if datasource.Type == "elasticsearch" {
+	switch datasource.Type {
+	case Elasticsearch:
 		queryObj = Query{
 			RefID: "A",
 			Query: query,
@@ -140,8 +141,7 @@ func (h *HTTPDatasourceQuery) ExecuteQuery(
 			IntervalMs:    2000,
 			MaxDataPoints: 100,
 		}
-	} else {
-		// Default to Loki configuration
+	case Loki:
 		queryObj = Query{
 			RefID:     "A",
 			Expr:      query,
@@ -155,6 +155,9 @@ func (h *HTTPDatasourceQuery) ExecuteQuery(
 			IntervalMs:    2000,
 			MaxDataPoints: 100,
 		}
+	default:
+		// No default configuration for other datasource types
+		return nil, fmt.Errorf("unsupported datasource type: %s", datasource.Type)
 	}
 
 	body := Body{
