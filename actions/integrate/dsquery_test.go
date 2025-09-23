@@ -1,3 +1,4 @@
+//nolint:goconst
 package main
 
 import (
@@ -515,7 +516,8 @@ func TestElasticsearchQueryStructure(t *testing.T) {
 		func(req *http.Request) (*http.Response, error) {
 			// Read the request body
 			body := make([]byte, req.ContentLength)
-			req.Body.Read(body)
+			_, err := req.Body.Read(body)
+			require.NoError(t, err)
 			capturedRequestBody = body
 
 			return httpmock.NewStringResponse(200, string(queryResponseJSON)), nil
@@ -638,7 +640,8 @@ func TestLokiQueryStructure(t *testing.T) {
 		func(req *http.Request) (*http.Response, error) {
 			// Read the request body
 			body := make([]byte, req.ContentLength)
-			req.Body.Read(body)
+			_, err := req.Body.Read(body)
+			require.NoError(t, err)
 			capturedRequestBody = body
 
 			return httpmock.NewStringResponse(200, string(queryResponseJSON)), nil
