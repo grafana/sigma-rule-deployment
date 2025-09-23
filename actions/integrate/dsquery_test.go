@@ -3,77 +3,27 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"testing"
 	"time"
 
+	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// MockDatasourceQuery implements the DatasourceQuery interface for testing
-type MockDatasourceQuery struct {
-	mockDatasources map[string]*GrafanaDatasource
-	mockResponses   map[string][]byte
-	dsQueries       []string
-	execQueries     []string
-}
-
-func NewMockDatasourceQuery() *MockDatasourceQuery {
-	return &MockDatasourceQuery{
-		mockDatasources: make(map[string]*GrafanaDatasource),
-		mockResponses:   make(map[string][]byte),
-		dsQueries:       []string{},
-		execQueries:     []string{},
-	}
-}
-
-func (m *MockDatasourceQuery) AddMockDatasource(name string, ds *GrafanaDatasource) {
-	m.mockDatasources[name] = ds
-}
-
-func (m *MockDatasourceQuery) AddMockResponse(query string, response []byte) {
-	m.mockResponses[query] = response
-}
-
-func (m *MockDatasourceQuery) GetDatasource(dsName, _, _ string, _ time.Duration) (*GrafanaDatasource, error) {
-	m.dsQueries = append(m.dsQueries, dsName)
-
-	if ds, exists := m.mockDatasources[dsName]; exists {
-		return ds, nil
-	}
-
-	// Default response if not mocked specifically
-	return &GrafanaDatasource{
-		UID:  "default-uid",
-		Type: Loki,
-		Name: dsName,
-	}, nil
-}
-
-func (m *MockDatasourceQuery) ExecuteQuery(query, dsName, _, _, _, _ string, _ time.Duration) ([]byte, error) {
-	m.execQueries = append(m.execQueries, query)
-
-	// Check if this is an unsupported datasource type
-	if ds, exists := m.mockDatasources[dsName]; exists {
-		if ds.Type != Loki && ds.Type != Elasticsearch {
-			return nil, fmt.Errorf("unsupported datasource type: %s", ds.Type)
-		}
-	}
-
-	if response, exists := m.mockResponses[query]; exists {
-		return response, nil
-	}
-
-	// Default response if not mocked specifically
-	return []byte(`{"results":{"A":{"frames":[{"schema":{"fields":[{"name":"Time","type":"time"},{"name":"Line","type":"string"}]},"data":{"values":[[1625126400000,1625126460000],["default response","default response"]]}}]}}}`), nil
-}
-
 func TestGetDatasourceByName(t *testing.T) {
-	// Set up test mock
-	mockQuery := NewMockDatasourceQuery()
+	// Activate httpmock
+	httpmock.Activate(t)
+	defer httpmock.DeactivateAndReset()
 
-	// Add mock datasource
-	mockQuery.AddMockDatasource("test-datasource", &GrafanaDatasource{
+	baseURL := "http://grafana:3000"
+	apiKey := "test-api-key"
+	dsName := "test-datasource"
+	timeout := 5 * time.Second
+
+	// Mock datasource response
+	mockDatasource := &GrafanaDatasource{
 		ID:     1,
 		UID:    "abc123",
 		OrgID:  1,
@@ -81,110 +31,187 @@ func TestGetDatasourceByName(t *testing.T) {
 		Type:   Loki,
 		Access: "proxy",
 		URL:    "http://loki:3100",
-	})
+	}
 
-	// Save and restore the default executor
-	originalExecutor := DefaultDatasourceQuery
-	DefaultDatasourceQuery = mockQuery
-	defer func() {
-		DefaultDatasourceQuery = originalExecutor
-	}()
+	datasourceJSON, err := json.Marshal(mockDatasource)
+	require.NoError(t, err)
+
+	// Register mock for datasource by name endpoint
+	httpmock.RegisterResponder("GET", fmt.Sprintf("%s/api/datasources/name/%s", baseURL, dsName),
+		httpmock.NewStringResponder(200, string(datasourceJSON)))
 
 	// Test successful case
-	ds, err := GetDatasourceByName("test-datasource", "http://grafana:3000", "test-api-key", 5*time.Second)
+	ds, err := GetDatasourceByName(dsName, baseURL, apiKey, timeout)
 	require.NoError(t, err)
 	assert.Equal(t, "abc123", ds.UID)
 	assert.Equal(t, Loki, ds.Type)
 	assert.Equal(t, "test-datasource", ds.Name)
 
-	// Verify the query was made
-	assert.Contains(t, mockQuery.dsQueries, "test-datasource")
+	// Verify the request was made
+	info := httpmock.GetCallCountInfo()
+	assert.Equal(t, 1, info["GET http://grafana:3000/api/datasources/name/test-datasource"])
 }
 
-func TestTestQuery(t *testing.T) {
-	// Set up test mock
-	mockQuery := NewMockDatasourceQuery()
+func TestGetDatasourceByNameByUID(t *testing.T) {
+	// Activate httpmock
+	httpmock.Activate(t)
+	defer httpmock.DeactivateAndReset()
 
-	// Add mock datasource
-	mockQuery.AddMockDatasource("test-datasource", &GrafanaDatasource{
+	baseURL := "http://grafana:3000"
+	apiKey := "test-api-key"
+	dsUID := "abc123"
+	timeout := 5 * time.Second
+
+	// Mock datasource response
+	mockDatasource := &GrafanaDatasource{
 		ID:     1,
-		UID:    "xyz789",
+		UID:    "abc123",
 		OrgID:  1,
 		Name:   "test-datasource",
 		Type:   Loki,
 		Access: "proxy",
 		URL:    "http://loki:3100",
-	})
+	}
 
-	// Add mock query responses
-	mockQuery.AddMockResponse("{job=\"loki\"} |= \"error\"", []byte(`{
-		"results": {
-			"A": {
-				"frames": [{
-					"schema": {
-						"fields": [
-							{"name": "Time", "type": "time"},
-							{"name": "Line", "type": "string"}
-						]
-					},
-					"data": {
-						"values": [
-							[1625126400000, 1625126460000],
-							["error log line", "another error log"]
-						]
-					}
-				}]
-			}
-		}
-	}`))
+	datasourceJSON, err := json.Marshal(mockDatasource)
+	require.NoError(t, err)
 
-	// Save and restore the default executor
-	originalQuery := DefaultDatasourceQuery
-	DefaultDatasourceQuery = mockQuery
-	defer func() {
-		DefaultDatasourceQuery = originalQuery
-	}()
+	// Register mock for datasource by UID endpoint
+	httpmock.RegisterResponder("GET", fmt.Sprintf("%s/api/datasources/uid/%s", baseURL, dsUID),
+		httpmock.NewStringResponder(200, string(datasourceJSON)))
 
 	// Test successful case
-	result, err := TestQuery("{job=\"loki\"} |= \"error\"", "test-datasource", "http://grafana:3000", "test-api-key", "now-1h", "now", 5*time.Second)
+	ds, err := GetDatasourceByName(dsUID, baseURL, apiKey, timeout)
+	require.NoError(t, err)
+	assert.Equal(t, "abc123", ds.UID)
+	assert.Equal(t, Loki, ds.Type)
+	assert.Equal(t, "test-datasource", ds.Name)
+
+	// Verify the request was made
+	info := httpmock.GetCallCountInfo()
+	assert.Equal(t, 1, info["GET http://grafana:3000/api/datasources/uid/abc123"])
+}
+
+func TestGetDatasourceByNameNotFound(t *testing.T) {
+	// Activate httpmock
+	httpmock.Activate(t)
+	defer httpmock.DeactivateAndReset()
+
+	baseURL := "http://grafana:3000"
+	apiKey := "test-api-key"
+	dsName := "nonexistent-datasource"
+	timeout := 5 * time.Second
+
+	// Register mock for 404 response
+	httpmock.RegisterResponder("GET", fmt.Sprintf("%s/api/datasources/name/%s", baseURL, dsName),
+		httpmock.NewStringResponder(404, `{"message": "Data source not found"}`))
+
+	// Test error case
+	ds, err := GetDatasourceByName(dsName, baseURL, apiKey, timeout)
+	require.Error(t, err)
+	assert.Nil(t, ds)
+	assert.Contains(t, err.Error(), "HTTP error getting datasource: 404 Not Found")
+}
+
+func TestTestQueryLoki(t *testing.T) {
+	// Activate httpmock
+	httpmock.Activate(t)
+	defer httpmock.DeactivateAndReset()
+
+	baseURL := "http://grafana:3000"
+	apiKey := "test-api-key"
+	dsName := "test-loki"
+	query := `{job="loki"} |= "error"`
+	from := "now-1h"
+	to := "now"
+	timeout := 5 * time.Second
+
+	// Mock datasource response
+	mockDatasource := &GrafanaDatasource{
+		ID:     1,
+		UID:    "loki123",
+		OrgID:  1,
+		Name:   "test-loki",
+		Type:   Loki,
+		Access: "proxy",
+		URL:    "http://loki:3100",
+	}
+
+	datasourceJSON, err := json.Marshal(mockDatasource)
+	require.NoError(t, err)
+
+	// Mock query response
+	mockQueryResponse := map[string]any{
+		"results": map[string]any{
+			"A": map[string]any{
+				"frames": []any{
+					map[string]any{
+						"schema": map[string]any{
+							"fields": []any{
+								map[string]any{"name": "Time", "type": "time"},
+								map[string]any{"name": "Line", "type": "string"},
+							},
+						},
+						"data": map[string]any{
+							"values": []any{
+								[]any{1625126400000, 1625126460000},
+								[]any{"error log line", "another error log"},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	queryResponseJSON, err := json.Marshal(mockQueryResponse)
+	require.NoError(t, err)
+
+	// Register mocks
+	httpmock.RegisterResponder("GET", fmt.Sprintf("%s/api/datasources/name/%s", baseURL, dsName),
+		httpmock.NewStringResponder(200, string(datasourceJSON)))
+
+	httpmock.RegisterResponder("POST", fmt.Sprintf("%s/api/ds/query", baseURL),
+		httpmock.NewStringResponder(200, string(queryResponseJSON)))
+
+	// Test successful case
+	result, err := TestQuery(query, dsName, baseURL, apiKey, from, to, timeout)
 	require.NoError(t, err)
 
 	// Verify the result contains expected data
-	var response map[string]interface{}
+	var response map[string]any
 	err = json.Unmarshal(result, &response)
 	require.NoError(t, err)
 
-	results, ok := response["results"].(map[string]interface{})
+	results, ok := response["results"].(map[string]any)
 	require.True(t, ok)
-	a, ok := results["A"].(map[string]interface{})
+	a, ok := results["A"].(map[string]any)
 	require.True(t, ok)
-	frames, ok := a["frames"].([]interface{})
+	frames, ok := a["frames"].([]any)
 	require.True(t, ok)
 	assert.NotEmpty(t, frames)
 
-	// Verify the query was made
-	assert.Contains(t, mockQuery.execQueries, "{job=\"loki\"} |= \"error\"")
-
-	// Test with a different query that uses the default response
-	result, err = TestQuery("{job=\"loki\"} |= \"debug\"", "test-datasource", "http://grafana:3000", "test-api-key", "now-1h", "now", 5*time.Second)
-	require.NoError(t, err)
-
-	// Verify the query was made
-	assert.Contains(t, mockQuery.execQueries, "{job=\"loki\"} |= \"debug\"")
-
-	// Verify we got a result (the default in this case)
-	err = json.Unmarshal(result, &response)
-	require.NoError(t, err)
-	_, ok = response["results"]
-	require.True(t, ok)
+	// Verify the requests were made
+	info := httpmock.GetCallCountInfo()
+	assert.Equal(t, 1, info["GET http://grafana:3000/api/datasources/name/test-loki"])
+	assert.Equal(t, 1, info["POST http://grafana:3000/api/ds/query"])
 }
 
 func TestTestQueryElasticsearch(t *testing.T) {
-	// Set up test mock
-	mockQuery := NewMockDatasourceQuery()
+	// Activate httpmock
+	httpmock.Activate(t)
+	defer httpmock.DeactivateAndReset()
 
-	// Add mock Elasticsearch datasource
-	mockQuery.AddMockDatasource("test-elasticsearch", &GrafanaDatasource{
+	baseURL := "http://grafana:3000"
+	apiKey := "test-api-key"
+	dsName := "test-elasticsearch"
+	query := `type:log AND (level:(ERROR OR FATAL OR CRITICAL))`
+	from := "1758615188601"
+	to := "1758618788601"
+	timeout := 5 * time.Second
+
+	// Mock datasource response
+	mockDatasource := &GrafanaDatasource{
 		ID:     71,
 		UID:    "dej6qd07cf8cgc",
 		OrgID:  1,
@@ -192,69 +219,77 @@ func TestTestQueryElasticsearch(t *testing.T) {
 		Type:   Elasticsearch,
 		Access: "proxy",
 		URL:    "http://elasticsearch:9200",
-	})
+	}
 
-	// Add mock query response with minified Elasticsearch response
-	mockQuery.AddMockResponse("type:log AND (level:(ERROR OR FATAL OR CRITICAL))", []byte(`{
-		"results": {
-			"A": {
+	datasourceJSON, err := json.Marshal(mockDatasource)
+	require.NoError(t, err)
+
+	// Mock query response
+	mockQueryResponse := map[string]any{
+		"results": map[string]any{
+			"A": map[string]any{
 				"status": 200,
-				"frames": [{
-					"schema": {
-						"name": "Count",
-						"refId": "A",
-						"meta": {
-							"type": "timeseries-multi",
-							"typeVersion": [0, 0]
-						},
-						"fields": [
-							{
-								"name": "Time",
-								"type": "time",
-								"typeInfo": {
-									"frame": "time.Time"
-								}
+				"frames": []any{
+					map[string]any{
+						"schema": map[string]any{
+							"name":  "Count",
+							"refId": "A",
+							"meta": map[string]any{
+								"type":        "timeseries-multi",
+								"typeVersion": []any{0, 0},
 							},
-							{
-								"name": "Value",
-								"type": "number",
-								"typeInfo": {
-									"frame": "float64",
-									"nullable": true
-								}
-							}
-						]
+							"fields": []any{
+								map[string]any{
+									"name": "Time",
+									"type": "time",
+									"typeInfo": map[string]any{
+										"frame": "time.Time",
+									},
+								},
+								map[string]any{
+									"name": "Value",
+									"type": "number",
+									"typeInfo": map[string]any{
+										"frame":    "float64",
+										"nullable": true,
+									},
+								},
+							},
+						},
+						"data": map[string]any{
+							"values": []any{
+								[]any{1758615188000, 1758615190000, 1758615192000, 1758615194000, 1758615196000},
+								[]any{2, 0, 0, 1, 0},
+							},
+						},
 					},
-					"data": {
-						"values": [
-							[1758615188000, 1758615190000, 1758615192000, 1758615194000, 1758615196000],
-							[2, 0, 0, 1, 0]
-						]
-					}
-				}]
-			}
-		}
-	}`))
+				},
+			},
+		},
+	}
 
-	// Save and restore the default executor
-	originalQuery := DefaultDatasourceQuery
-	DefaultDatasourceQuery = mockQuery
-	defer func() {
-		DefaultDatasourceQuery = originalQuery
-	}()
+	queryResponseJSON, err := json.Marshal(mockQueryResponse)
+	require.NoError(t, err)
+
+	// Register mocks
+	httpmock.RegisterResponder("GET", fmt.Sprintf("%s/api/datasources/name/%s", baseURL, dsName),
+		httpmock.NewStringResponder(200, string(datasourceJSON)))
+
+	httpmock.RegisterResponder("POST", fmt.Sprintf("%s/api/ds/query", baseURL),
+		httpmock.NewStringResponder(200, string(queryResponseJSON)))
 
 	// Test successful case
-	result, err := TestQuery("type:log AND (level:(ERROR OR FATAL OR CRITICAL))", "test-elasticsearch", "http://grafana:3000", "test-api-key", "1758615188601", "1758618788601", 5*time.Second)
+	result, err := TestQuery(query, dsName, baseURL, apiKey, from, to, timeout)
 	require.NoError(t, err)
 
 	// Verify the result contains expected data
-	var response map[string]interface{}
+	var response map[string]any
 	err = json.Unmarshal(result, &response)
 	require.NoError(t, err)
 
-	results, ok := response["results"].(map[string]interface{})
+	results, ok := response["results"].(map[string]any)
 	require.True(t, ok)
-	a, ok := results["A"].(map[string]interface{})
+	a, ok := results["A"].(map[string]any)
 	require.True(t, ok)
 
 	// Verify status
@@ -263,164 +298,65 @@ func TestTestQueryElasticsearch(t *testing.T) {
 	assert.Equal(t, float64(200), status)
 
 	// Verify frames structure
-	frames, ok := a["frames"].([]interface{})
+	frames, ok := a["frames"].([]any)
 	require.True(t, ok)
 	assert.NotEmpty(t, frames)
 
-	frame, ok := frames[0].(map[string]interface{})
+	frame, ok := frames[0].(map[string]any)
 	require.True(t, ok)
 
 	// Verify schema
-	schema, ok := frame["schema"].(map[string]interface{})
+	schema, ok := frame["schema"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "Count", schema["name"])
 	assert.Equal(t, "A", schema["refId"])
 
 	// Verify data structure
-	data, ok := frame["data"].(map[string]interface{})
+	data, ok := frame["data"].(map[string]any)
 	require.True(t, ok)
-	values, ok := data["values"].([]interface{})
+	values, ok := data["values"].([]any)
 	require.True(t, ok)
 	assert.Len(t, values, 2) // Time and Value arrays
 
-	// Verify the query was made
-	assert.Contains(t, mockQuery.execQueries, "type:log AND (level:(ERROR OR FATAL OR CRITICAL))")
-}
-
-func TestElasticsearchQueryStructure(t *testing.T) {
-	// Create a mock datasource
-	ds := &GrafanaDatasource{
-		ID:   71,
-		UID:  "dej6qd07cf8cgc",
-		Type: Elasticsearch,
-	}
-
-	// Test the query structure by examining what would be sent
-	queryStr := "type:log AND (level:(ERROR OR FATAL OR CRITICAL))"
-
-	// Build the expected query object for Elasticsearch
-	expectedQuery := Query{
-		RefID: "A",
-		Query: queryStr,
-		Datasource: GrafanaDatasource{
-			Type: ds.Type,
-			UID:  ds.UID,
-		},
-		Metrics: []Metric{
-			{
-				Type: "count",
-				ID:   "1",
-			},
-		},
-		BucketAggs: []BucketAgg{
-			{
-				Type: "date_histogram",
-				ID:   "2",
-				Settings: map[string]any{
-					"interval": "auto",
-				},
-				Field: "@timestamp",
-			},
-		},
-		TimeField:     "@timestamp",
-		DatasourceID:  ds.ID,
-		IntervalMs:    2000,
-		MaxDataPoints: 100,
-	}
-
-	expectedBody := Body{
-		Queries: []Query{expectedQuery},
-		From:    "1758615188601",
-		To:      "1758618788601",
-	}
-
-	// Marshal to JSON to verify the structure
-	jsonData, err := json.MarshalIndent(expectedBody, "", "  ")
-	require.NoError(t, err)
-
-	// Verify the JSON contains the expected Elasticsearch-specific fields
-	var parsedBody map[string]interface{}
-	err = json.Unmarshal(jsonData, &parsedBody)
-	require.NoError(t, err)
-
-	queries, ok := parsedBody["queries"].([]interface{})
-	require.True(t, ok)
-	require.Len(t, queries, 1)
-
-	query, ok := queries[0].(map[string]interface{})
-	require.True(t, ok)
-
-	// Verify Elasticsearch-specific fields are present
-	assert.Equal(t, queryStr, query["query"])
-	// alias is empty string, so it should be omitted in JSON (omitempty)
-	_, hasAlias := query["alias"]
-	assert.False(t, hasAlias, "Empty alias should be omitted due to omitempty tag")
-	assert.Equal(t, "@timestamp", query["timeField"])
-	assert.Equal(t, float64(71), query["datasourceId"])
-
-	// Verify metrics structure
-	metrics, ok := query["metrics"].([]interface{})
-	require.True(t, ok)
-	require.Len(t, metrics, 1)
-
-	metric, ok := metrics[0].(map[string]interface{})
-	require.True(t, ok)
-	assert.Equal(t, "count", metric["type"])
-	assert.Equal(t, "1", metric["id"])
-
-	// Verify bucketAggs structure
-	bucketAggs, ok := query["bucketAggs"].([]interface{})
-	require.True(t, ok)
-	require.Len(t, bucketAggs, 1)
-
-	bucketAgg, ok := bucketAggs[0].(map[string]interface{})
-	require.True(t, ok)
-	assert.Equal(t, "date_histogram", bucketAgg["type"])
-	assert.Equal(t, "2", bucketAgg["id"])
-	assert.Equal(t, "@timestamp", bucketAgg["field"])
-
-	settings, ok := bucketAgg["settings"].(map[string]interface{})
-	require.True(t, ok)
-	assert.Equal(t, "auto", settings["interval"])
-
-	// Verify Loki-specific fields are NOT present (should be omitted)
-	_, hasExpr := query["expr"]
-	assert.False(t, hasExpr, "Elasticsearch query should not have 'expr' field")
-
-	_, hasQueryType := query["queryType"]
-	assert.False(t, hasQueryType, "Elasticsearch query should not have 'queryType' field")
-
-	_, hasMaxLines := query["maxLines"]
-	assert.False(t, hasMaxLines, "Elasticsearch query should not have 'maxLines' field")
-
-	_, hasFormat := query["format"]
-	assert.False(t, hasFormat, "Elasticsearch query should not have 'format' field")
+	// Verify the requests were made
+	info := httpmock.GetCallCountInfo()
+	assert.Equal(t, 1, info["GET http://grafana:3000/api/datasources/name/test-elasticsearch"])
+	assert.Equal(t, 1, info["POST http://grafana:3000/api/ds/query"])
 }
 
 func TestTestQueryUnsupportedDatasourceType(t *testing.T) {
-	// Set up test mock
-	mockQuery := NewMockDatasourceQuery()
+	// Activate httpmock
+	httpmock.Activate(t)
+	defer httpmock.DeactivateAndReset()
 
-	// Add mock datasource with unsupported type
-	mockQuery.AddMockDatasource("test-unsupported", &GrafanaDatasource{
+	baseURL := "http://grafana:3000"
+	apiKey := "test-api-key"
+	dsName := "test-prometheus"
+	query := "up"
+	from := "now-1h"
+	to := "now"
+	timeout := 5 * time.Second
+
+	// Mock datasource response with unsupported type
+	mockDatasource := &GrafanaDatasource{
 		ID:     1,
-		UID:    "unsupported123",
+		UID:    "prometheus123",
 		OrgID:  1,
-		Name:   "test-unsupported",
+		Name:   "test-prometheus",
 		Type:   "prometheus", // Unsupported datasource type
 		Access: "proxy",
 		URL:    "http://prometheus:9090",
-	})
+	}
 
-	// Save and restore the default executor
-	originalQuery := DefaultDatasourceQuery
-	DefaultDatasourceQuery = mockQuery
-	defer func() {
-		DefaultDatasourceQuery = originalQuery
-	}()
+	datasourceJSON, err := json.Marshal(mockDatasource)
+	require.NoError(t, err)
+
+	// Register mock for datasource
+	httpmock.RegisterResponder("GET", fmt.Sprintf("%s/api/datasources/name/%s", baseURL, dsName),
+		httpmock.NewStringResponder(200, string(datasourceJSON)))
 
 	// Test that ExecuteQuery returns an error for unsupported datasource type
-	result, err := TestQuery("up", "test-unsupported", "http://grafana:3000", "test-api-key", "now-1h", "now", 5*time.Second)
+	result, err := TestQuery(query, dsName, baseURL, apiKey, from, to, timeout)
 
 	// Verify that an error is returned
 	require.Error(t, err)
@@ -429,6 +365,328 @@ func TestTestQueryUnsupportedDatasourceType(t *testing.T) {
 	// Verify that no result is returned
 	assert.Nil(t, result)
 
-	// Verify that ExecuteQuery was called (it should fail after getting datasource info)
-	assert.Contains(t, mockQuery.execQueries, "up")
+	// Verify that only the datasource request was made (query request should not be made)
+	info := httpmock.GetCallCountInfo()
+	assert.Equal(t, 1, info["GET http://grafana:3000/api/datasources/name/test-prometheus"])
+	assert.Equal(t, 0, info["POST http://grafana:3000/api/ds/query"])
+}
+
+func TestTestQueryHTTPError(t *testing.T) {
+	// Activate httpmock
+	httpmock.Activate(t)
+	defer httpmock.DeactivateAndReset()
+
+	baseURL := "http://grafana:3000"
+	apiKey := "test-api-key"
+	dsName := "test-loki"
+	query := `{job="loki"} |= "error"`
+	from := "now-1h"
+	to := "now"
+	timeout := 5 * time.Second
+
+	// Mock datasource response
+	mockDatasource := &GrafanaDatasource{
+		ID:     1,
+		UID:    "loki123",
+		OrgID:  1,
+		Name:   "test-loki",
+		Type:   Loki,
+		Access: "proxy",
+		URL:    "http://loki:3100",
+	}
+
+	datasourceJSON, err := json.Marshal(mockDatasource)
+	require.NoError(t, err)
+
+	// Register mocks
+	httpmock.RegisterResponder("GET", fmt.Sprintf("%s/api/datasources/name/%s", baseURL, dsName),
+		httpmock.NewStringResponder(200, string(datasourceJSON)))
+
+	// Mock query endpoint to return 500 error
+	httpmock.RegisterResponder("POST", fmt.Sprintf("%s/api/ds/query", baseURL),
+		httpmock.NewStringResponder(500, `{"error": "Internal server error"}`))
+
+	// Test error case
+	result, err := TestQuery(query, dsName, baseURL, apiKey, from, to, timeout)
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "HTTP error 500 when querying datasource")
+
+	// Verify the requests were made
+	info := httpmock.GetCallCountInfo()
+	assert.Equal(t, 1, info["GET http://grafana:3000/api/datasources/name/test-loki"])
+	assert.Equal(t, 1, info["POST http://grafana:3000/api/ds/query"])
+}
+
+func TestTestQueryInvalidJSONResponse(t *testing.T) {
+	// Activate httpmock
+	httpmock.Activate(t)
+	defer httpmock.DeactivateAndReset()
+
+	baseURL := "http://grafana:3000"
+	apiKey := "test-api-key"
+	dsName := "test-loki"
+	query := `{job="loki"} |= "error"`
+	from := "now-1h"
+	to := "now"
+	timeout := 5 * time.Second
+
+	// Mock datasource response
+	mockDatasource := &GrafanaDatasource{
+		ID:     1,
+		UID:    "loki123",
+		OrgID:  1,
+		Name:   "test-loki",
+		Type:   Loki,
+		Access: "proxy",
+		URL:    "http://loki:3100",
+	}
+
+	datasourceJSON, err := json.Marshal(mockDatasource)
+	require.NoError(t, err)
+
+	// Register mocks
+	httpmock.RegisterResponder("GET", fmt.Sprintf("%s/api/datasources/name/%s", baseURL, dsName),
+		httpmock.NewStringResponder(200, string(datasourceJSON)))
+
+	// Mock query endpoint to return invalid JSON
+	httpmock.RegisterResponder("POST", fmt.Sprintf("%s/api/ds/query", baseURL),
+		httpmock.NewStringResponder(200, `invalid json response`))
+
+	// Test error case
+	result, err := TestQuery(query, dsName, baseURL, apiKey, from, to, timeout)
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "invalid JSON response")
+
+	// Verify the requests were made
+	info := httpmock.GetCallCountInfo()
+	assert.Equal(t, 1, info["GET http://grafana:3000/api/datasources/name/test-loki"])
+	assert.Equal(t, 1, info["POST http://grafana:3000/api/ds/query"])
+}
+
+func TestElasticsearchQueryStructure(t *testing.T) {
+	// Activate httpmock
+	httpmock.Activate(t)
+	defer httpmock.DeactivateAndReset()
+
+	baseURL := "http://grafana:3000"
+	apiKey := "test-api-key"
+	dsName := "test-elasticsearch"
+	query := `type:log AND (level:(ERROR OR FATAL OR CRITICAL))`
+	from := "1758615188601"
+	to := "1758618788601"
+	timeout := 5 * time.Second
+
+	// Mock datasource response
+	mockDatasource := &GrafanaDatasource{
+		ID:     71,
+		UID:    "dej6qd07cf8cgc",
+		OrgID:  1,
+		Name:   "test-elasticsearch",
+		Type:   Elasticsearch,
+		Access: "proxy",
+		URL:    "http://elasticsearch:9200",
+	}
+
+	datasourceJSON, err := json.Marshal(mockDatasource)
+	require.NoError(t, err)
+
+	// Mock query response
+	mockQueryResponse := map[string]any{
+		"results": map[string]any{
+			"A": map[string]any{
+				"status": 200,
+				"frames": []any{},
+			},
+		},
+	}
+
+	queryResponseJSON, err := json.Marshal(mockQueryResponse)
+	require.NoError(t, err)
+
+	// Register mocks
+	httpmock.RegisterResponder("GET", fmt.Sprintf("%s/api/datasources/name/%s", baseURL, dsName),
+		httpmock.NewStringResponder(200, string(datasourceJSON)))
+
+	// Capture the request body to verify the query structure
+	var capturedRequestBody []byte
+	httpmock.RegisterResponder("POST", fmt.Sprintf("%s/api/ds/query", baseURL),
+		func(req *http.Request) (*http.Response, error) {
+			// Read the request body
+			body := make([]byte, req.ContentLength)
+			req.Body.Read(body)
+			capturedRequestBody = body
+
+			return httpmock.NewStringResponse(200, string(queryResponseJSON)), nil
+		})
+
+	// Test successful case
+	result, err := TestQuery(query, dsName, baseURL, apiKey, from, to, timeout)
+	require.NoError(t, err)
+	assert.NotNil(t, result)
+
+	// Verify the query structure
+	require.NotNil(t, capturedRequestBody)
+	var requestBody map[string]any
+	err = json.Unmarshal(capturedRequestBody, &requestBody)
+	require.NoError(t, err)
+
+	// Verify the request body structure
+	queries, ok := requestBody["queries"].([]any)
+	require.True(t, ok)
+	require.Len(t, queries, 1)
+
+	queryObj, ok := queries[0].(map[string]any)
+	require.True(t, ok)
+
+	// Verify Elasticsearch-specific fields are present
+	assert.Equal(t, query, queryObj["query"])
+	assert.Equal(t, "@timestamp", queryObj["timeField"])
+	assert.Equal(t, float64(71), queryObj["datasourceId"])
+
+	// Verify metrics structure
+	metrics, ok := queryObj["metrics"].([]any)
+	require.True(t, ok)
+	require.Len(t, metrics, 1)
+
+	metric, ok := metrics[0].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "count", metric["type"])
+	assert.Equal(t, "1", metric["id"])
+
+	// Verify bucketAggs structure
+	bucketAggs, ok := queryObj["bucketAggs"].([]any)
+	require.True(t, ok)
+	require.Len(t, bucketAggs, 1)
+
+	bucketAgg, ok := bucketAggs[0].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "date_histogram", bucketAgg["type"])
+	assert.Equal(t, "2", bucketAgg["id"])
+	assert.Equal(t, "@timestamp", bucketAgg["field"])
+
+	settings, ok := bucketAgg["settings"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "auto", settings["interval"])
+
+	// Verify Loki-specific fields are NOT present (should be omitted)
+	_, hasExpr := queryObj["expr"]
+	assert.False(t, hasExpr, "Elasticsearch query should not have 'expr' field")
+
+	_, hasQueryType := queryObj["queryType"]
+	assert.False(t, hasQueryType, "Elasticsearch query should not have 'queryType' field")
+
+	_, hasMaxLines := queryObj["maxLines"]
+	assert.False(t, hasMaxLines, "Elasticsearch query should not have 'maxLines' field")
+
+	_, hasFormat := queryObj["format"]
+	assert.False(t, hasFormat, "Elasticsearch query should not have 'format' field")
+
+	// Verify the requests were made
+	info := httpmock.GetCallCountInfo()
+	assert.Equal(t, 1, info["GET http://grafana:3000/api/datasources/name/test-elasticsearch"])
+	assert.Equal(t, 1, info["POST http://grafana:3000/api/ds/query"])
+}
+
+func TestLokiQueryStructure(t *testing.T) {
+	// Activate httpmock
+	httpmock.Activate(t)
+	defer httpmock.DeactivateAndReset()
+
+	baseURL := "http://grafana:3000"
+	apiKey := "test-api-key"
+	dsName := "test-loki"
+	query := `{job="loki"} |= "error"`
+	from := "now-1h"
+	to := "now"
+	timeout := 5 * time.Second
+
+	// Mock datasource response
+	mockDatasource := &GrafanaDatasource{
+		ID:     1,
+		UID:    "loki123",
+		OrgID:  1,
+		Name:   "test-loki",
+		Type:   Loki,
+		Access: "proxy",
+		URL:    "http://loki:3100",
+	}
+
+	datasourceJSON, err := json.Marshal(mockDatasource)
+	require.NoError(t, err)
+
+	// Mock query response
+	mockQueryResponse := map[string]any{
+		"results": map[string]any{
+			"A": map[string]any{
+				"frames": []any{},
+			},
+		},
+	}
+
+	queryResponseJSON, err := json.Marshal(mockQueryResponse)
+	require.NoError(t, err)
+
+	// Register mocks
+	httpmock.RegisterResponder("GET", fmt.Sprintf("%s/api/datasources/name/%s", baseURL, dsName),
+		httpmock.NewStringResponder(200, string(datasourceJSON)))
+
+	// Capture the request body to verify the query structure
+	var capturedRequestBody []byte
+	httpmock.RegisterResponder("POST", fmt.Sprintf("%s/api/ds/query", baseURL),
+		func(req *http.Request) (*http.Response, error) {
+			// Read the request body
+			body := make([]byte, req.ContentLength)
+			req.Body.Read(body)
+			capturedRequestBody = body
+
+			return httpmock.NewStringResponse(200, string(queryResponseJSON)), nil
+		})
+
+	// Test successful case
+	result, err := TestQuery(query, dsName, baseURL, apiKey, from, to, timeout)
+	require.NoError(t, err)
+	assert.NotNil(t, result)
+
+	// Verify the query structure
+	require.NotNil(t, capturedRequestBody)
+	var requestBody map[string]any
+	err = json.Unmarshal(capturedRequestBody, &requestBody)
+	require.NoError(t, err)
+
+	// Verify the request body structure
+	queries, ok := requestBody["queries"].([]any)
+	require.True(t, ok)
+	require.Len(t, queries, 1)
+
+	queryObj, ok := queries[0].(map[string]any)
+	require.True(t, ok)
+
+	// Verify Loki-specific fields are present
+	assert.Equal(t, query, queryObj["expr"])
+	assert.Equal(t, "range", queryObj["queryType"])
+	assert.Equal(t, float64(100), queryObj["maxLines"])
+	assert.Equal(t, "time_series", queryObj["format"])
+
+	// Verify Elasticsearch-specific fields are NOT present (should be omitted)
+	_, hasQuery := queryObj["query"]
+	assert.False(t, hasQuery, "Loki query should not have 'query' field")
+
+	_, hasTimeField := queryObj["timeField"]
+	assert.False(t, hasTimeField, "Loki query should not have 'timeField' field")
+
+	_, hasDatasourceID := queryObj["datasourceId"]
+	assert.False(t, hasDatasourceID, "Loki query should not have 'datasourceId' field")
+
+	_, hasMetrics := queryObj["metrics"]
+	assert.False(t, hasMetrics, "Loki query should not have 'metrics' field")
+
+	_, hasBucketAggs := queryObj["bucketAggs"]
+	assert.False(t, hasBucketAggs, "Loki query should not have 'bucketAggs' field")
+
+	// Verify the requests were made
+	info := httpmock.GetCallCountInfo()
+	assert.Equal(t, 1, info["GET http://grafana:3000/api/datasources/name/test-loki"])
+	assert.Equal(t, 1, info["POST http://grafana:3000/api/ds/query"])
 }
