@@ -191,8 +191,7 @@ func TestConvertToAlert(t *testing.T) {
 				Lookback:   "2m",
 			},
 			wantQueryText: "sum(count_over_time({job=`.+`} | json | test=`true`[$__auto]))",
-			wantDuration:  definitions.Duration(420 * time.Second), // 5m + 2m lookback = 7 * time.Minute
-			wantUpdated:   nil,                                     // expect timestamp update
+			wantDuration:  definitions.Duration(7 * time.Minute), // 5m + 2m lookback = 7m
 			wantError:     false,
 		},
 	}
