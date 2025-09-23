@@ -702,22 +702,25 @@ func (i *Integrator) processFrame(frame Frame, result *QueryTestResult) error {
 }
 
 // generateExploreLink creates a Grafana explore link based on the datasource type
-func (i *Integrator) generateExploreLink(query, datasource, datasourceType string) (string, error) {
-	jsonQuery, err := json.Marshal(query)
+func (i *Integrator) generateExploreLink(query, datasource, datasourceType string, config ConversionConfig, defaultConf ConversionConfig) (string, error) {
+	customModel := getC(config.QueryModel, defaultConf.QueryModel, "")
+	escapedQuery, err := escapeQueryJSON(query)
 	if err != nil {
-		return "", fmt.Errorf("error marshalling query %s: %v", query, err)
+		return "", fmt.Errorf("could not escape provided query: %s", query)
 	}
 
 	var pane string
-	switch datasourceType {
-	case Loki:
-		pane = fmt.Sprintf(`{"yyz":{"datasource":"%[1]s","queries":[{"refId":"A","expr":%[2]s,"queryType":"range","datasource":{"type":"loki","uid":"%[1]s"},"editorMode":"code","direction":"backward"}],"range":{"from":"%[3]s","to":"%[4]s"}}}`, datasource, string(jsonQuery), i.config.IntegratorConfig.From, i.config.IntegratorConfig.To)
-	case Elasticsearch:
+	switch {
+	case customModel != "":
+		pane = fmt.Sprintf(`{"yyz":{"datasource":"%[1]s","queries":[%[2]s],"range":{"from":"%[3]s","to":"%[4]s"}}}`, datasource, fmt.Sprintf(customModel, "A", datasource, escapedQuery), i.config.IntegratorConfig.From, i.config.IntegratorConfig.To)
+	case datasourceType == Loki:
+		pane = fmt.Sprintf(`{"yyz":{"datasource":"%[1]s","queries":[{"refId":"A","expr":"%[2]s","queryType":"range","datasource":{"type":"loki","uid":"%[1]s"},"editorMode":"code","direction":"backward"}],"range":{"from":"%[3]s","to":"%[4]s"}}}`, datasource, escapedQuery, i.config.IntegratorConfig.From, i.config.IntegratorConfig.To)
+	case datasourceType == Elasticsearch:
 		// For Elasticsearch, we need to include the full query structure with metrics and bucketAggs
-		pane = fmt.Sprintf(`{"yyz":{"datasource":"%[1]s","queries":[{"refId":"A","datasource":{"type":"elasticsearch","uid":"%[1]s"},"query":%[2]s,"alias":"","metrics":[{"type":"count","id":"1"}],"bucketAggs":[{"type":"date_histogram","id":"2","settings":{"interval":"auto"},"field":"@timestamp"}],"timeField":"@timestamp"}],"range":{"from":"%[3]s","to":"%[4]s"},"compact":false}}`, datasource, string(jsonQuery), i.config.IntegratorConfig.From, i.config.IntegratorConfig.To)
+		pane = fmt.Sprintf(`{"yyz":{"datasource":"%[1]s","queries":[{"refId":"A","datasource":{"type":"elasticsearch","uid":"%[1]s"},"query":"%[2]s","alias":"","metrics":[{"type":"count","id":"1"}],"bucketAggs":[{"type":"date_histogram","id":"2","settings":{"interval":"auto"},"field":"@timestamp"}],"timeField":"@timestamp"}],"range":{"from":"%[3]s","to":"%[4]s"},"compact":false}}`, datasource, escapedQuery, i.config.IntegratorConfig.From, i.config.IntegratorConfig.To)
 	default:
 		// Fallback to a generic structure
-		pane = fmt.Sprintf(`{"yyz":{"datasource":"%[1]s","queries":[{"refId":"A","query":%[2]s,"datasource":{"type":"%[3]s","uid":"%[1]s"}}],"range":{"from":"%[4]s","to":"%[5]s"}}}`, datasource, string(jsonQuery), datasourceType, i.config.IntegratorConfig.From, i.config.IntegratorConfig.To)
+		pane = fmt.Sprintf(`{"yyz":{"datasource":"%[1]s","queries":[{"refId":"A","query":"%[2]s","datasource":{"type":"%[3]s","uid":"%[1]s"}}],"range":{"from":"%[4]s","to":"%[5]s"}}}`, datasource, escapedQuery, datasourceType, i.config.IntegratorConfig.From, i.config.IntegratorConfig.To)
 	}
 
 	return fmt.Sprintf("%s/explore?schemaVersion=1&panes=%s&orgId=%d", i.config.DeployerConfig.GrafanaInstance, url.QueryEscape(pane), i.config.IntegratorConfig.OrgID), nil
@@ -744,7 +747,7 @@ func (i *Integrator) TestQueries(queries []string, config, defaultConf Conversio
 		}
 
 		// Generate explore link based on datasource type
-		exploreLink, err := i.generateExploreLink(query, datasource, datasourceType)
+		exploreLink, err := i.generateExploreLink(query, datasource, datasourceType, config, defaultConf)
 		if err != nil {
 			return nil, fmt.Errorf("error generating explore link: %v", err)
 		}

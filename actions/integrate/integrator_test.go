@@ -1300,7 +1300,7 @@ func TestGenerateExploreLink(t *testing.T) {
 			}
 
 			// Test generateExploreLink
-			exploreLink, err := integrator.generateExploreLink(tt.query, tt.datasource, tt.datasourceType)
+			exploreLink, err := integrator.generateExploreLink(tt.query, tt.datasource, tt.datasourceType, ConversionConfig{}, ConversionConfig{})
 
 			if tt.wantError {
 				assert.Error(t, err)
