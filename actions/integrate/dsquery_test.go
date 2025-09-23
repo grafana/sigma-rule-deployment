@@ -170,3 +170,223 @@ func TestTestQuery(t *testing.T) {
 	_, ok = response["results"]
 	require.True(t, ok)
 }
+
+func TestTestQueryElasticsearch(t *testing.T) {
+	// Set up test mock
+	mockQuery := NewMockDatasourceQuery()
+
+	// Add mock Elasticsearch datasource
+	mockQuery.AddMockDatasource("test-elasticsearch", &GrafanaDatasource{
+		ID:     71,
+		UID:    "dej6qd07cf8cgc",
+		OrgID:  1,
+		Name:   "test-elasticsearch",
+		Type:   "elasticsearch",
+		Access: "proxy",
+		URL:    "http://elasticsearch:9200",
+	})
+
+	// Add mock query response with minified Elasticsearch response
+	mockQuery.AddMockResponse("type:log AND (level:(ERROR OR FATAL OR CRITICAL))", []byte(`{
+		"results": {
+			"A": {
+				"status": 200,
+				"frames": [{
+					"schema": {
+						"name": "Count",
+						"refId": "A",
+						"meta": {
+							"type": "timeseries-multi",
+							"typeVersion": [0, 0]
+						},
+						"fields": [
+							{
+								"name": "Time",
+								"type": "time",
+								"typeInfo": {
+									"frame": "time.Time"
+								}
+							},
+							{
+								"name": "Value",
+								"type": "number",
+								"typeInfo": {
+									"frame": "float64",
+									"nullable": true
+								}
+							}
+						]
+					},
+					"data": {
+						"values": [
+							[1758615188000, 1758615190000, 1758615192000, 1758615194000, 1758615196000],
+							[2, 0, 0, 1, 0]
+						]
+					}
+				}]
+			}
+		}
+	}`))
+
+	// Save and restore the default executor
+	originalQuery := DefaultDatasourceQuery
+	DefaultDatasourceQuery = mockQuery
+	defer func() {
+		DefaultDatasourceQuery = originalQuery
+	}()
+
+	// Test successful case
+	result, err := TestQuery("type:log AND (level:(ERROR OR FATAL OR CRITICAL))", "test-elasticsearch", "http://grafana:3000", "test-api-key", "1758615188601", "1758618788601", 5*time.Second)
+	require.NoError(t, err)
+
+	// Verify the result contains expected data
+	var response map[string]interface{}
+	err = json.Unmarshal(result, &response)
+	require.NoError(t, err)
+
+	results, ok := response["results"].(map[string]interface{})
+	require.True(t, ok)
+	a, ok := results["A"].(map[string]interface{})
+	require.True(t, ok)
+
+	// Verify status
+	status, ok := a["status"].(float64)
+	require.True(t, ok)
+	assert.Equal(t, float64(200), status)
+
+	// Verify frames structure
+	frames, ok := a["frames"].([]interface{})
+	require.True(t, ok)
+	assert.NotEmpty(t, frames)
+
+	frame, ok := frames[0].(map[string]interface{})
+	require.True(t, ok)
+
+	// Verify schema
+	schema, ok := frame["schema"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "Count", schema["name"])
+	assert.Equal(t, "A", schema["refId"])
+
+	// Verify data structure
+	data, ok := frame["data"].(map[string]interface{})
+	require.True(t, ok)
+	values, ok := data["values"].([]interface{})
+	require.True(t, ok)
+	assert.Len(t, values, 2) // Time and Value arrays
+
+	// Verify the query was made
+	assert.Contains(t, mockQuery.execQueries, "type:log AND (level:(ERROR OR FATAL OR CRITICAL))")
+}
+
+func TestElasticsearchQueryStructure(t *testing.T) {
+	// Test that the query structure is correctly built for Elasticsearch
+
+	// Create a mock datasource
+	ds := &GrafanaDatasource{
+		ID:   71,
+		UID:  "dej6qd07cf8cgc",
+		Type: "elasticsearch",
+	}
+
+	// Test the query structure by examining what would be sent
+	queryStr := "type:log AND (level:(ERROR OR FATAL OR CRITICAL))"
+
+	// Build the expected query object for Elasticsearch
+	expectedQuery := Query{
+		RefID: "A",
+		Query: queryStr,
+		Datasource: GrafanaDatasource{
+			Type: ds.Type,
+			UID:  ds.UID,
+		},
+		Metrics: []Metric{
+			{
+				Type: "count",
+				ID:   "1",
+			},
+		},
+		BucketAggs: []BucketAgg{
+			{
+				Type: "date_histogram",
+				ID:   "2",
+				Settings: map[string]any{
+					"interval": "auto",
+				},
+				Field: "@timestamp",
+			},
+		},
+		TimeField:     "@timestamp",
+		DatasourceID:  ds.ID,
+		IntervalMs:    2000,
+		MaxDataPoints: 100,
+	}
+
+	expectedBody := Body{
+		Queries: []Query{expectedQuery},
+		From:    "1758615188601",
+		To:      "1758618788601",
+	}
+
+	// Marshal to JSON to verify the structure
+	jsonData, err := json.MarshalIndent(expectedBody, "", "  ")
+	require.NoError(t, err)
+
+	// Verify the JSON contains the expected Elasticsearch-specific fields
+	var parsedBody map[string]interface{}
+	err = json.Unmarshal(jsonData, &parsedBody)
+	require.NoError(t, err)
+
+	queries, ok := parsedBody["queries"].([]interface{})
+	require.True(t, ok)
+	require.Len(t, queries, 1)
+
+	query, ok := queries[0].(map[string]interface{})
+	require.True(t, ok)
+
+	// Verify Elasticsearch-specific fields are present
+	assert.Equal(t, queryStr, query["query"])
+	// alias is empty string, so it should be omitted in JSON (omitempty)
+	_, hasAlias := query["alias"]
+	assert.False(t, hasAlias, "Empty alias should be omitted due to omitempty tag")
+	assert.Equal(t, "@timestamp", query["timeField"])
+	assert.Equal(t, float64(71), query["datasourceId"])
+
+	// Verify metrics structure
+	metrics, ok := query["metrics"].([]interface{})
+	require.True(t, ok)
+	require.Len(t, metrics, 1)
+
+	metric, ok := metrics[0].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "count", metric["type"])
+	assert.Equal(t, "1", metric["id"])
+
+	// Verify bucketAggs structure
+	bucketAggs, ok := query["bucketAggs"].([]interface{})
+	require.True(t, ok)
+	require.Len(t, bucketAggs, 1)
+
+	bucketAgg, ok := bucketAggs[0].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "date_histogram", bucketAgg["type"])
+	assert.Equal(t, "2", bucketAgg["id"])
+	assert.Equal(t, "@timestamp", bucketAgg["field"])
+
+	settings, ok := bucketAgg["settings"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "auto", settings["interval"])
+
+	// Verify Loki-specific fields are NOT present (should be omitted)
+	_, hasExpr := query["expr"]
+	assert.False(t, hasExpr, "Elasticsearch query should not have 'expr' field")
+
+	_, hasQueryType := query["queryType"]
+	assert.False(t, hasQueryType, "Elasticsearch query should not have 'queryType' field")
+
+	_, hasMaxLines := query["maxLines"]
+	assert.False(t, hasMaxLines, "Elasticsearch query should not have 'maxLines' field")
+
+	_, hasFormat := query["format"]
+	assert.False(t, hasFormat, "Elasticsearch query should not have 'format' field")
+}
