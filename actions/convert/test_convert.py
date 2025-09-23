@@ -8,7 +8,7 @@ import pytest
 from dynaconf.utils import DynaconfDict
 
 from convert import convert
-from convert.convert import convert_rules, is_path, is_safe_path, load_rules
+from convert.convert import convert_rules, is_path, is_safe_path, load_rules, filter_rule_fields
 
 
 @pytest.fixture
@@ -1051,3 +1051,36 @@ def test_convert_rules_deletes_conversion_for_deleted_rule(temp_workspace, mock_
 
     # Verify the conversion file was deleted
     assert not conversion_file.exists()
+
+def test_filter_rule_fields():
+    """Test that the filter_rule_fields function filters the rule fields correctly."""
+    rule_dicts = [
+        {
+            "title": "Test Rule",
+            "description": "Test Description",
+            "severity": "Test Severity",
+            "logsource": {"category": "Test Category", "product": "Test Product", "service": "Test Service", "definition": "Test Definition"},
+            "detection": {"selection": {"field": "Test Field"}, "condition": "selection"},
+            "fields": ["Test Field"]
+        },
+        {
+            "title": "Test Rule 2",
+            "severity": "Test Severity 2",
+            "logsource": {"category": "Test Category 2", "product": "Test Product 2", "service": "Test Service 2", "definition": "Test Definition 2"},
+            "detection": {"selection": {"field": "Test Field 2"}, "condition": "selection"},
+            "fields": ["Test Field 2"]
+        }
+    ]
+    required_fields = ["title", "description", "logsource"]
+    filtered_rule_dicts = filter_rule_fields(rule_dicts, required_fields)
+    assert filtered_rule_dicts == [
+        {
+            "title": "Test Rule",
+            "description": "Test Description",
+            "logsource": {"category": "Test Category", "product": "Test Product", "service": "Test Service", "definition": "Test Definition"}
+        },
+        {
+            "title": "Test Rule 2",
+            "logsource": {"category": "Test Category 2", "product": "Test Product 2", "service": "Test Service 2", "definition": "Test Definition 2"}
+        }
+    ]

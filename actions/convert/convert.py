@@ -332,12 +332,15 @@ def convert_rules(
                 output_filename = output_filename.replace(os.sep, "_")
                 output_file = path_prefix / conversions_output_dir / output_filename
 
+                # Filter the rules to only include the required fields, if empty, return the full rule dictionaries
+                required_rule_fields = conversion.get("required_rule_fields", default_required_rule_fields)
+
                 # Create the output data structure
                 output_data = {
                     "queries": queries,
                     "conversion_name": name,
                     "input_file": str(rel_input_path),
-                    "rules": load_rules(input_file),
+                    "rules": filter_rule_fields(load_rules(input_file), required_rule_fields),
                     "output_file": str(Path(output_file).relative_to(path_prefix)),
                 }
 
@@ -429,3 +432,19 @@ def load_rules(rule_file: str) -> list[dict[str, Any]]:
     except Exception as e:
         print(f"{e.__class__.__name__}: Error loading rule file {rule_file}: {str(e)}")
         raise ValueError(f"Error loading rule file {rule_file}") from e
+
+def filter_rule_fields(rule_dicts: list[dict[str, Any]], required_fields: list[str]) -> list[dict[str, Any]]:
+    """Filter the fields of the rules to only include the specified fields.
+    If no required fields are specified, return the full rule dictionaries.
+
+    Args:
+        rule_dicts (list[dict[str, Any]]): The list of rule dictionaries.
+        required_fields (list[str]): The list of required fields.
+
+    Returns:
+        Iterator[dict[str, Any]]: The filtered Sigma rule files as a list of dictionaries.
+    """
+    if not required_fields:
+        return rule_dicts
+
+    return [dict((field, rule_dict[field]) for field in required_fields if field in rule_dict) for rule_dict in rule_dicts]
