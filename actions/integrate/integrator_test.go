@@ -220,12 +220,12 @@ func TestConvertToAlert(t *testing.T) {
 				TimeWindow: "5m",
 			},
 			integratorConfig: IntegrationConfig{
-				Labels: map[string]string{
+				TemplateLabels: map[string]string{
 					"Level":   "{{.Level}}",
 					"Product": "{{.Logsource.Product}}",
 					"Service": "{{.Logsource.Service}}",
 				},
-				Annotations: map[string]string{
+				TemplateAnnotations: map[string]string{
 					"Author": "{{.Author}}",
 				},
 			},

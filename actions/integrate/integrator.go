@@ -549,14 +549,18 @@ func (i *Integrator) ConvertToAlert(rule *definitions.ProvisionedAlertRule, quer
 	// Path to associated conversion file
 	rule.Annotations["ConversionFile"] = conversionFile
 
-	if i.config.IntegratorConfig.Annotations != nil {
-		for key, value := range i.config.IntegratorConfig.Annotations {
+	if i.config.IntegratorConfig.TemplateAnnotations != nil {
+		for key, value := range i.config.IntegratorConfig.TemplateAnnotations {
 			tmpl, err := template.New("annotation_" + key).Parse(value)
 			if err != nil {
 				return fmt.Errorf("error parsing template %s: %v", key, err)
 			}
 			var buf bytes.Buffer
-			err = tmpl.Execute(&buf, conversionObject.Rules[0])
+			if i.config.IntegratorConfig.TemplateAllRules {
+				err = tmpl.Execute(&buf, conversionObject.Rules)
+			} else {
+				err = tmpl.Execute(&buf, conversionObject.Rules[0])
+			}
 			if err != nil {
 				return fmt.Errorf("error executing template %s: %v", key, err)
 			}
@@ -568,14 +572,18 @@ func (i *Integrator) ConvertToAlert(rule *definitions.ProvisionedAlertRule, quer
 		rule.Labels = make(map[string]string)
 	}
 
-	if i.config.IntegratorConfig.Labels != nil {
-		for key, value := range i.config.IntegratorConfig.Labels {
+	if i.config.IntegratorConfig.TemplateLabels != nil {
+		for key, value := range i.config.IntegratorConfig.TemplateLabels {
 			tmpl, err := template.New("label_" + key).Parse(value)
 			if err != nil {
 				return fmt.Errorf("error parsing template %s: %v", key, err)
 			}
 			var buf bytes.Buffer
-			err = tmpl.Execute(&buf, conversionObject.Rules[0])
+			if i.config.IntegratorConfig.TemplateAllRules {
+				err = tmpl.Execute(&buf, conversionObject.Rules)
+			} else {
+				err = tmpl.Execute(&buf, conversionObject.Rules[0])
+			}
 			if err != nil {
 				return fmt.Errorf("error executing template %s: %v", key, err)
 			}

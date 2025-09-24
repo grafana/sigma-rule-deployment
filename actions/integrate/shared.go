@@ -40,8 +40,9 @@ type IntegrationConfig struct {
 	To                           string            `yaml:"to"`
 	ShowLogLines                 bool              `yaml:"show_log_lines"`
 	ContinueOnQueryTestingErrors bool              `yaml:"continue_on_query_testing_errors"`
-	Labels                       map[string]string `yaml:"labels"`
-	Annotations                  map[string]string `yaml:"annotations"`
+	TemplateLabels               map[string]string `yaml:"template_labels"`
+	TemplateAnnotations          map[string]string `yaml:"template_annotations"`
+	TemplateAllRules             bool              `yaml:"template_all_rules"`
 }
 
 type DeploymentConfig struct {
