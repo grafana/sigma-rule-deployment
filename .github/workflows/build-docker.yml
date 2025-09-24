@@ -67,5 +67,9 @@ jobs:
         id: generate-token
         uses: actions/create-github-app-token@v2
         with:
-          app_id: ${{ env.GITHUB_APP_ID }}
-          private_key: ${{ env.GITHUB_APP_PRIVATE_KEY }}
+          app-id: ${{ env.GITHUB_APP_ID }}
+          private-key: ${{ env.GITHUB_APP_PRIVATE_KEY }}
+          owner: grafana
+          repositories: |
+            sigma-rule-deployment
+            sigma-rule-deployment-integration-test
