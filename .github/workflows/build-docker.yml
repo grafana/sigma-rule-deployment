@@ -91,6 +91,7 @@ jobs:
         working-directory: ./sigma-rule-deployment-integration-test
         env:
           GITHUB_PR_NUMBER: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
         run: |
           git fetch
 
