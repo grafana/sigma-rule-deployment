@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"text/template"
 	"time"
 
 	"github.com/google/uuid"
@@ -20,6 +21,13 @@ import (
 
 const TRUE = "true"
 
+type SigmaLogsource struct {
+	Category   string `json:"category"`
+	Product    string `json:"product"`
+	Service    string `json:"service"`
+	Definition string `json:"definition"`
+}
+
 type SigmaRule struct {
 	Title   string `json:"title"`
 	ID      string `json:"id"`
@@ -27,29 +35,24 @@ type SigmaRule struct {
 		ID   string `json:"id"`
 		Type string `json:"type"`
 	} `json:"related"`
-	Name        string   `json:"name"`
-	Taxonomy    string   `json:"taxonomy"`
-	Status      string   `json:"status"`
-	Description string   `json:"description"`
-	License     string   `json:"license"`
-	Author      string   `json:"author"`
-	References  []string `json:"references"`
-	Date        string   `json:"date"`
-	Modified    string   `json:"modified"`
-	Logsource   struct {
-		Category   string `json:"category"`
-		Product    string `json:"product"`
-		Service    string `json:"service"`
-		Definition string `json:"definition"`
-	} `json:"logsource"`
-	Detection      any      `json:"detection"`
-	Correlation    any      `json:"correlation"`
-	Fields         []string `json:"fields"`
-	FalsePositives []string `json:"falsepositives"`
-	Level          string   `json:"level"`
-	Tags           []string `json:"tags"`
-	Scope          string   `json:"scope"`
-	Generate       bool     `json:"generate"`
+	Name           string         `json:"name"`
+	Taxonomy       string         `json:"taxonomy"`
+	Status         string         `json:"status"`
+	Description    string         `json:"description"`
+	License        string         `json:"license"`
+	Author         string         `json:"author"`
+	References     []string       `json:"references"`
+	Date           string         `json:"date"`
+	Modified       string         `json:"modified"`
+	Logsource      SigmaLogsource `json:"logsource"`
+	Detection      any            `json:"detection"`
+	Correlation    any            `json:"correlation"`
+	Fields         []string       `json:"fields"`
+	FalsePositives []string       `json:"falsepositives"`
+	Level          string         `json:"level"`
+	Tags           []string       `json:"tags"`
+	Scope          string         `json:"scope"`
+	Generate       bool           `json:"generate"`
 }
 
 type ConversionOutput struct {
@@ -367,7 +370,7 @@ func (i *Integrator) Run() error {
 		if err != nil {
 			return err
 		}
-		err = i.ConvertToAlert(rule, queries, titles, config, inputFile)
+		err = i.ConvertToAlert(rule, queries, titles, config, inputFile, conversionObject)
 		if err != nil {
 			return err
 		}
@@ -453,7 +456,7 @@ func (i *Integrator) Run() error {
 	return nil
 }
 
-func (i *Integrator) ConvertToAlert(rule *definitions.ProvisionedAlertRule, queries []string, titles string, config ConversionConfig, conversionFile string) error {
+func (i *Integrator) ConvertToAlert(rule *definitions.ProvisionedAlertRule, queries []string, titles string, config ConversionConfig, conversionFile string, conversionObject ConversionOutput) error {
 	datasource := getC(config.DataSource, i.config.ConversionDefaults.DataSource, "nil")
 	timewindow := getC(config.TimeWindow, i.config.ConversionDefaults.TimeWindow, "1m")
 	duration, err := time.ParseDuration(timewindow)
@@ -546,6 +549,48 @@ func (i *Integrator) ConvertToAlert(rule *definitions.ProvisionedAlertRule, quer
 
 	// Path to associated conversion file
 	rule.Annotations["ConversionFile"] = conversionFile
+
+	if i.config.IntegratorConfig.TemplateAnnotations != nil {
+		for key, value := range i.config.IntegratorConfig.TemplateAnnotations {
+			tmpl, err := template.New("annotation_" + key).Parse(value)
+			if err != nil {
+				return fmt.Errorf("error parsing template %s: %v", key, err)
+			}
+			var buf bytes.Buffer
+			if i.config.IntegratorConfig.TemplateAllRules {
+				err = tmpl.Execute(&buf, conversionObject.Rules)
+			} else {
+				err = tmpl.Execute(&buf, conversionObject.Rules[0])
+			}
+			if err != nil {
+				return fmt.Errorf("error executing template %s: %v", key, err)
+			}
+			rule.Annotations[key] = buf.String()
+		}
+	}
+
+	if rule.Labels == nil {
+		rule.Labels = make(map[string]string)
+	}
+
+	if i.config.IntegratorConfig.TemplateLabels != nil {
+		for key, value := range i.config.IntegratorConfig.TemplateLabels {
+			tmpl, err := template.New("label_" + key).Parse(value)
+			if err != nil {
+				return fmt.Errorf("error parsing template %s: %v", key, err)
+			}
+			var buf bytes.Buffer
+			if i.config.IntegratorConfig.TemplateAllRules {
+				err = tmpl.Execute(&buf, conversionObject.Rules)
+			} else {
+				err = tmpl.Execute(&buf, conversionObject.Rules[0])
+			}
+			if err != nil {
+				return fmt.Errorf("error executing template %s: %v", key, err)
+			}
+			rule.Labels[key] = buf.String()
+		}
+	}
 
 	return nil
 }

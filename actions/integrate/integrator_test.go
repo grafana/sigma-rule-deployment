@@ -19,15 +19,19 @@ func TestConvertToAlert(t *testing.T) {
 	fixedTime := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 
 	tests := []struct {
-		name          string
-		queries       []string
-		rule          *definitions.ProvisionedAlertRule
-		titles        string
-		config        ConversionConfig
-		wantQueryText string
-		wantDuration  definitions.Duration
-		wantUpdated   *time.Time // nil means expect an update, specified time means expect no change
-		wantError     bool
+		name             string
+		queries          []string
+		rule             *definitions.ProvisionedAlertRule
+		titles           string
+		convConfig       ConversionConfig
+		integratorConfig IntegrationConfig
+		convObject       ConversionOutput
+		wantQueryText    string
+		wantDuration     definitions.Duration
+		wantUpdated      *time.Time // nil means expect an update, specified time means expect no change
+		wantError        bool
+		wantLabels       map[string]string
+		wantAnnotations  map[string]string
 	}{
 		{
 			name:    "valid new loki query",
@@ -36,7 +40,7 @@ func TestConvertToAlert(t *testing.T) {
 			rule: &definitions.ProvisionedAlertRule{
 				UID: "5c1c217a",
 			},
-			config: ConversionConfig{
+			convConfig: ConversionConfig{
 				Name:       "conv",
 				Target:     "loki",
 				DataSource: "my_data_source",
@@ -55,7 +59,7 @@ func TestConvertToAlert(t *testing.T) {
 			rule: &definitions.ProvisionedAlertRule{
 				UID: "3bb06d82",
 			},
-			config: ConversionConfig{
+			convConfig: ConversionConfig{
 				Name:           "conv",
 				Target:         "esql",
 				DataSource:     "my_es_data_source",
@@ -75,7 +79,7 @@ func TestConvertToAlert(t *testing.T) {
 			rule: &definitions.ProvisionedAlertRule{
 				UID: "5c1c217a",
 			},
-			config: ConversionConfig{
+			convConfig: ConversionConfig{
 				TimeWindow: "1y",
 			},
 			wantDuration: 0,   // invalid time window, expect no value
@@ -89,7 +93,7 @@ func TestConvertToAlert(t *testing.T) {
 			rule: &definitions.ProvisionedAlertRule{
 				UID: "f4c34eae-c7c3-4891-8965-08a01e8286b8",
 			},
-			config: ConversionConfig{
+			convConfig: ConversionConfig{
 				TimeWindow: "1y",
 			},
 			wantDuration: 0,   // invalid time window, expect no value
@@ -122,7 +126,7 @@ func TestConvertToAlert(t *testing.T) {
 				},
 				Updated: fixedTime,
 			},
-			config: ConversionConfig{
+			convConfig: ConversionConfig{
 				Name:       "conv",
 				Target:     "loki",
 				DataSource: "my_data_source",
@@ -141,7 +145,7 @@ func TestConvertToAlert(t *testing.T) {
 			rule: &definitions.ProvisionedAlertRule{
 				UID: "5c1c217a",
 			},
-			config: ConversionConfig{
+			convConfig: ConversionConfig{
 				Name:       "conv",
 				Target:     "custom",
 				DataSource: "my_custom_data_source",
@@ -161,7 +165,7 @@ func TestConvertToAlert(t *testing.T) {
 			rule: &definitions.ProvisionedAlertRule{
 				UID: "5c1c217a",
 			},
-			config: ConversionConfig{
+			convConfig: ConversionConfig{
 				Name:       "conv",
 				Target:     "generic",
 				DataSource: "generic_uid",
@@ -180,7 +184,7 @@ func TestConvertToAlert(t *testing.T) {
 			rule: &definitions.ProvisionedAlertRule{
 				UID: "5c1c217a",
 			},
-			config: ConversionConfig{
+			convConfig: ConversionConfig{
 				Name:       "conv",
 				Target:     "loki",
 				DataSource: "my_data_source",
@@ -193,13 +197,66 @@ func TestConvertToAlert(t *testing.T) {
 			wantUpdated:   nil,                                     // expect timestamp update
 			wantError:     false,
 		},
+		{
+			name:    "template annotations and labels",
+			queries: []string{"{job=`.+`} | json | test=`true`"},
+			titles:  "Template Rule",
+			rule: &definitions.ProvisionedAlertRule{
+				UID: "",
+			},
+			convObject: ConversionOutput{
+				Rules: []SigmaRule{
+					{
+						Level:     "high",
+						Logsource: SigmaLogsource{Product: "okta", Service: "okta"},
+						Author:    "John Doe",
+					},
+				},
+			},
+			convConfig: ConversionConfig{
+				Name:       "conv",
+				Target:     "loki",
+				DataSource: "my_data_source",
+				RuleGroup:  "Every 5 Minutes",
+				TimeWindow: "5m",
+			},
+			integratorConfig: IntegrationConfig{
+				TemplateLabels: map[string]string{
+					"Level":   "{{.Level}}",
+					"Product": "{{.Logsource.Product}}",
+					"Service": "{{.Logsource.Service}}",
+				},
+				TemplateAnnotations: map[string]string{
+					"Author": "{{.Author}}",
+				},
+			},
+			wantQueryText: "sum(count_over_time({job=`.+`} | json | test=`true`[$__auto]))",
+			wantDuration:  definitions.Duration(300 * time.Second),
+			wantUpdated:   nil, // expect timestamp update
+			wantError:     false,
+			wantLabels: map[string]string{
+				"Level":   "high",
+				"Product": "okta",
+				"Service": "okta",
+			},
+			wantAnnotations: map[string]string{
+				"Author":         "John Doe",
+				"ConversionFile": "test_conversion_file.json",
+				"LogSourceType":  "loki",
+				"LogSourceUid":   "my_data_source",
+				"Lookback":       "0s",
+				"Query":          "{job=`.+`} | json | test=`true`",
+				"TimeWindow":     "5m",
+			},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			i := NewIntegrator()
 			originalTimestamp := tt.rule.Updated
-			err := i.ConvertToAlert(tt.rule, tt.queries, tt.titles, tt.config, "test_conversion_file.json")
+			i.config.IntegratorConfig = tt.integratorConfig
+			err := i.ConvertToAlert(tt.rule, tt.queries, tt.titles, tt.convConfig, "test_conversion_file.json", tt.convObject)
 			if tt.wantError {
 				assert.NotNil(t, err)
 			} else {
@@ -211,18 +268,24 @@ func TestConvertToAlert(t *testing.T) {
 					assert.True(t, tt.rule.Updated.After(originalTimestamp), "new timestamp should be after original")
 					assert.Contains(t, string(tt.rule.Data[0].Model), tt.wantQueryText)
 					assert.Equal(t, tt.wantDuration, tt.rule.Data[0].RelativeTimeRange.From)
-					assert.Equal(t, tt.config.RuleGroup, tt.rule.RuleGroup)
-					assert.Equal(t, tt.config.DataSource, tt.rule.Data[0].DatasourceUID)
+					assert.Equal(t, tt.convConfig.RuleGroup, tt.rule.RuleGroup)
+					assert.Equal(t, tt.convConfig.DataSource, tt.rule.Data[0].DatasourceUID)
 					assert.Equal(t, tt.titles, tt.rule.Title)
 
-					if tt.config.Lookback != "" {
-						lookbackDuration, err := time.ParseDuration(tt.config.Lookback)
+					if tt.convConfig.Lookback != "" {
+						lookbackDuration, err := time.ParseDuration(tt.convConfig.Lookback)
 						assert.NoError(t, err)
 						expectedTo := definitions.Duration(lookbackDuration)
 						assert.Equal(t, tt.wantDuration, tt.rule.Data[0].RelativeTimeRange.From, "From should match expected duration (time window + lookback)")
 						assert.Equal(t, expectedTo, tt.rule.Data[0].RelativeTimeRange.To, "To should be lookback duration")
 					} else {
 						assert.Equal(t, definitions.Duration(0), tt.rule.Data[0].RelativeTimeRange.To, "To should be 0 when no lookback")
+					}
+					if tt.wantLabels != nil {
+						assert.Equal(t, tt.wantLabels, tt.rule.Labels)
+					}
+					if tt.wantAnnotations != nil {
+						assert.Equal(t, tt.wantAnnotations, tt.rule.Annotations)
 					}
 				}
 			}

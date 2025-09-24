@@ -7,6 +7,10 @@ conversion_defaults:
   skip_unsupported: true
   file_pattern: "*.yml"
   data_source: grafanacloud-logs
+  required_rule_fields:
+    - level
+    - logsource
+    - author
 conversions:
   - name: aws_cloudtrail
     input: "rules-development/cloud/aws/cloudtrail/*"
@@ -54,6 +58,13 @@ integration:
   test_queries: true # Whether to test the queries against the datasource
   from: "now-1h"
   to: "now"
+  template_labels:
+    Level: "{{.Level}}"
+    Product: "{{.Logsource.Product}}"
+    Service: "{{.Logsource.Service}}"
+  template_annotations:
+    Author: "{{.Author}}"
+  template_all_rules: false
 deployment:
   grafana_instance: https://myinstance.grafana.com
   timeout: 10s # HTTP request timeout for testing queries
