@@ -8,6 +8,11 @@ import (
 	"strings"
 )
 
+const (
+	Loki          = "loki"
+	Elasticsearch = "elasticsearch"
+)
+
 type FoldersConfig struct {
 	ConversionPath string `yaml:"conversion_path"`
 	DeploymentPath string `yaml:"deployment_path"`
