@@ -101,6 +101,7 @@ jobs:
 
           if [ $STATUS -eq 0 ]; then
             git checkout "integration-test-pr-${GITHUB_PR_NUMBER}"
+            git pull
           else
             git checkout -b "integration-test-pr-${GITHUB_PR_NUMBER}"
           fi
