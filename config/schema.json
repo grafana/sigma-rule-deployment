@@ -178,7 +178,7 @@
                 },
                 "template_all_rules": {
                     "type": "boolean",
-                    "description": "Whether to apply the template to all rules or just the first rule",
+                    "description": "Whether to use all the rules in a Sigma rule file for templated annotations and labels, or just the first rule",
                     "default": false
                 }
             },
