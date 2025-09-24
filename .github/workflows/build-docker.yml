@@ -94,8 +94,8 @@ jobs:
         run: |
           git fetch
 
-          git rev-parse --verify integration-test-pr-${GITHUB_PR_NUMBER}
-          STATUS=$?
+          STATUS=0
+          git rev-parse --verify integration-test-pr-${GITHUB_PR_NUMBER} 2>/dev/null || STATUS=$?
 
           if [ $STATUS -eq 0 ]; then
             git checkout integration-test-pr-${GITHUB_PR_NUMBER}
