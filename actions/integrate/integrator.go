@@ -527,7 +527,6 @@ func (i *Integrator) ConvertToAlert(rule *definitions.ProvisionedAlertRule, quer
 	rule.RuleGroup = getC(config.RuleGroup, i.config.ConversionDefaults.RuleGroup, "Default")
 	rule.NoDataState = definitions.OK
 	rule.ExecErrState = definitions.OkErrState
-	rule.Updated = time.Now()
 	rule.Title = titles
 	rule.Condition = "C"
 
