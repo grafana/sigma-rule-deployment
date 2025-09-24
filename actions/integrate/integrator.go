@@ -1,3 +1,4 @@
+//nolint:goconst
 package main
 
 import (
@@ -9,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"text/template"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,6 +21,13 @@ import (
 
 const TRUE = "true"
 
+type SigmaLogsource struct {
+	Category   string `json:"category"`
+	Product    string `json:"product"`
+	Service    string `json:"service"`
+	Definition string `json:"definition"`
+}
+
 type SigmaRule struct {
 	Title   string `json:"title"`
 	ID      string `json:"id"`
@@ -26,29 +35,24 @@ type SigmaRule struct {
 		ID   string `json:"id"`
 		Type string `json:"type"`
 	} `json:"related"`
-	Name        string   `json:"name"`
-	Taxonomy    string   `json:"taxonomy"`
-	Status      string   `json:"status"`
-	Description string   `json:"description"`
-	License     string   `json:"license"`
-	Author      string   `json:"author"`
-	References  []string `json:"references"`
-	Date        string   `json:"date"`
-	Modified    string   `json:"modified"`
-	Logsource   struct {
-		Category   string `json:"category"`
-		Product    string `json:"product"`
-		Service    string `json:"service"`
-		Definition string `json:"definition"`
-	} `json:"logsource"`
-	Detection      any      `json:"detection"`
-	Correlation    any      `json:"correlation"`
-	Fields         []string `json:"fields"`
-	FalsePositives []string `json:"falsepositives"`
-	Level          string   `json:"level"`
-	Tags           []string `json:"tags"`
-	Scope          string   `json:"scope"`
-	Generate       bool     `json:"generate"`
+	Name           string         `json:"name"`
+	Taxonomy       string         `json:"taxonomy"`
+	Status         string         `json:"status"`
+	Description    string         `json:"description"`
+	License        string         `json:"license"`
+	Author         string         `json:"author"`
+	References     []string       `json:"references"`
+	Date           string         `json:"date"`
+	Modified       string         `json:"modified"`
+	Logsource      SigmaLogsource `json:"logsource"`
+	Detection      any            `json:"detection"`
+	Correlation    any            `json:"correlation"`
+	Fields         []string       `json:"fields"`
+	FalsePositives []string       `json:"falsepositives"`
+	Level          string         `json:"level"`
+	Tags           []string       `json:"tags"`
+	Scope          string         `json:"scope"`
+	Generate       bool           `json:"generate"`
 }
 
 type ConversionOutput struct {
@@ -366,7 +370,7 @@ func (i *Integrator) Run() error {
 		if err != nil {
 			return err
 		}
-		err = i.ConvertToAlert(rule, queries, titles, config, inputFile)
+		err = i.ConvertToAlert(rule, queries, titles, config, inputFile, conversionObject)
 		if err != nil {
 			return err
 		}
@@ -452,7 +456,7 @@ func (i *Integrator) Run() error {
 	return nil
 }
 
-func (i *Integrator) ConvertToAlert(rule *definitions.ProvisionedAlertRule, queries []string, titles string, config ConversionConfig, conversionFile string) error {
+func (i *Integrator) ConvertToAlert(rule *definitions.ProvisionedAlertRule, queries []string, titles string, config ConversionConfig, conversionFile string, conversionObject ConversionOutput) error {
 	datasource := getC(config.DataSource, i.config.ConversionDefaults.DataSource, "nil")
 	timewindow := getC(config.TimeWindow, i.config.ConversionDefaults.TimeWindow, "1m")
 	duration, err := time.ParseDuration(timewindow)
@@ -539,11 +543,53 @@ func (i *Integrator) ConvertToAlert(rule *definitions.ProvisionedAlertRule, quer
 	rule.Annotations["LogSourceUid"] = datasource
 
 	// LogSourceType annotation (target)
-	logSourceType := getC(config.Target, i.config.ConversionDefaults.Target, "loki")
+	logSourceType := getC(config.Target, i.config.ConversionDefaults.Target, Loki)
 	rule.Annotations["LogSourceType"] = logSourceType
 
 	// Path to associated conversion file
 	rule.Annotations["ConversionFile"] = conversionFile
+
+	if i.config.IntegratorConfig.TemplateAnnotations != nil {
+		for key, value := range i.config.IntegratorConfig.TemplateAnnotations {
+			tmpl, err := template.New("annotation_" + key).Parse(value)
+			if err != nil {
+				return fmt.Errorf("error parsing template %s: %v", key, err)
+			}
+			var buf bytes.Buffer
+			if i.config.IntegratorConfig.TemplateAllRules {
+				err = tmpl.Execute(&buf, conversionObject.Rules)
+			} else {
+				err = tmpl.Execute(&buf, conversionObject.Rules[0])
+			}
+			if err != nil {
+				return fmt.Errorf("error executing template %s: %v", key, err)
+			}
+			rule.Annotations[key] = buf.String()
+		}
+	}
+
+	if rule.Labels == nil {
+		rule.Labels = make(map[string]string)
+	}
+
+	if i.config.IntegratorConfig.TemplateLabels != nil {
+		for key, value := range i.config.IntegratorConfig.TemplateLabels {
+			tmpl, err := template.New("label_" + key).Parse(value)
+			if err != nil {
+				return fmt.Errorf("error parsing template %s: %v", key, err)
+			}
+			var buf bytes.Buffer
+			if i.config.IntegratorConfig.TemplateAllRules {
+				err = tmpl.Execute(&buf, conversionObject.Rules)
+			} else {
+				err = tmpl.Execute(&buf, conversionObject.Rules[0])
+			}
+			if err != nil {
+				return fmt.Errorf("error executing template %s: %v", key, err)
+			}
+			rule.Labels[key] = buf.String()
+		}
+	}
 
 	return nil
 }
@@ -699,9 +745,37 @@ func (i *Integrator) processFrame(frame Frame, result *QueryTestResult) error {
 	return nil
 }
 
+// generateExploreLink creates a Grafana explore link based on the datasource type
+func (i *Integrator) generateExploreLink(query, datasource, datasourceType string, config ConversionConfig, defaultConf ConversionConfig) (string, error) {
+	customModel := getC(config.QueryModel, defaultConf.QueryModel, "")
+	escapedQuery, err := escapeQueryJSON(query)
+	if err != nil {
+		return "", fmt.Errorf("could not escape provided query: %s", query)
+	}
+
+	var pane string
+	switch {
+	case customModel != "":
+		pane = fmt.Sprintf(`{"yyz":{"datasource":"%[1]s","queries":[%[2]s],"range":{"from":"%[3]s","to":"%[4]s"}}}`, datasource, fmt.Sprintf(customModel, "A", datasource, escapedQuery), i.config.IntegratorConfig.From, i.config.IntegratorConfig.To)
+	case datasourceType == Loki:
+		pane = fmt.Sprintf(`{"yyz":{"datasource":"%[1]s","queries":[{"refId":"A","expr":"%[2]s","queryType":"range","datasource":{"type":"loki","uid":"%[1]s"},"editorMode":"code","direction":"backward"}],"range":{"from":"%[3]s","to":"%[4]s"}}}`, datasource, escapedQuery, i.config.IntegratorConfig.From, i.config.IntegratorConfig.To)
+	case datasourceType == Elasticsearch:
+		// For Elasticsearch, we need to include the full query structure with metrics and bucketAggs
+		pane = fmt.Sprintf(`{"yyz":{"datasource":"%[1]s","queries":[{"refId":"A","datasource":{"type":"elasticsearch","uid":"%[1]s"},"query":"%[2]s","alias":"","metrics":[{"type":"count","id":"1"}],"bucketAggs":[{"type":"date_histogram","id":"2","settings":{"interval":"auto"},"field":"@timestamp"}],"timeField":"@timestamp"}],"range":{"from":"%[3]s","to":"%[4]s"},"compact":false}}`, datasource, escapedQuery, i.config.IntegratorConfig.From, i.config.IntegratorConfig.To)
+	default:
+		// Fallback to a generic structure
+		pane = fmt.Sprintf(`{"yyz":{"datasource":"%[1]s","queries":[{"refId":"A","query":"%[2]s","datasource":{"type":"%[3]s","uid":"%[1]s"}}],"range":{"from":"%[4]s","to":"%[5]s"}}}`, datasource, escapedQuery, datasourceType, i.config.IntegratorConfig.From, i.config.IntegratorConfig.To)
+	}
+
+	return fmt.Sprintf("%s/explore?schemaVersion=1&panes=%s&orgId=%d", i.config.DeployerConfig.GrafanaInstance, url.QueryEscape(pane), i.config.IntegratorConfig.OrgID), nil
+}
+
 func (i *Integrator) TestQueries(queries []string, config, defaultConf ConversionConfig, timeoutDuration time.Duration) ([]QueryTestResult, error) {
 	queryResults := make([]QueryTestResult, 0, len(queries))
 	datasource := getC(config.DataSource, defaultConf.DataSource, "")
+	// Determine datasource type using the same logic as createAlertQuery
+	datasourceType := getC(config.DataSourceType, defaultConf.DataSourceType, getC(config.Target, defaultConf.Target, Loki))
+
 	for _, query := range queries {
 		resp, err := TestQuery(
 			query,
@@ -716,16 +790,15 @@ func (i *Integrator) TestQueries(queries []string, config, defaultConf Conversio
 			return nil, fmt.Errorf("error testing query %s: %v", query, err)
 		}
 
-		jsonQuery, err := json.Marshal(query)
+		// Generate explore link based on datasource type
+		exploreLink, err := i.generateExploreLink(query, datasource, datasourceType, config, defaultConf)
 		if err != nil {
-			return nil, fmt.Errorf("error marshalling query %s: %v", query, err)
+			return nil, fmt.Errorf("error generating explore link: %v", err)
 		}
-
-		pane := fmt.Sprintf(`{"yyz":{"datasource":"%[1]s","queries":[{"refId":"A","expr":%[2]s,"queryType":"range","datasource":{"type":"loki","uid":"%[1]s"},"editorMode":"code","direction":"backward"}],"range":{"from":"%[3]s","to":"%[4]s"}}}`, datasource, string(jsonQuery), i.config.IntegratorConfig.From, i.config.IntegratorConfig.To)
 		// Parse the response to extract statistics
 		result := QueryTestResult{
 			Datasource: datasource,
-			Link:       fmt.Sprintf("%s/explore?schemaVersion=1&panes=%s&orgId=%d", i.config.DeployerConfig.GrafanaInstance, url.QueryEscape(pane), i.config.IntegratorConfig.OrgID),
+			Link:       exploreLink,
 			Stats: Stats{
 				Fields: make(map[string]string),
 				Errors: make([]string, 0),
@@ -767,11 +840,11 @@ func getRuleUID(conversionName string, conversionID uuid.UUID) string {
 
 // createAlertQuery creates an AlertQuery based on the target data source and configuration
 func createAlertQuery(query string, refID string, datasource string, timerange definitions.RelativeTimeRange, config ConversionConfig, defaultConf ConversionConfig) (definitions.AlertQuery, error) {
-	datasourceType := getC(config.DataSourceType, defaultConf.DataSourceType, getC(config.Target, defaultConf.Target, "loki"))
+	datasourceType := getC(config.DataSourceType, defaultConf.DataSourceType, getC(config.Target, defaultConf.Target, Loki))
 	customModel := getC(config.QueryModel, defaultConf.QueryModel, "")
 
 	// Modify query based on target data source
-	if datasourceType == "loki" {
+	if datasourceType == Loki {
 		// if the query is not a metric query, we need to add a sum aggregation to it
 		if !strings.HasPrefix(query, "sum") {
 			query = fmt.Sprintf("sum(count_over_time(%s[$__auto]))", query)
@@ -796,10 +869,10 @@ func createAlertQuery(query string, refID string, datasource string, timerange d
 	switch {
 	case customModel != "":
 		alertQuery.Model = json.RawMessage(fmt.Sprintf(customModel, refID, datasource, escapedQuery))
-	case datasourceType == "loki":
+	case datasourceType == Loki:
 		alertQuery.QueryType = "instant"
 		alertQuery.Model = json.RawMessage(fmt.Sprintf(`{"refId":"%s","datasource":{"type":"loki","uid":"%s"},"hide":false,"expr":"%s","queryType":"instant","editorMode":"code"}`, refID, datasource, escapedQuery))
-	case datasourceType == "elasticsearch":
+	case datasourceType == Elasticsearch:
 		// Based on the Elasticsearch data source plugin
 		// https://github.com/grafana/grafana/blob/main/public/app/plugins/datasource/elasticsearch/dataquery.gen.ts
 		alertQuery.Model = json.RawMessage(fmt.Sprintf(`{"refId":"%s","datasource":{"type":"elasticsearch","uid":"%s"},"query":"%s","alias":"","metrics":[{"type":"count","id":"1"}],"bucketAggs":[{"type":"date_histogram","id":"2","settings":{"interval":"auto"}}],"intervalMs":2000,"maxDataPoints":1354,"timeField":"@timestamp"}`, refID, datasource, escapedQuery))
