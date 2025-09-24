@@ -89,6 +89,8 @@ jobs:
           path: ./sigma-rule-deployment-integration-test
       - name: Create new branch
         working-directory: ./sigma-rule-deployment-integration-test
+        env:
+          GITHUB_PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          git checkout -b integration-test-pr-${{ github.pull_request.number }}
-          git push origin integration-test-pr-${{ github.pull_request.number }}
+          git checkout -b integration-test-pr-${GITHUB_PR_NUMBER}
+          git push origin integration-test-pr-${GITHUB_PR_NUMBER}
