@@ -122,7 +122,7 @@ jobs:
 
           git commit -m "update integration test configuration" --allow-empty
 
-          git push origin "integration-test-pr-${GITHUB_PR_NUMBER}"
+          git push origin "integration-test-pr-${GITHUB_PR_NUMBER}" --force
 
           if [ $STATUS -ne 0 ]; then
             gh pr create --title "Integration Test PR ${GITHUB_PR_NUMBER}" --body "This PR is created by the Sigma Rule Deployment App to test the integration of the Sigma Rule Deployment App with the Sigma Rule Deployment Integration Test App. for grafana/sigma-rule-deployment#${GITHUB_PR_NUMBER}" --head "integration-test-pr-${GITHUB_PR_NUMBER}" --base main
