@@ -96,12 +96,12 @@ jobs:
           git fetch
 
           STATUS=0
-          git rev-parse --verify integration-test-pr-${GITHUB_PR_NUMBER} 2>/dev/null || STATUS=$?
+          git rev-parse --verify "integration-test-pr-${GITHUB_PR_NUMBER}" 2>/dev/null || STATUS=$?
 
           if [ $STATUS -eq 0 ]; then
-            git checkout integration-test-pr-${GITHUB_PR_NUMBER}
+            git checkout "integration-test-pr-${GITHUB_PR_NUMBER}"
           else
-            git checkout -b integration-test-pr-${GITHUB_PR_NUMBER}
+            git checkout -b "integration-test-pr-${GITHUB_PR_NUMBER}"
           fi
 
           rm -r ./rules
@@ -118,8 +118,8 @@ jobs:
 
           git commit -m "update integration test configuration" --allow-empty
 
-          git push origin integration-test-pr-${GITHUB_PR_NUMBER}
+          git push origin "integration-test-pr-${GITHUB_PR_NUMBER}"
 
           if [ $STATUS -ne 0 ]; then
-            gh pr create --title "Integration Test PR ${GITHUB_PR_NUMBER}" --body "This PR is created by the Sigma Rule Deployment App to test the integration of the Sigma Rule Deployment App with the Sigma Rule Deployment Integration Test App. for grafana/sigma-rule-deployment#${GITHUB_PR_NUMBER}" --head integration-test-pr-${GITHUB_PR_NUMBER} --base main
+            gh pr create --title "Integration Test PR ${GITHUB_PR_NUMBER}" --body "This PR is created by the Sigma Rule Deployment App to test the integration of the Sigma Rule Deployment App with the Sigma Rule Deployment Integration Test App. for grafana/sigma-rule-deployment#${GITHUB_PR_NUMBER}" --head "integration-test-pr-${GITHUB_PR_NUMBER}" --base main
           fi
