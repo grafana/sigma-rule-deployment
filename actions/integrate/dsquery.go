@@ -45,16 +45,38 @@ type GrafanaDatasource struct {
 	ReadOnly          bool            `json:"readOnly,omitempty"`
 }
 
+// BucketAgg represents a bucket aggregation for Elasticsearch queries
+type BucketAgg struct {
+	Type     string         `json:"type"`
+	ID       string         `json:"id"`
+	Settings map[string]any `json:"settings,omitempty"`
+	Field    string         `json:"field,omitempty"`
+}
+
+// Metric represents a metric for Elasticsearch queries
+type Metric struct {
+	Type string `json:"type"`
+	ID   string `json:"id"`
+}
+
 type Query struct {
 	RefID         string            `json:"refId"`
-	Expr          string            `json:"expr"`
-	QueryType     string            `json:"queryType"`
+	Expr          string            `json:"expr,omitempty"`  // For Loki
+	Query         string            `json:"query,omitempty"` // For Elasticsearch
+	QueryType     string            `json:"queryType,omitempty"`
 	Datasource    GrafanaDatasource `json:"datasource"`
 	EditorMode    string            `json:"editorMode,omitempty"`
-	MaxLines      int               `json:"maxLines"`
-	Format        string            `json:"format"`
-	IntervalMs    int               `json:"intervalMs"`
-	MaxDataPoints int               `json:"maxDataPoints"`
+	MaxLines      int               `json:"maxLines,omitempty"`
+	Format        string            `json:"format,omitempty"`
+	IntervalMs    int               `json:"intervalMs,omitempty"`
+	MaxDataPoints int               `json:"maxDataPoints,omitempty"`
+
+	// Elasticsearch-specific fields
+	Alias        string      `json:"alias,omitempty"`
+	Metrics      []Metric    `json:"metrics,omitempty"`
+	BucketAggs   []BucketAgg `json:"bucketAggs,omitempty"`
+	TimeField    string      `json:"timeField,omitempty"`
+	DatasourceID int         `json:"datasourceId,omitempty"`
 }
 
 type Body struct {
@@ -86,24 +108,62 @@ func (h *HTTPDatasourceQuery) ExecuteQuery(
 		return nil, fmt.Errorf("failed to get datasource: %v", err)
 	}
 
-	body := Body{
-		Queries: []Query{
-			{
-				RefID:     "A",
-				Expr:      query,
-				QueryType: "range",
-				Datasource: GrafanaDatasource{
-					Type: datasource.Type,
-					UID:  datasource.UID,
-				},
-				MaxLines:      100,
-				Format:        "time_series",
-				IntervalMs:    2000,
-				MaxDataPoints: 100,
+	var queryObj Query
+
+	// Configure query based on datasource type
+	switch datasource.Type {
+	case Elasticsearch:
+		queryObj = Query{
+			RefID: "A",
+			Query: query,
+			Datasource: GrafanaDatasource{
+				Type: datasource.Type,
+				UID:  datasource.UID,
 			},
-		},
-		From: from,
-		To:   to,
+			Metrics: []Metric{
+				{
+					Type: "count",
+					ID:   "1",
+				},
+			},
+			BucketAggs: []BucketAgg{
+				{
+					Type: "date_histogram",
+					ID:   "2",
+					Settings: map[string]any{
+						"interval": "auto",
+					},
+					Field: "@timestamp",
+				},
+			},
+			TimeField:     "@timestamp",
+			DatasourceID:  datasource.ID,
+			IntervalMs:    2000,
+			MaxDataPoints: 100,
+		}
+	case Loki:
+		queryObj = Query{
+			RefID:     "A",
+			Expr:      query,
+			QueryType: "range",
+			Datasource: GrafanaDatasource{
+				Type: datasource.Type,
+				UID:  datasource.UID,
+			},
+			MaxLines:      100,
+			Format:        "time_series",
+			IntervalMs:    2000,
+			MaxDataPoints: 100,
+		}
+	default:
+		// No default configuration for other datasource types
+		return nil, fmt.Errorf("unsupported datasource type: %s", datasource.Type)
+	}
+
+	body := Body{
+		Queries: []Query{queryObj},
+		From:    from,
+		To:      to,
 	}
 
 	jsonBody, err := json.Marshal(body)

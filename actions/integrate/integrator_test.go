@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1141,6 +1142,462 @@ func (t *testDatasourceQueryWithErrors) ExecuteQuery(query, dsName, baseURL, api
 }
 
 // TestIntegrationWithQueryTestingErrors tests the core behavior of continue_on_query_testing_errors
+func TestGenerateExploreLink(t *testing.T) {
+	tests := []struct {
+		name                 string
+		query                string
+		datasource           string
+		datasourceType       string
+		from                 string
+		to                   string
+		orgID                int64
+		grafanaURL           string
+		wantURLContains      []string
+		wantPanesContains    []string
+		wantPanesNotContains []string
+		wantError            bool
+	}{
+		{
+			name:           "Loki explore link generation",
+			query:          `{job="loki"} |= "error"`,
+			datasource:     "loki-uid-123",
+			datasourceType: Loki,
+			from:           "now-1h",
+			to:             "now",
+			orgID:          1,
+			grafanaURL:     "https://test.grafana.com",
+			wantURLContains: []string{
+				"https://test.grafana.com/explore",
+				"schemaVersion=1",
+				"orgId=1",
+			},
+			wantPanesContains: []string{
+				`"datasource":"loki-uid-123"`,
+				`"type":"loki"`,
+				`"expr":"{job=\"loki\"} |= \"error\""`,
+				`"queryType":"range"`,
+				`"editorMode":"code"`,
+				`"direction":"backward"`,
+				`"from":"now-1h"`,
+				`"to":"now"`,
+			},
+			wantPanesNotContains: []string{
+				`"query":`,
+				`"metrics"`,
+				`"bucketAggs"`,
+				`"timeField"`,
+			},
+			wantError: false,
+		},
+		{
+			name:           "Elasticsearch explore link generation",
+			query:          `type:log AND (level:(ERROR OR FATAL OR CRITICAL))`,
+			datasource:     "es-uid-456",
+			datasourceType: Elasticsearch,
+			from:           "now-2h",
+			to:             "now-1h",
+			orgID:          2,
+			grafanaURL:     "https://prod.grafana.com",
+			wantURLContains: []string{
+				"https://prod.grafana.com/explore",
+				"schemaVersion=1",
+				"orgId=2",
+			},
+			wantPanesContains: []string{
+				`"datasource":"es-uid-456"`,
+				`"type":"elasticsearch"`,
+				`"query":"type:log AND (level:(ERROR OR FATAL OR CRITICAL))"`,
+				`"metrics":[{"type":"count","id":"1"}]`,
+				`"bucketAggs":[{"type":"date_histogram","id":"2","settings":{"interval":"auto"},"field":"@timestamp"}]`,
+				`"timeField":"@timestamp"`,
+				`"compact":false`,
+				`"from":"now-2h"`,
+				`"to":"now-1h"`,
+			},
+			wantPanesNotContains: []string{
+				`"expr":`,
+				`"queryType"`,
+				`"editorMode"`,
+				`"direction"`,
+			},
+			wantError: false,
+		},
+		{
+			name:           "Generic datasource explore link generation",
+			query:          `SELECT * FROM logs WHERE level = 'ERROR'`,
+			datasource:     "generic-uid-789",
+			datasourceType: "prometheus",
+			from:           "now-30m",
+			to:             "now",
+			orgID:          3,
+			grafanaURL:     "https://dev.grafana.com",
+			wantURLContains: []string{
+				"https://dev.grafana.com/explore",
+				"schemaVersion=1",
+				"orgId=3",
+			},
+			wantPanesContains: []string{
+				`"datasource":"generic-uid-789"`,
+				`"type":"prometheus"`,
+				`"query":"SELECT * FROM logs WHERE level = 'ERROR'"`,
+				`"from":"now-30m"`,
+				`"to":"now"`,
+			},
+			wantPanesNotContains: []string{
+				`"expr":`,
+				`"queryType"`,
+				`"editorMode"`,
+				`"direction"`,
+				`"metrics"`,
+				`"bucketAggs"`,
+				`"timeField"`,
+			},
+			wantError: false,
+		},
+		{
+			name:           "Empty datasource should work fine",
+			query:          `{job="test"}`,
+			datasource:     "",
+			datasourceType: Loki,
+			from:           "now-1h",
+			to:             "now",
+			orgID:          1,
+			grafanaURL:     "https://test.grafana.com",
+			wantURLContains: []string{
+				"https://test.grafana.com/explore",
+				"schemaVersion=1",
+				"orgId=1",
+			},
+			wantPanesContains: []string{
+				`"datasource":""`,
+				`"type":"loki"`,
+				`"expr":"{job=\"test\"}"`,
+			},
+			wantPanesNotContains: []string{
+				`"query":`,
+				`"metrics"`,
+				`"bucketAggs"`,
+				`"timeField"`,
+			},
+			wantError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create integrator with test configuration
+			integrator := &Integrator{
+				config: Configuration{
+					IntegratorConfig: IntegrationConfig{
+						From:  tt.from,
+						To:    tt.to,
+						OrgID: tt.orgID,
+					},
+					DeployerConfig: DeploymentConfig{
+						GrafanaInstance: tt.grafanaURL,
+					},
+				},
+			}
+
+			// Test generateExploreLink
+			exploreLink, err := integrator.generateExploreLink(tt.query, tt.datasource, tt.datasourceType, ConversionConfig{}, ConversionConfig{})
+
+			if tt.wantError {
+				assert.Error(t, err)
+				return
+			}
+
+			assert.NoError(t, err)
+			assert.NotEmpty(t, exploreLink)
+
+			// Verify URL components
+			for _, expected := range tt.wantURLContains {
+				assert.Contains(t, exploreLink, expected, "Explore link should contain: %s", expected)
+			}
+
+			// Parse the URL to extract the panes parameter
+			parsedURL, err := url.Parse(exploreLink)
+			assert.NoError(t, err)
+
+			panesParam := parsedURL.Query().Get("panes")
+			assert.NotEmpty(t, panesParam, "panes parameter should be present")
+
+			// URL decode the panes parameter
+			decodedPanes, err := url.QueryUnescape(panesParam)
+			assert.NoError(t, err)
+			assert.NotEmpty(t, decodedPanes, "decoded panes should not be empty")
+
+			// Verify the decoded panes contains expected components
+			for _, expected := range tt.wantPanesContains {
+				assert.Contains(t, decodedPanes, expected, "Decoded panes should contain: %s", expected)
+			}
+
+			// Verify the decoded panes does not contain unexpected components
+			for _, unexpected := range tt.wantPanesNotContains {
+				assert.NotContains(t, decodedPanes, unexpected, "Decoded panes should not contain: %s", unexpected)
+			}
+
+			// Verify the link is properly URL encoded (raw JSON should not be visible in the URL)
+			assert.Contains(t, exploreLink, "panes=")
+			assert.NotContains(t, exploreLink, `{"yyz":`)
+		})
+	}
+}
+
+func TestIntegratorWithExploreLinkGeneration(t *testing.T) {
+	tests := []struct {
+		name                 string
+		datasourceType       string
+		query                string
+		datasource           string
+		wantURLContains      []string
+		wantPanesContains    []string
+		wantPanesNotContains []string
+	}{
+		{
+			name:           "Loki datasource generates correct explore link",
+			datasourceType: Loki,
+			query:          `{job="loki"} |= "error"`,
+			datasource:     "test-loki-datasource",
+			wantURLContains: []string{
+				"https://test.grafana.com/explore",
+				"schemaVersion=1",
+				"orgId=1",
+			},
+			wantPanesContains: []string{
+				`"datasource":"test-loki-datasource"`,
+				`"type":"loki"`,
+				`"expr":"{job=\"loki\"} |= \"error\""`,
+				`"queryType":"range"`,
+			},
+			wantPanesNotContains: []string{
+				`"query":`,
+				`"metrics"`,
+				`"bucketAggs"`,
+				`"timeField"`,
+			},
+		},
+		{
+			name:           "Elasticsearch datasource generates correct explore link",
+			datasourceType: Elasticsearch,
+			query:          `type:log AND (level:(ERROR OR FATAL OR CRITICAL))`,
+			datasource:     "test-elasticsearch-datasource",
+			wantURLContains: []string{
+				"https://test.grafana.com/explore",
+				"schemaVersion=1",
+				"orgId=1",
+			},
+			wantPanesContains: []string{
+				`"datasource":"test-elasticsearch-datasource"`,
+				`"type":"elasticsearch"`,
+				`"query":"type:log AND (level:(ERROR OR FATAL OR CRITICAL))"`,
+				`"metrics":[{"type":"count","id":"1"}]`,
+				`"bucketAggs":[{"type":"date_histogram"`,
+				`"timeField":"@timestamp"`,
+			},
+			wantPanesNotContains: []string{
+				`"expr":`,
+				`"queryType"`,
+				`"editorMode"`,
+				`"direction"`,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create test queries
+			testQueries := []string{tt.query}
+
+			// Create temporary test directory
+			testDir := filepath.Join("testdata", "test_explore_link", tt.name)
+			err := os.MkdirAll(testDir, 0o755)
+			assert.NoError(t, err)
+			defer os.RemoveAll(testDir)
+
+			// Create conversion and deployment subdirectories
+			convPath := filepath.Join(testDir, "conv")
+			deployPath := filepath.Join(testDir, "deploy")
+			err = os.MkdirAll(convPath, 0o755)
+			assert.NoError(t, err)
+			err = os.MkdirAll(deployPath, 0o755)
+			assert.NoError(t, err)
+
+			// Create test conversion output
+			convOutput := ConversionOutput{
+				Queries:        testQueries,
+				ConversionName: "test_explore_link",
+				Rules: []SigmaRule{
+					{
+						ID:    "996f8884-9144-40e7-ac63-29090ccde9a0",
+						Title: "Test Explore Link Rule",
+					},
+				},
+			}
+
+			// Create test configuration with query testing enabled
+			config := Configuration{
+				Folders: FoldersConfig{
+					ConversionPath: convPath,
+					DeploymentPath: deployPath,
+				},
+				ConversionDefaults: ConversionConfig{
+					Target:         tt.datasourceType,
+					DataSource:     tt.datasource,
+					DataSourceType: tt.datasourceType,
+				},
+				Conversions: []ConversionConfig{
+					{
+						Name:           "test_explore_link",
+						RuleGroup:      "Explore Link Test Rules",
+						TimeWindow:     "5m",
+						DataSource:     tt.datasource,
+						DataSourceType: tt.datasourceType,
+					},
+				},
+				IntegratorConfig: IntegrationConfig{
+					FolderID:    "test-folder",
+					OrgID:       1,
+					TestQueries: true,
+					From:        "now-1h",
+					To:          "now",
+				},
+				DeployerConfig: DeploymentConfig{
+					GrafanaInstance: "https://test.grafana.com",
+					Timeout:         "5s",
+				},
+			}
+
+			// Create test conversion output file
+			convBytes, err := json.Marshal(convOutput)
+			assert.NoError(t, err)
+			convFile := filepath.Join(convPath, "test_explore_link.json")
+			err = os.WriteFile(convFile, convBytes, 0o600)
+			assert.NoError(t, err)
+
+			// Create mock query executor
+			mockDatasourceQuery := newTestDatasourceQuery()
+
+			// Add mock response for our test query
+			mockDatasourceQuery.AddMockResponse(tt.query, []byte(`{
+				"results": {
+					"A": {
+						"frames": [{
+							"schema": {
+								"fields": [
+									{"name": "Time", "type": "time"},
+									{"name": "Line", "type": "string"}
+								]
+							},
+							"data": {
+								"values": [
+									[1625126400000, 1625126460000],
+									["test log line", "another test log"]
+								]
+							}
+						}]
+					}
+				}
+			}`))
+
+			// Create a temporary output file for capturing outputs
+			outputFile, err := os.CreateTemp("", "github-output")
+			assert.NoError(t, err)
+			defer os.Remove(outputFile.Name())
+
+			// Setup environment for the test
+			os.Setenv("GITHUB_OUTPUT", outputFile.Name())
+			defer os.Unsetenv("GITHUB_OUTPUT")
+
+			// Set up integrator
+			integrator := &Integrator{
+				config:       config,
+				addedFiles:   []string{convFile},
+				removedFiles: []string{},
+			}
+
+			// Save original executor and restore after test
+			originalDatasourceQuery := DefaultDatasourceQuery
+			DefaultDatasourceQuery = mockDatasourceQuery
+			defer func() {
+				DefaultDatasourceQuery = originalDatasourceQuery
+			}()
+
+			// Set environment variable for API token
+			os.Setenv("INTEGRATOR_GRAFANA_SA_TOKEN", "test-api-token")
+			defer os.Unsetenv("INTEGRATOR_GRAFANA_SA_TOKEN")
+
+			// Run integration
+			err = integrator.Run()
+			assert.NoError(t, err)
+
+			// Read the output file to get the captured outputs
+			outputBytes, err := os.ReadFile(outputFile.Name())
+			assert.NoError(t, err)
+			outputContent := string(outputBytes)
+
+			// Verify test_query_results was captured
+			assert.Contains(t, outputContent, "test_query_results=")
+
+			// Extract the test_query_results value
+			lines := strings.Split(outputContent, "\n")
+			var testQueryResults string
+			for _, line := range lines {
+				if strings.HasPrefix(line, "test_query_results=") {
+					testQueryResults = strings.TrimPrefix(line, "test_query_results=")
+					break
+				}
+			}
+			assert.NotEmpty(t, testQueryResults)
+
+			// Parse and validate the query test results
+			var queryResults map[string][]QueryTestResult
+			err = json.Unmarshal([]byte(testQueryResults), &queryResults)
+			assert.NoError(t, err)
+			assert.Equal(t, len(testQueries), len(queryResults[convFile]))
+
+			// Verify the explore link in the query results
+			for _, results := range queryResults {
+				for _, queryTestResult := range results {
+					assert.Equal(t, tt.datasource, queryTestResult.Datasource)
+					assert.NotEmpty(t, queryTestResult.Link)
+
+					// Verify URL components
+					for _, expected := range tt.wantURLContains {
+						assert.Contains(t, queryTestResult.Link, expected, "Explore link should contain: %s", expected)
+					}
+
+					// Parse the URL to extract the panes parameter
+					parsedURL, err := url.Parse(queryTestResult.Link)
+					assert.NoError(t, err)
+
+					panesParam := parsedURL.Query().Get("panes")
+					assert.NotEmpty(t, panesParam, "panes parameter should be present")
+
+					// URL decode the panes parameter
+					decodedPanes, err := url.QueryUnescape(panesParam)
+					assert.NoError(t, err)
+					assert.NotEmpty(t, decodedPanes, "decoded panes should not be empty")
+
+					// Verify the decoded panes contains expected components
+					for _, expected := range tt.wantPanesContains {
+						assert.Contains(t, decodedPanes, expected, "Decoded panes should contain: %s", expected)
+					}
+
+					// Verify the decoded panes does not contain unexpected components
+					for _, unexpected := range tt.wantPanesNotContains {
+						assert.NotContains(t, decodedPanes, unexpected, "Decoded panes should not contain: %s", unexpected)
+					}
+
+					// Verify the link is properly URL encoded (raw JSON should not be visible in the URL)
+					assert.Contains(t, queryTestResult.Link, "panes=")
+					assert.NotContains(t, queryTestResult.Link, `{"yyz":`)
+				}
+			}
+		})
+	}
+}
+
 func TestIntegrationWithQueryTestingErrors(t *testing.T) {
 	tests := []struct {
 		name                     string
