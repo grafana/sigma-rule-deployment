@@ -1,0 +1,20 @@
+folders:
+  conversions: ./conversions
+  deployments: ./deployments
+conversions:
+  - name: Test Rule 1
+    description: Tests that the first rule is converted correctly with it's pipelines
+    outputs:
+      - name: github_audit_test-1.json
+        queries:
+          - "{service_namespace=`cicd-o11y`} | logfmt | action=`codespaces.delete` or action=`environment.delete` or action=`project.delete` or action=`repo.destroy`"
+
+integrations:
+  - name: Test Integration 1
+    description: Tests that the first integration is converted correctly with it's pipelines
+    outputs:
+      - name: github_audit_test-1
+        alerting_rules:
+          - refId: A0
+            model:
+              expr: sum(count_over_time({service_namespace=`cicd-o11y`} | logfmt | action=`codespaces.delete` or action=`environment.delete` or action=`project.delete` or action=`repo.destroy`[$__auto]))

@@ -1,0 +1,13 @@
+name: Archived Repos
+priority: 100
+transformations:
+  - id: custom_log_source
+    type: set_custom_log_source
+    selection:
+      service_namespace: cicd-o11y
+      ci_github_workflow_run_path|fieldref: ci_github_workflow_run_path
+  - id: custom_parser
+    type: set_custom_attribute
+    attribute: loki_parser
+    value: >-
+      | logfmt
