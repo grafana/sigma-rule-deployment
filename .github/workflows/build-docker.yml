@@ -115,7 +115,7 @@ jobs:
           git config user.email "sigma-rule-deployment-app@grafana.com"
           git config user.name "Sigma Rule Deployment App"
 
-          git commit -m "update integration test configuration"
+          git commit -m "update integration test configuration" --allow-empty
 
           git push origin integration-test-pr-${GITHUB_PR_NUMBER}
 
