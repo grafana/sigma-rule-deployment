@@ -92,6 +92,7 @@ jobs:
         env:
           GITHUB_PR_NUMBER: ${{ github.event.pull_request.number }}
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+          ACTION_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           git fetch
 
@@ -110,6 +111,8 @@ jobs:
           rm config.yml
 
           cp -R ../sigma-rule-deployment/integration-test/* ./
+          sed -i "s/uses: grafana\/sigma-rule-deployment\/actions\/convert@.*/uses: grafana\/sigma-rule-deployment\/actions\/convert@$ACTION_SHA/g" ./.github/workflows/convert-integrate-test.yml
+          sed -i "s/uses: grafana\/sigma-rule-deployment\/actions\/integrate@.*/uses: grafana\/sigma-rule-deployment\/actions\/integrate@$ACTION_SHA/g" ./.github/workflows/convert-integrate-test.yml
 
           git add -A
 

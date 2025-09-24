@@ -1,0 +1,38 @@
+name: "Close Integration Test PR"
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - closed
+
+jobs:
+  close-integration-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Setup Token
+        uses: grafana/shared-workflows/actions/get-vault-secrets@get-vault-secrets/v1.3.0
+        with:
+          repo_secrets: |
+            GITHUB_APP_ID=github-app:app-id
+            GITHUB_CLIENT_ID=github-app:client-id
+            GITHUB_CLIENT_SECRET=github-app:client-secret
+            GITHUB_APP_PRIVATE_KEY=github-app:client-pem
+      - name: Generate Token
+        id: generate-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ env.GITHUB_APP_ID }}
+          private-key: ${{ env.GITHUB_APP_PRIVATE_KEY }}
+          owner: grafana
+          repositories: |
+            sigma-rule-deployment-integration-test
+
+      - name: Close PR
+        env:
+          GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
+          GITHUB_PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr close "integration-test-pr-${GITHUB_PR_NUMBER}" -c "Closed by GitHub Actions, tests completed" -d
