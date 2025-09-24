@@ -46,3 +46,16 @@ jobs:
           tags: |
             ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${{ github.sha }}
           push: true
+  test:
+    name: "Integration Testing"
+    runs-on: ubuntu-latest
+    needs:
+      - build
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Setup Integration Tests
+        uses: grafana/shared-workflows/actions/create-github-app-token@create-github-app-token/v0.2.0
+        with:
+          github_app: sigma-rule-deployment-app
