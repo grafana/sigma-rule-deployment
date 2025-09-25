@@ -53,10 +53,10 @@ runs:
     - name: Determine Image Reference
       id: image-ref
       shell: bash
+      env:
+        ACTION_REF: ${{ github.action_ref }}
       run: |
-        ACTION_REF="${{ github.action_ref }}"
-        
-        # Check if the action_ref is a tag (starts with v followed by numbers/dots)
+        # Check if the ACTION_REF is a tag (starts with v followed by numbers/dots)
         if [[ "$ACTION_REF" =~ ^v[0-9]+(\.[0-9]+)*(\.[0-9]+)?$ ]]; then
           echo "image_ref=$ACTION_REF" >> $GITHUB_OUTPUT
           echo "Using tag: $ACTION_REF"
