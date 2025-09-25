@@ -7,7 +7,7 @@ conversions:
     outputs:
       - name: github_audit_test-1.json
         queries:
-          - "{service_namespace=`cicd-o11y`} | logfmt | action=`codespaces.delete` or action=`environment.delete` or action=`project.delete` or action=`repo.destroy`"
+          - "{service_namespace=`cicd-o11y`} | logfmt | action=`repo.destroy`"
 
 integrations:
   - name: Test Integration 1
@@ -17,4 +17,4 @@ integrations:
         alerting_rules:
           - refId: A0
             model:
-              expr: sum(count_over_time({service_namespace=`cicd-o11y`} | logfmt | action=`codespaces.delete` or action=`environment.delete` or action=`project.delete` or action=`repo.destroy`[$__auto]))
+              expr: sum(count_over_time({service_namespace=`cicd-o11y`} | logfmt |action=`repo.destroy`[$__auto]))
