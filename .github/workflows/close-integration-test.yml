@@ -8,7 +8,9 @@ on:
 jobs:
   close-integration-test:
     runs-on: ubuntu-latest
-
+    permissions:
+      id-token: write
+      contents: read
     steps:
       - name: Setup Token
         uses: grafana/shared-workflows/actions/get-vault-secrets@get-vault-secrets/v1.3.0
