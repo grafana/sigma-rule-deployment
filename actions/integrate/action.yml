@@ -65,6 +65,23 @@ runs:
         registry: ghcr.io
         username: ${{ github.actor }}
         password: ${{ github.token }}
+    - name: Determine Image Reference
+      id: image-ref
+      shell: bash
+      run: |
+        ACTION_REF="${{ github.action_ref }}"
+        
+        # Check if the action_ref is a tag (starts with v followed by numbers/dots)
+        if [[ "$ACTION_REF" =~ ^v[0-9]+(\.[0-9]+)*(\.[0-9]+)?$ ]]; then
+          echo "image_ref=$ACTION_REF" >> $GITHUB_OUTPUT
+          echo "Using tag: $ACTION_REF"
+        elif [[ "$ACTION_REF" == "latest" ]]; then
+          echo "image_ref=latest" >> $GITHUB_OUTPUT
+          echo "Using latest tag"
+        else
+          echo "image_ref=sha-$ACTION_REF" >> $GITHUB_OUTPUT
+          echo "Using SHA: sha-$ACTION_REF"
+        fi
     - name: Identify relevant commits
       if: ${{ github.event_name == 'pull_request' && inputs.changed_files_from_base == 'false' }}
       id: commits
@@ -128,7 +145,7 @@ runs:
         DELETED_FILES: ${{ steps.changed-files.outputs.deleted_files }}
         ALL_RULES: ${{ inputs.all_rules }}
         CONTINUE_ON_QUERY_TESTING_ERRORS: ${{ inputs.continue_on_query_testing_errors }}
-        IMAGE_REF: ${{ github.action_ref == 'latest' && 'latest' || format('sha-{0}', github.action_ref) }}
+        IMAGE_REF: ${{ steps.image-ref.outputs.image_ref }}
       run: |
         docker run --rm \
             -v "$(pwd):/sigma-rules" \
