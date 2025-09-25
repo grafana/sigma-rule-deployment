@@ -33,4 +33,4 @@ jobs:
           GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
           GITHUB_PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          gh pr close --repo grafana/sigma-rule-deployment-integration-test "integration-test-pr-${GITHUB_PR_NUMBER}" -c "Closed by GitHub Actions, tests completed" -d|| true
+          gh pr close --repo grafana/sigma-rule-deployment-integration-test "integration-test-pr-${GITHUB_PR_NUMBER}" -c "Closed by GitHub Actions, tests completed" -d || true
