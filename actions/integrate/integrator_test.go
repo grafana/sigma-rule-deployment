@@ -908,7 +908,7 @@ func (t *testDatasourceQuery) GetDatasource(dsName, _, _ string, _ time.Duration
 	}, nil
 }
 
-func (t *testDatasourceQuery) ExecuteQuery(query, dsName, _, _, _, _ string, _ time.Duration) ([]byte, error) {
+func (t *testDatasourceQuery) ExecuteQuery(query, dsName, _, _, _, _, _, _ string, _ time.Duration) ([]byte, error) {
 	t.queryLog = append(t.queryLog, query)
 	t.datasourceLog = append(t.datasourceLog, dsName)
 
@@ -1195,14 +1195,14 @@ func (t *testDatasourceQueryWithErrors) AddMockError(query string, err error) {
 	t.mockErrors[query] = err
 }
 
-func (t *testDatasourceQueryWithErrors) ExecuteQuery(query, dsName, baseURL, apiKey, from, to string, timeout time.Duration) ([]byte, error) {
+func (t *testDatasourceQueryWithErrors) ExecuteQuery(query, dsName, baseURL, apiKey, refID, from, to, customModel string, timeout time.Duration) ([]byte, error) {
 	// Check if we should return an error for this query
 	if err, exists := t.mockErrors[query]; exists {
 		return nil, err
 	}
 
 	// Otherwise use the parent implementation
-	return t.testDatasourceQuery.ExecuteQuery(query, dsName, baseURL, apiKey, from, to, timeout)
+	return t.testDatasourceQuery.ExecuteQuery(query, dsName, baseURL, apiKey, refID, from, to, customModel, timeout)
 }
 
 // TestIntegrationWithQueryTestingErrors tests the core behavior of continue_on_query_testing_errors

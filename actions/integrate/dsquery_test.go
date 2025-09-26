@@ -4,6 +4,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"testing"
 	"time"
@@ -176,7 +177,7 @@ func TestTestQueryLoki(t *testing.T) {
 		httpmock.NewStringResponder(200, string(queryResponseJSON)))
 
 	// Test successful case
-	result, err := TestQuery(query, dsName, baseURL, apiKey, from, to, timeout)
+	result, err := TestQuery(query, dsName, baseURL, apiKey, "A", from, to, "", timeout)
 	require.NoError(t, err)
 
 	// Verify the result contains expected data
@@ -280,7 +281,7 @@ func TestTestQueryElasticsearch(t *testing.T) {
 		httpmock.NewStringResponder(200, string(queryResponseJSON)))
 
 	// Test successful case
-	result, err := TestQuery(query, dsName, baseURL, apiKey, from, to, timeout)
+	result, err := TestQuery(query, dsName, baseURL, apiKey, "A", from, to, "", timeout)
 	require.NoError(t, err)
 
 	// Verify the result contains expected data
@@ -357,7 +358,7 @@ func TestTestQueryUnsupportedDatasourceType(t *testing.T) {
 		httpmock.NewStringResponder(200, string(datasourceJSON)))
 
 	// Test that ExecuteQuery returns an error for unsupported datasource type
-	result, err := TestQuery(query, dsName, baseURL, apiKey, from, to, timeout)
+	result, err := TestQuery(query, dsName, baseURL, apiKey, "A", from, to, "", timeout)
 
 	// Verify that an error is returned
 	require.Error(t, err)
@@ -408,7 +409,7 @@ func TestTestQueryHTTPError(t *testing.T) {
 		httpmock.NewStringResponder(500, `{"error": "Internal server error"}`))
 
 	// Test error case
-	result, err := TestQuery(query, dsName, baseURL, apiKey, from, to, timeout)
+	result, err := TestQuery(query, dsName, baseURL, apiKey, "A", from, to, "", timeout)
 	require.Error(t, err)
 	assert.Nil(t, result)
 	assert.Contains(t, err.Error(), "HTTP error 500 when querying datasource")
@@ -455,7 +456,7 @@ func TestTestQueryInvalidJSONResponse(t *testing.T) {
 		httpmock.NewStringResponder(200, `invalid json response`))
 
 	// Test error case
-	result, err := TestQuery(query, dsName, baseURL, apiKey, from, to, timeout)
+	result, err := TestQuery(query, dsName, baseURL, apiKey, "A", from, to, "", timeout)
 	require.Error(t, err)
 	assert.Nil(t, result)
 	assert.Contains(t, err.Error(), "invalid JSON response")
@@ -524,7 +525,7 @@ func TestElasticsearchQueryStructure(t *testing.T) {
 		})
 
 	// Test successful case
-	result, err := TestQuery(query, dsName, baseURL, apiKey, from, to, timeout)
+	result, err := TestQuery(query, dsName, baseURL, apiKey, "A", from, to, "", timeout)
 	require.NoError(t, err)
 	assert.NotNil(t, result)
 
@@ -648,7 +649,7 @@ func TestLokiQueryStructure(t *testing.T) {
 		})
 
 	// Test successful case
-	result, err := TestQuery(query, dsName, baseURL, apiKey, from, to, timeout)
+	result, err := TestQuery(query, dsName, baseURL, apiKey, "A", from, to, "", timeout)
 	require.NoError(t, err)
 	assert.NotNil(t, result)
 
@@ -691,5 +692,118 @@ func TestLokiQueryStructure(t *testing.T) {
 	// Verify the requests were made
 	info := httpmock.GetCallCountInfo()
 	assert.Equal(t, 1, info["GET http://grafana:3000/api/datasources/name/test-loki"])
+	assert.Equal(t, 1, info["POST http://grafana:3000/api/ds/query"])
+}
+
+func TestTestQueryElasticsearchWithCustomModel(t *testing.T) {
+	// Activate httpmock
+	httpmock.Activate(t)
+	defer httpmock.DeactivateAndReset()
+
+	// Mock datasource response
+	httpmock.RegisterResponder("GET", "http://grafana:3000/api/datasources/name/test-elasticsearch",
+		httpmock.NewJsonResponderOrPanic(200, map[string]any{
+			"id":   1,
+			"uid":  "test-elasticsearch-uid",
+			"type": "elasticsearch",
+			"name": "test-elasticsearch",
+		}))
+
+	// Mock query response
+	httpmock.RegisterResponder("POST", "http://grafana:3000/api/ds/query",
+		func(req *http.Request) (*http.Response, error) {
+			// Read the request body to verify the custom model was used
+			body, err := io.ReadAll(req.Body)
+			if err != nil {
+				return nil, err
+			}
+
+			// Parse the request body to verify structure
+			var requestBody map[string]any
+			if err := json.Unmarshal(body, &requestBody); err != nil {
+				return nil, err
+			}
+
+			// Verify the request has queries array
+			queries, ok := requestBody["queries"].([]any)
+			require.True(t, ok, "Request should contain queries array")
+			require.Len(t, queries, 1, "Should have exactly one query")
+
+			// Verify the query structure matches our custom model
+			query, ok := queries[0].(map[string]any)
+			require.True(t, ok, "Query should be a map")
+
+			// Verify custom fields are present
+			assert.Equal(t, "A", query["refId"], "refId should be A")
+			assert.Equal(t, "my custom query", query["customQueryField"], "customQueryField should match")
+			assert.Equal(t, "customValue", query["customField"], "customField should be present")
+
+			// Verify datasource structure
+			datasource, ok := query["datasource"].(map[string]any)
+			require.True(t, ok, "Datasource should be a map")
+			assert.Equal(t, "elasticsearch", datasource["type"], "Datasource type should be elasticsearch")
+			assert.Equal(t, "test-elasticsearch-uid", datasource["uid"], "Datasource UID should match")
+
+			// Return a mock response
+			response := map[string]any{
+				"results": map[string]any{
+					"A": map[string]any{
+						"frames": []any{
+							map[string]any{
+								"schema": map[string]any{
+									"fields": []any{
+										map[string]any{"name": "Time", "type": "time"},
+										map[string]any{"name": "Count", "type": "number"},
+									},
+								},
+								"data": map[string]any{
+									"values": []any{
+										[]any{1625126400000, 1625126460000},
+										[]any{10, 15},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			return httpmock.NewJsonResponse(200, response)
+		})
+
+	// Test parameters
+	query := "my custom query"
+	dsName := "test-elasticsearch"
+	baseURL := "http://grafana:3000"
+	apiKey := "test-api-key"
+	from := "now-1h"
+	to := "now"
+	customModel := `{"refId":"%s","datasource":{"type":"elasticsearch","uid":"%s"},"customQueryField":"%s","customField":"customValue"}`
+	timeout := 30 * time.Second
+
+	// Test successful case
+	result, err := TestQuery(query, dsName, baseURL, apiKey, "A", from, to, customModel, timeout)
+	require.NoError(t, err)
+	assert.NotNil(t, result)
+
+	// Verify the result contains expected data
+	var response map[string]any
+	err = json.Unmarshal(result, &response)
+	require.NoError(t, err)
+
+	// Verify response structure
+	results, ok := response["results"].(map[string]any)
+	require.True(t, ok, "Response should contain results")
+
+	resultA, ok := results["A"].(map[string]any)
+	require.True(t, ok, "Results should contain A")
+
+	frames, ok := resultA["frames"].([]any)
+	require.True(t, ok, "Result A should contain frames")
+	require.Len(t, frames, 1, "Should have exactly one frame")
+
+	// Verify the requests were made
+	info := httpmock.GetCallCountInfo()
+	assert.Equal(t, 1, info["GET http://grafana:3000/api/datasources/name/test-elasticsearch"])
 	assert.Equal(t, 1, info["POST http://grafana:3000/api/ds/query"])
 }
