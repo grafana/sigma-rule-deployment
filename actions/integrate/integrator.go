@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"text/template"
 	"time"
@@ -381,8 +382,16 @@ func (i *Integrator) Run() error {
 
 		if i.config.IntegratorConfig.TestQueries {
 			fmt.Println("Testing queries against the datasource")
+			// Convert queries slice to map with refIDs
+			queryMap := make(map[string]string, len(queries))
+			for index, query := range queries {
+				refID := fmt.Sprintf("A%d", index)
+				queryMap[refID] = query
+			}
 			// Test all queries against the datasource
-			queryResults, err := i.TestQueries(queries, config, i.config.ConversionDefaults, timeoutDuration)
+			queryResults, err := i.TestQueries(
+				queryMap, config, i.config.ConversionDefaults, timeoutDuration,
+			)
 			if err != nil {
 				fmt.Printf("Error testing queries for file %s: %v\n", inputFile, err)
 				// Return error if continue on query testing errors is not enabled
@@ -400,6 +409,14 @@ func (i *Integrator) Run() error {
 						fmt.Printf("Error: %s\n", error)
 					}
 				}
+			}
+
+			if len(queryResults) > 0 {
+				fmt.Printf("Query testing completed successfully for file %s\n", inputFile)
+				fmt.Printf("Query returned results: %d\n", len(queryResults))
+			} else if err == nil {
+				fmt.Printf("Query testing completed successfully for file %s\n", inputFile)
+				fmt.Printf("Yet, query returned no results\n")
 			}
 
 			queryTestResults[inputFile] = queryResults
@@ -770,20 +787,31 @@ func (i *Integrator) generateExploreLink(query, datasource, datasourceType strin
 	return fmt.Sprintf("%s/explore?schemaVersion=1&panes=%s&orgId=%d", i.config.DeployerConfig.GrafanaInstance, url.QueryEscape(pane), i.config.IntegratorConfig.OrgID), nil
 }
 
-func (i *Integrator) TestQueries(queries []string, config, defaultConf ConversionConfig, timeoutDuration time.Duration) ([]QueryTestResult, error) {
+func (i *Integrator) TestQueries(queries map[string]string, config, defaultConf ConversionConfig, timeoutDuration time.Duration) ([]QueryTestResult, error) {
 	queryResults := make([]QueryTestResult, 0, len(queries))
 	datasource := getC(config.DataSource, defaultConf.DataSource, "")
 	// Determine datasource type using the same logic as createAlertQuery
 	datasourceType := getC(config.DataSourceType, defaultConf.DataSourceType, getC(config.Target, defaultConf.Target, Loki))
+	customModel := getC(config.QueryModel, defaultConf.QueryModel, "")
 
-	for _, query := range queries {
+	// Sort refIDs to ensure consistent ordering
+	refIDs := make([]string, 0, len(queries))
+	for refID := range queries {
+		refIDs = append(refIDs, refID)
+	}
+	sort.Strings(refIDs)
+
+	for _, refID := range refIDs {
+		query := queries[refID]
 		resp, err := TestQuery(
 			query,
 			datasource,
 			i.config.DeployerConfig.GrafanaInstance,
 			os.Getenv("INTEGRATOR_GRAFANA_SA_TOKEN"),
+			refID,
 			i.config.IntegratorConfig.From,
 			i.config.IntegratorConfig.To,
+			customModel,
 			timeoutDuration,
 		)
 		if err != nil {
