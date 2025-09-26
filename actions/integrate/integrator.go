@@ -389,7 +389,9 @@ func (i *Integrator) Run() error {
 				queryMap[refID] = query
 			}
 			// Test all queries against the datasource
-			queryResults, err := i.TestQueries(queryMap, config, i.config.ConversionDefaults, timeoutDuration)
+			queryResults, err := i.TestQueries(
+				queryMap, config, i.config.ConversionDefaults, timeoutDuration,
+			)
 			if err != nil {
 				fmt.Printf("Error testing queries for file %s: %v\n", inputFile, err)
 				// Return error if continue on query testing errors is not enabled
@@ -407,6 +409,14 @@ func (i *Integrator) Run() error {
 						fmt.Printf("Error: %s\n", error)
 					}
 				}
+			}
+
+			if len(queryResults) > 0 {
+				fmt.Printf("Query testing completed successfully for file %s\n", inputFile)
+				fmt.Printf("Query returned results: %d\n", len(queryResults))
+			} else if err == nil {
+				fmt.Printf("Query testing completed successfully for file %s\n", inputFile)
+				fmt.Printf("Yet, query returned no results\n")
 			}
 
 			queryTestResults[inputFile] = queryResults
