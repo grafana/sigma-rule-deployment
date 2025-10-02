@@ -8,10 +8,10 @@ The Config Validator action should be used as a validation step before running c
 
 ## Inputs
 
-| Input         | Description                                                                                                                     | Required | Default              |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------- | -------- | -------------------- |
-| `config_file` | Path to the configuration file to validate (relative to repository root)                                                        | No       | `config.yml`         |
-| `schema_file` | Path to the JSON schema file (relative to repository root). If not provided, uses the default schema from the action repository | No       | `config/schema.json` |
+| Input         | Description                                                                        | Required | Default              |
+| ------------- | ---------------------------------------------------------------------------------- | -------- | -------------------- |
+| `config_file` | Path to the configuration file to validate, relative to the root of the repository | No       | `config.yml`         |
+| `schema_file` | Path to the JSON schema file, relative to the root of the repository               | No       | `config/schema.json` |
 
 ## Usage
 
@@ -44,6 +44,21 @@ jobs:
           config_file: config.yml
           schema_file: config/schema.json
 ```
+
+## How It Works
+
+1. **Setup**: The action checks out the repository and prepares the environment for validation.
+2. **File Resolution**: Resolves the paths for both the configuration file and JSON schema file relative to the repository root.
+3. **Schema Loading**: Loads the JSON schema file (either the default bundled schema or a custom one from your repository).
+4. **Configuration Parsing**: Parses the YAML configuration file and converts it to JSON format for validation.
+5. **Validation**: Uses `check-jsonschema` to validate the configuration against the schema, checking for:
+   - Required fields and their presence
+   - Data types and format compliance
+   - Nested object structure validation
+   - Enum value validation
+   - Custom constraint validation
+6. **Error Reporting**: Provides detailed error messages if validation fails, including specific field names and expected formats.
+7. **Success**: Exits with success status if the configuration passes all validation checks.
 
 ## Important Notes
 
