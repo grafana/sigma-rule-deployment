@@ -92,7 +92,7 @@ runs:
     - name: Output Commits
       shell: bash
       env:
-        COMMITS: "${{ steps.commits.outputs.result }}"
+        COMMITS: "${{ steps.commits.outputs.result.commit }}"
       run: |
         echo "${COMMITS}"
     - name: Get Changed Files
