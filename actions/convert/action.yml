@@ -93,7 +93,7 @@ runs:
       id: commits-usable
       shell: bash
       env:
-        COMMITS: "${{ steps.commits.outputs.result.commit }}"
+        COMMITS: "${{ steps.commits.outputs.result }}"
       run: |
         COMMIT=$(echo "${ COMMITS }" | jq -r '.commit')
         FIRST_COMMIT=$(echo "${ COMMITS }" | jq -r '.first_commit')
