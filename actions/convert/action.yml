@@ -89,6 +89,12 @@ runs:
             first_commit,
             last_commit
           };
+    - name: Output Commits
+      shell: bash
+      env:
+        COMMITS: "${{ steps.commits.outputs.result }}"
+      run: |
+        echo "${COMMITS}"
     - name: Get Changed Files
       id: changed-files
       shell: bash
