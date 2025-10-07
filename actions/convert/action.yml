@@ -95,9 +95,9 @@ runs:
       env:
         COMMITS: "${{ steps.commits.outputs.result }}"
       run: |
-        COMMIT=$(echo "${ COMMITS }" | jq -r '.commit')
-        FIRST_COMMIT=$(echo "${ COMMITS }" | jq -r '.first_commit')
-        LAST_COMMIT=$(echo "${ COMMITS }" | jq -r '.last_commit')
+        COMMIT=$(echo "$COMMITS" | jq -r '.commit')
+        FIRST_COMMIT=$(echo "$COMMITS" | jq -r '.first_commit')
+        LAST_COMMIT=$(echo "$COMMITS" | jq -r '.last_commit')
 
         echo "commit=${COMMIT}" >> $GITHUB_OUTPUT
         echo "first_commit=${FIRST_COMMIT}" >> $GITHUB_OUTPUT
