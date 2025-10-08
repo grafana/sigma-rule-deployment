@@ -50,6 +50,7 @@ def convert_rules(
                 "query": "rule_query_2",
             },
         ],
+        "output_file": "output_file",
     }
 
     Args:
