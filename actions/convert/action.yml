@@ -109,10 +109,17 @@ runs:
       env:
         BASE_REF: ${{ steps.commits-usable.outputs.last_commit || steps.commits-usable.outputs.commit || github.event.pull_request.base.ref || format('origin/{0}', github.event.repository.default_branch) }}
         CONVERSION_PATH: ${{ steps.config-paths.outputs.conversion_path }}
+        CONFIG_PATH: ${{ inputs.config_path }}
       run: |
+        # Diff Commands are constructed in conversion to discover the change for the **inputs** into the conversion process. This means that changes to the configuration or rules will
+        # be registered as changed files, **but** changes to the output file will not register a change and will cause the conversion to pass but not run.
+
+        ACMR_DIFF_COMMAND="git diff ${BASE_REF} --name-only --diff-filter=ACMR -- '${CONFIG_PATH}' $(yq -r "[.conversions.[].input.[]] | unique | [\"':(glob)\" + .[] + \"'\"] | join(\" \")" ${CONFIG_PATH})"
+        D_DIFF_COMMAND="git diff ${BASE_REF} --name-only --diff-filter=D -- '${CONFIG_PATH}' $(yq -r "[.conversions.[].output.[]] | unique | [\"':(glob)\" + .[] + \"'\"] | join(\" \")" ${CONFIG_PATH})"
+
         # We want to exclude the output directory from the list of changed files here and .github directory
-        CHANGED_FILES=$(git diff "$BASE_REF" --name-only --diff-filter=ACMR -- ":(exclude)${CONVERSION_PATH}" ":(exclude).github")
-        DELETED_FILES=$(git diff "$BASE_REF" --name-only --diff-filter=D -- ":(exclude)${CONVERSION_PATH}" ":(exclude).github")
+        CHANGED_FILES=$(eval $ACMR_DIFF_COMMAND)
+        DELETED_FILES=$(eval $D_DIFF_COMMAND)
 
         echo all_changed_files=${CHANGED_FILES//\\n/} >> "$GITHUB_OUTPUT"
         echo deleted_files=${DELETED_FILES//\\n/} >> "$GITHUB_OUTPUT"
