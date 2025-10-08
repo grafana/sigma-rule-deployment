@@ -1,6 +1,6 @@
 # Sigma Rule Deployment GitHub Actions Suite
 
-Automate the conversion, testing, and deployment of [Sigma rules](https://sigmahq.io/) to [Grafana Alerting](https://grafana.com/docs/grafana/latest/alerting/) rules with GitHub Actions.
+Automate the conversion, testing, and deployment of [Sigma rules](https://sigmahq.io/) to [Grafana Alerting](https://grafana.com/docs/grafana/latest/alerting/) rules with GitHub Actions using a [SOCless](./README.md#what-is-socless) approach.
 
 ## Available Actions
 
@@ -8,6 +8,10 @@ Automate the conversion, testing, and deployment of [Sigma rules](https://sigmah
 - [Sigma Rule Converter](./actions/convert/README.md): Converts Sigma rules to target query languages using `sigma-cli`. Supports dynamic plugin installation, custom configurations, and output management, producing a JSON output format that can be used by the integrator.
 - [Query Integrator](./actions/integrate/README.md): Given a folder of input query files (as produced by the converter), each file containing a list of queries and relevant metadata, convert each into a Grafana Managed Alerting alert rule, optionally testing the queries against a configured Grafana instance to validate that it works as expected.
 - [Rule Deployer](./actions/deploy/README.md): Given a folder of Grafana Managed Alerting alert rules (as produced by the integrator), deploy them to the configured Grafana instance, using Alerting's provisioning API.
+
+### Architecture
+
+![Architecture](./assets/architecture.png)
 
 ## Usage
 
@@ -25,16 +29,16 @@ Automate the conversion, testing, and deployment of [Sigma rules](https://sigmah
    - See the sample [configuration file](config/config-example.yml)
    - See also the [configuration file schema](https://github.com/grafana/sigma-rule-deployment/blob/main/config/schema.json) for more details
 4. Add a workflow to run the conversion/integration Actions on a PR commit or issue comment
-   - See the reusable workflow [convert-integrate.yml](.github/workflow/convert-integrate.yml)
+   - See the reusable workflow [convert-integrate.yml](.github/workflows/convert-integrate.yml)
 5. Add a workflow to run the deployment Action on a push to main
-   - See the reusable workflow [deploy.yml](.github/workflow/deploy.yml)
+   - See the reusable workflow [deploy.yml](.github/workflows/deploy.yml)
 6. Create a PR that adds or modify a converted Sigma rule, and add a comment `sigma convert all` to the PR to see the conversion and integration process in action
 7. Once you're happy with the results, merge the PR into main, which will trigger the deployer to provision the rules to your Grafana instance
 8. With the alert rules successfully provisioned, set up [Alerting notifications](https://grafana.com/docs/grafana/latest/alerting/configure-notifications/) for the relevant folder and/or groups to directly contact affected users. Alternatively you can connect them to [Grafana IRM](https://grafana.com/docs/grafana-cloud/alerting-and-irm/irm/) and use it to manage on-call rotas and simplify alert routing
 
 ## FAQ
 
-### Q: What backends/data sources do you support?
+### What backends/data sources do you support?
 
 These Actions can convert rules using **any** Sigma backend and produce valid alert rules for **any** data source, however, to date they have only been thoroughly tested with Loki. In particular, converting log queries into metric queries so they can be used correctly with Grafana Managed Alerting is dependent on the backend supporting that option or by modifying the generated queries.
 
@@ -58,12 +62,31 @@ To ensure the data source plugin can execute your queries, you may need to provi
 
 An example query model would be:
 
-```
+```yaml
 query_model: '{"refId":"%s","datasource":{"type":"my_data_source_type","uid":"%s"},"query":"%s","customKey":"customValue"}'
 ```
 
 Other than the `refId` and `datasource` (which are required by Grafana), the keys used for the query model are data source dependent. They can be identified by testing a query against the data source with the [Query inspector](https://grafana.com/docs/grafana/latest/explore/explore-inspector/) open, going to the Query tab, and examining the items used in the `request.data.queries` list.
 
-### Q: Are there any restrictions on the Sigma rule files?
+### Are there any restrictions on the Sigma rule files?
 
 The main restriction are they need to be valid Sigma rules, including the `id` and `title` [metadata fields](https://sigmahq.io/docs/basics/rules.html#available-sigma-metadata-fields). If you are using [Correlation rules](https://github.com/SigmaHQ/sigma-specification/blob/main/specification/sigma-correlation-rules-specification.md), the rule files must contain **all** the referenced rules within the rule file (using [YAML's multiple document feature](https://gettaurus.org/docs/YAMLTutorial/#YAML-Multi-Documents), i.e., combined with `---`).
+
+### How do these Actions work?
+
+![Sequence Diagram](./assets/sequence-diagram.png)
+
+### What is SOCless?
+
+SOCless refers to a security operations model where detection engineering and incident response workflows are fully automated through code and CI/CD pipelines. Instead of relying on manual analyst actions for converting, validating, and deploying detection rules, a SOCless system executes these tasks automatically and consistently.
+
+This repository implements the SOCless model using GitHub Actions to manage the complete lifecycle of Sigma rules, from definition to live deployment in Grafana Managed Alerting.
+
+The suite enables teams to:
+
+- **Automate rule management**: Run validation, conversion, integration, and deployment automatically through GitHub Actions workflows
+- **Reduce human error**: Enforce schema validation and automated testing before any rule reaches production
+- **Accelerate updates**: Deploy new or modified Sigma rules within minutes of merging a pull request
+- **Maintain configuration consistency**: Use version-controlled workflows and standardized pipelines to ensure reproducible deployments across environments
+
+By shifting detection engineering into a CI/CD-driven model, the SOCless approach transforms traditional SOC operations into an automated, auditable, and scalable system, which allows security teams to focus on analysis and improvement rather than manual rule maintenance.
