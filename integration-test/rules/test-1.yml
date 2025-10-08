@@ -1,0 +1,17 @@
+title: GitHub Test Rule
+id: 700f552f-0fa9-4bfe-bbaf-bbbde94c1c8c
+status: test
+description: Detects a repository being deleted.
+author: jamesc-grafana
+date: 2025-09-25
+logsource:
+  product: github
+  service: audit
+detection:
+  selection:
+    action:
+      - "repo.destroy"
+  condition: selection
+falsepositives:
+  - Validate the deletion activity is permitted. The "actor" field need to be validated.
+level: informational

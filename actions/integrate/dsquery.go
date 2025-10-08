@@ -13,7 +13,7 @@ import (
 // DatasourceQuery is an interface for executing Grafana datasource queries
 type DatasourceQuery interface {
 	GetDatasource(dsName, baseURL, apiKey string, timeout time.Duration) (*GrafanaDatasource, error)
-	ExecuteQuery(query, dsName, baseURL, apiKey, from, to string, timeout time.Duration) ([]byte, error)
+	ExecuteQuery(query, dsName, baseURL, apiKey, refID, from, to, customModel string, timeout time.Duration) ([]byte, error)
 }
 
 // HTTPDatasourceQuery is the default implementation of DatasourceQuery
@@ -45,16 +45,38 @@ type GrafanaDatasource struct {
 	ReadOnly          bool            `json:"readOnly,omitempty"`
 }
 
+// BucketAgg represents a bucket aggregation for Elasticsearch queries
+type BucketAgg struct {
+	Type     string         `json:"type"`
+	ID       string         `json:"id"`
+	Settings map[string]any `json:"settings,omitempty"`
+	Field    string         `json:"field,omitempty"`
+}
+
+// Metric represents a metric for Elasticsearch queries
+type Metric struct {
+	Type string `json:"type"`
+	ID   string `json:"id"`
+}
+
 type Query struct {
 	RefID         string            `json:"refId"`
-	Expr          string            `json:"expr"`
-	QueryType     string            `json:"queryType"`
+	Expr          string            `json:"expr,omitempty"`  // For Loki
+	Query         string            `json:"query,omitempty"` // For Elasticsearch
+	QueryType     string            `json:"queryType,omitempty"`
 	Datasource    GrafanaDatasource `json:"datasource"`
 	EditorMode    string            `json:"editorMode,omitempty"`
-	MaxLines      int               `json:"maxLines"`
-	Format        string            `json:"format"`
-	IntervalMs    int               `json:"intervalMs"`
-	MaxDataPoints int               `json:"maxDataPoints"`
+	MaxLines      int               `json:"maxLines,omitempty"`
+	Format        string            `json:"format,omitempty"`
+	IntervalMs    int               `json:"intervalMs,omitempty"`
+	MaxDataPoints int               `json:"maxDataPoints,omitempty"`
+
+	// Elasticsearch-specific fields
+	Alias        string      `json:"alias,omitempty"`
+	Metrics      []Metric    `json:"metrics,omitempty"`
+	BucketAggs   []BucketAgg `json:"bucketAggs,omitempty"`
+	TimeField    string      `json:"timeField,omitempty"`
+	DatasourceID int         `json:"datasourceId,omitempty"`
 }
 
 type Body struct {
@@ -65,20 +87,24 @@ type Body struct {
 
 // TestQuery uses the default executor to query a datasource
 func TestQuery(
-	query, dsName, baseURL, apiKey, from, to string,
+	query, dsName, baseURL, apiKey, refID, from, to, customModel string,
 	timeout time.Duration,
 ) ([]byte, error) {
-	return DefaultDatasourceQuery.ExecuteQuery(query, dsName, baseURL, apiKey, from, to, timeout)
+	return DefaultDatasourceQuery.ExecuteQuery(
+		query, dsName, baseURL, apiKey, refID, from, to, customModel, timeout,
+	)
 }
 
 // GetDatasourceByName uses the default executor to get datasource information
-func GetDatasourceByName(dsName, baseURL, apiKey string, timeout time.Duration) (*GrafanaDatasource, error) {
+func GetDatasourceByName(
+	dsName, baseURL, apiKey string, timeout time.Duration,
+) (*GrafanaDatasource, error) {
 	return DefaultDatasourceQuery.GetDatasource(dsName, baseURL, apiKey, timeout)
 }
 
 // ExecuteQuery implementation for HTTPDatasourceQuery
 func (h *HTTPDatasourceQuery) ExecuteQuery(
-	query, dsName, baseURL, apiKey, from, to string,
+	query, dsName, baseURL, apiKey, refID, from, to, customModel string,
 	timeout time.Duration,
 ) ([]byte, error) {
 	datasource, err := h.GetDatasource(dsName, baseURL, apiKey, timeout)
@@ -86,24 +112,84 @@ func (h *HTTPDatasourceQuery) ExecuteQuery(
 		return nil, fmt.Errorf("failed to get datasource: %v", err)
 	}
 
-	body := Body{
-		Queries: []Query{
-			{
-				RefID:     "A",
-				Expr:      query,
-				QueryType: "range",
-				Datasource: GrafanaDatasource{
-					Type: datasource.Type,
-					UID:  datasource.UID,
-				},
-				MaxLines:      100,
-				Format:        "time_series",
-				IntervalMs:    2000,
-				MaxDataPoints: 100,
+	var queryObj json.RawMessage
+
+	// Configure query based on custom model or datasource type
+	switch {
+	case customModel != "":
+		// Use custom model to build the query object
+		escapedQuery, err := escapeQueryJSON(query)
+		if err != nil {
+			return nil, fmt.Errorf("failed to escape query: %v", err)
+		}
+
+		// Use sprintf to populate the custom model with refID, datasource UID, and escaped query
+		queryObj = json.RawMessage(fmt.Sprintf(customModel, refID, datasource.UID, escapedQuery))
+	case datasource.Type == Elasticsearch:
+		structQuery := Query{
+			RefID: refID,
+			Query: query,
+			Datasource: GrafanaDatasource{
+				Type: datasource.Type,
+				UID:  datasource.UID,
 			},
-		},
-		From: from,
-		To:   to,
+			Metrics: []Metric{
+				{
+					Type: "count",
+					ID:   "1",
+				},
+			},
+			BucketAggs: []BucketAgg{
+				{
+					Type: "date_histogram",
+					ID:   "2",
+					Settings: map[string]any{
+						"interval": "auto",
+					},
+					Field: "@timestamp",
+				},
+			},
+			TimeField:     "@timestamp",
+			DatasourceID:  datasource.ID,
+			IntervalMs:    2000,
+			MaxDataPoints: 100,
+		}
+
+		queryBytes, err := json.Marshal(structQuery)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal query struct: %v", err)
+		}
+		queryObj = json.RawMessage(queryBytes)
+	case datasource.Type == Loki:
+		structQuery := Query{
+			RefID:     refID,
+			Expr:      query,
+			QueryType: "range",
+			Datasource: GrafanaDatasource{
+				Type: datasource.Type,
+				UID:  datasource.UID,
+			},
+			MaxLines:      100,
+			Format:        "time_series",
+			IntervalMs:    2000,
+			MaxDataPoints: 100,
+		}
+
+		queryBytes, err := json.Marshal(structQuery)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal query struct: %v", err)
+		}
+		queryObj = json.RawMessage(queryBytes)
+	default:
+		// No default configuration for other datasource types
+		return nil, fmt.Errorf("unsupported datasource type: %s", datasource.Type)
+	}
+
+	// Create the request body with the query object
+	body := map[string]any{
+		"queries": []json.RawMessage{queryObj},
+		"from":    from,
+		"to":      to,
 	}
 
 	jsonBody, err := json.Marshal(body)
@@ -158,7 +244,9 @@ func (h *HTTPDatasourceQuery) ExecuteQuery(
 }
 
 // GetDatasource implementation for HTTPDatasourceQuery
-func (h *HTTPDatasourceQuery) GetDatasource(dsName, baseURL, apiKey string, timeout time.Duration) (*GrafanaDatasource, error) {
+func (h *HTTPDatasourceQuery) GetDatasource(
+	dsName, baseURL, apiKey string, timeout time.Duration,
+) (*GrafanaDatasource, error) {
 	ds, err := h.getDatasourceByUID(dsName, baseURL, apiKey, timeout)
 	if err != nil {
 		return h.getDatasourceByName(dsName, baseURL, apiKey, timeout)
@@ -167,7 +255,9 @@ func (h *HTTPDatasourceQuery) GetDatasource(dsName, baseURL, apiKey string, time
 }
 
 // getDatasourceByName uses the default executor to get datasource information
-func (h *HTTPDatasourceQuery) getDatasourceByName(dsName, baseURL, apiKey string, timeout time.Duration) (*GrafanaDatasource, error) {
+func (h *HTTPDatasourceQuery) getDatasourceByName(
+	dsName, baseURL, apiKey string, timeout time.Duration,
+) (*GrafanaDatasource, error) {
 	dsURL, err := url.JoinPath(baseURL, "api/datasources/name", dsName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to construct API URL: %v", err)
@@ -177,7 +267,9 @@ func (h *HTTPDatasourceQuery) getDatasourceByName(dsName, baseURL, apiKey string
 }
 
 // getDatasourceByUID uses the default executor to get datasource information
-func (h *HTTPDatasourceQuery) getDatasourceByUID(uid, baseURL, apiKey string, timeout time.Duration) (*GrafanaDatasource, error) {
+func (h *HTTPDatasourceQuery) getDatasourceByUID(
+	uid, baseURL, apiKey string, timeout time.Duration,
+) (*GrafanaDatasource, error) {
 	dsURL, err := url.JoinPath(baseURL, "api/datasources/uid", uid)
 	if err != nil {
 		return nil, fmt.Errorf("failed to construct API URL: %v", err)
@@ -186,7 +278,9 @@ func (h *HTTPDatasourceQuery) getDatasourceByUID(uid, baseURL, apiKey string, ti
 	return h.getDatasourceRequest(dsURL, apiKey, timeout)
 }
 
-func (h *HTTPDatasourceQuery) getDatasourceRequest(baseURL, apiKey string, timeout time.Duration) (*GrafanaDatasource, error) {
+func (h *HTTPDatasourceQuery) getDatasourceRequest(
+	baseURL, apiKey string, timeout time.Duration,
+) (*GrafanaDatasource, error) {
 	req, err := http.NewRequest("GET", baseURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %v", err)

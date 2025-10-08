@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,18 +16,20 @@ import (
 )
 
 func TestConvertToAlert(t *testing.T) {
-	fixedTime := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
-
 	tests := []struct {
-		name          string
-		queries       []string
-		rule          *definitions.ProvisionedAlertRule
-		titles        string
-		config        ConversionConfig
-		wantQueryText string
-		wantDuration  definitions.Duration
-		wantUpdated   *time.Time // nil means expect an update, specified time means expect no change
-		wantError     bool
+		name             string
+		queries          []string
+		rule             *definitions.ProvisionedAlertRule
+		titles           string
+		convConfig       ConversionConfig
+		integratorConfig IntegrationConfig
+		convObject       ConversionOutput
+		wantQueryText    string
+		wantDuration     definitions.Duration
+		wantUnchanged    bool
+		wantError        bool
+		wantLabels       map[string]string
+		wantAnnotations  map[string]string
 	}{
 		{
 			name:    "valid new loki query",
@@ -35,7 +38,7 @@ func TestConvertToAlert(t *testing.T) {
 			rule: &definitions.ProvisionedAlertRule{
 				UID: "5c1c217a",
 			},
-			config: ConversionConfig{
+			convConfig: ConversionConfig{
 				Name:       "conv",
 				Target:     "loki",
 				DataSource: "my_data_source",
@@ -44,7 +47,6 @@ func TestConvertToAlert(t *testing.T) {
 			},
 			wantQueryText: "sum(count_over_time({job=`.+`} | json | test=`true`[$__auto]))",
 			wantDuration:  definitions.Duration(300 * time.Second),
-			wantUpdated:   nil, // expect timestamp update
 			wantError:     false,
 		},
 		{
@@ -54,7 +56,7 @@ func TestConvertToAlert(t *testing.T) {
 			rule: &definitions.ProvisionedAlertRule{
 				UID: "3bb06d82",
 			},
-			config: ConversionConfig{
+			convConfig: ConversionConfig{
 				Name:           "conv",
 				Target:         "esql",
 				DataSource:     "my_es_data_source",
@@ -64,7 +66,6 @@ func TestConvertToAlert(t *testing.T) {
 			},
 			wantQueryText: `from * | where eventSource==\"kms.amazonaws.com\" and eventName==\"CreateGrant\"`,
 			wantDuration:  definitions.Duration(300 * time.Second),
-			wantUpdated:   nil, // expect timestamp update
 			wantError:     false,
 		},
 		{
@@ -74,11 +75,10 @@ func TestConvertToAlert(t *testing.T) {
 			rule: &definitions.ProvisionedAlertRule{
 				UID: "5c1c217a",
 			},
-			config: ConversionConfig{
+			convConfig: ConversionConfig{
 				TimeWindow: "1y",
 			},
-			wantDuration: 0,   // invalid time window, expect no value
-			wantUpdated:  nil, // expect timestamp update
+			wantDuration: 0, // invalid time window, expect no value
 			wantError:    true,
 		},
 		{
@@ -88,50 +88,62 @@ func TestConvertToAlert(t *testing.T) {
 			rule: &definitions.ProvisionedAlertRule{
 				UID: "f4c34eae-c7c3-4891-8965-08a01e8286b8",
 			},
-			config: ConversionConfig{
+			convConfig: ConversionConfig{
 				TimeWindow: "1y",
 			},
-			wantDuration: 0,   // invalid time window, expect no value
-			wantUpdated:  nil, // expect timestamp update
+			wantDuration: 0, // invalid time window, expect no value
 			wantError:    true,
 		},
 		{
-			name:    "unchanged queries should not update timestamp",
-			queries: []string{"{job=`.+`} | json | test=`true`"},
-			titles:  "Alert Rule 6",
+			name:    "skip unchanged queries",
+			queries: []string{`{job=".+"} | json | test="true"`},
+			titles:  "New Alert Rule Title", // This should be ignored
 			rule: &definitions.ProvisionedAlertRule{
-				UID: "5c1c217a",
+				UID:   "5c1c217a",
+				Title: "Unchanged Alert Rule",
 				Data: []definitions.AlertQuery{
 					{
-						RefID:         "A0",
-						QueryType:     "instant",
-						DatasourceUID: "my_data_source",
-						Model:         json.RawMessage("{\"refId\":\"A0\",\"datasource\":{\"type\":\"loki\",\"uid\":\"my_data_source\"},\"hide\":false,\"expr\":\"sum(count_over_time({job=`.+`} | json | test=`true`[$__auto]))\",\"queryType\":\"instant\",\"editorMode\":\"code\"}"),
+						Model: json.RawMessage(`{"refId":"A0","datasource":{"type":"loki","uid":"nil"},"hide":false,"expr":"sum(count_over_time({job=\".+\"} | json | test=\"true\"[$__auto]))","queryType":"instant","editorMode":"code"}`),
 					},
 					{
-						RefID:         "B",
-						DatasourceUID: "__expr__",
-						Model:         json.RawMessage(`{"refId":"B","hide":false,"type":"reduce","datasource":{"uid":"__expr__","type":"__expr__"},"conditions":[{"type":"query","evaluator":{"params":[],"type":"gt"},"operator":{"type":"and"},"query":{"params":["B"]},"reducer":{"params":[],"type":"last"}}],"reducer":"last","expression":"A0"}`),
+						Model: json.RawMessage(`{"refId":"B","hide":false,"type":"reduce","datasource":{"uid":"__expr__","type":"__expr__"},"conditions":[{"type":"query","evaluator":{"params":[],"type":"gt"},"operator":{"type":"and"},"query":{"params":["B"]},"reducer":{"params":[],"type":"last"}}],"reducer":"last","expression":"A0"}`),
 					},
 					{
-						RefID:         "C",
-						DatasourceUID: "__expr__",
-						Model:         json.RawMessage(`{"refId":"C","hide":false,"type":"threshold","datasource":{"uid":"__expr__","type":"__expr__"},"conditions":[{"type":"query","evaluator":{"params":[1],"type":"gt"},"operator":{"type":"and"},"query":{"params":["C"]},"reducer":{"params":[],"type":"last"}}],"expression":"B"}`),
+						Model: json.RawMessage(`{"refId":"C","hide":false,"type":"threshold","datasource":{"uid":"__expr__","type":"__expr__"},"conditions":[{"type":"query","evaluator":{"params":[1],"type":"gt"},"operator":{"type":"and"},"query":{"params":["C"]},"reducer":{"params":[],"type":"last"}}],"expression":"B"}`),
 					},
 				},
-				Updated: fixedTime,
 			},
-			config: ConversionConfig{
+			wantUnchanged: true,
+		},
+		{
+			name:    "process changed queries",
+			queries: []string{`{job=".+"} | json | test="true"`},
+			titles:  "New Alert Rule Title", // This should *not* be ignored
+			convConfig: ConversionConfig{
 				Name:       "conv",
 				Target:     "loki",
 				DataSource: "my_data_source",
-				RuleGroup:  "Every 5 Minutes",
-				TimeWindow: "5m",
+				RuleGroup:  "Every Minute",
+				TimeWindow: "1m",
 			},
-			wantDuration:  definitions.Duration(300 * time.Second),
-			wantQueryText: "sum(count_over_time({job=`.+`} | json | test=`true`[$__auto]))",
-			wantUpdated:   &fixedTime, // expect timestamp to remain unchanged
-			wantError:     false,
+			rule: &definitions.ProvisionedAlertRule{
+				UID:   "5c1c217a",
+				Title: "Unchanged Alert Rule",
+				Data: []definitions.AlertQuery{
+					{
+						// old query, which doesn't match the new query
+						Model: json.RawMessage(`{"refId":"A0","datasource":{"type":"loki","uid":"nil"},"hide":false,"expr":"sum(count_over_time({old_job=\".+\"} | logfmt | test=\"old_query\"[$__auto]))","queryType":"instant","editorMode":"code"}`),
+					},
+					{
+						Model: json.RawMessage(`{"refId":"B","hide":false,"type":"reduce","datasource":{"uid":"__expr__","type":"__expr__"},"conditions":[{"type":"query","evaluator":{"params":[],"type":"gt"},"operator":{"type":"and"},"query":{"params":["B"]},"reducer":{"params":[],"type":"last"}}],"reducer":"last","expression":"A0"}`),
+					},
+					{
+						Model: json.RawMessage(`{"refId":"C","hide":false,"type":"threshold","datasource":{"uid":"__expr__","type":"__expr__"},"conditions":[{"type":"query","evaluator":{"params":[1],"type":"gt"},"operator":{"type":"and"},"query":{"params":["C"]},"reducer":{"params":[],"type":"last"}}],"expression":"B"}`),
+					},
+				},
+			},
+			wantDuration:  definitions.Duration(1 * time.Minute),
+			wantUnchanged: false,
 		},
 		{
 			name:    "valid query with a custom query model",
@@ -140,7 +152,7 @@ func TestConvertToAlert(t *testing.T) {
 			rule: &definitions.ProvisionedAlertRule{
 				UID: "5c1c217a",
 			},
-			config: ConversionConfig{
+			convConfig: ConversionConfig{
 				Name:       "conv",
 				Target:     "custom",
 				DataSource: "my_custom_data_source",
@@ -150,7 +162,6 @@ func TestConvertToAlert(t *testing.T) {
 			},
 			wantQueryText: "(DO MY QUERY)",
 			wantDuration:  definitions.Duration(1 * time.Hour),
-			wantUpdated:   nil, // expect timestamp update
 			wantError:     false,
 		},
 		{
@@ -160,7 +171,7 @@ func TestConvertToAlert(t *testing.T) {
 			rule: &definitions.ProvisionedAlertRule{
 				UID: "5c1c217a",
 			},
-			config: ConversionConfig{
+			convConfig: ConversionConfig{
 				Name:       "conv",
 				Target:     "generic",
 				DataSource: "generic_uid",
@@ -169,7 +180,6 @@ func TestConvertToAlert(t *testing.T) {
 			},
 			wantQueryText: `"DO MY QUERY"`,
 			wantDuration:  definitions.Duration(30 * time.Minute),
-			wantUpdated:   nil, // expect timestamp update
 			wantError:     false,
 		},
 		{
@@ -179,7 +189,7 @@ func TestConvertToAlert(t *testing.T) {
 			rule: &definitions.ProvisionedAlertRule{
 				UID: "5c1c217a",
 			},
-			config: ConversionConfig{
+			convConfig: ConversionConfig{
 				Name:       "conv",
 				Target:     "loki",
 				DataSource: "my_data_source",
@@ -188,40 +198,95 @@ func TestConvertToAlert(t *testing.T) {
 				Lookback:   "2m",
 			},
 			wantQueryText: "sum(count_over_time({job=`.+`} | json | test=`true`[$__auto]))",
-			wantDuration:  definitions.Duration(420 * time.Second), // 5m + 2m lookback = 7 * time.Minute
-			wantUpdated:   nil,                                     // expect timestamp update
+			wantDuration:  definitions.Duration(7 * time.Minute), // 5m + 2m lookback = 7m
 			wantError:     false,
+		},
+		{
+			name:    "template annotations and labels",
+			queries: []string{"{job=`.+`} | json | test=`true`"},
+			titles:  "Template Rule",
+			rule: &definitions.ProvisionedAlertRule{
+				UID: "",
+			},
+			convObject: ConversionOutput{
+				Rules: []SigmaRule{
+					{
+						Level:     "high",
+						Logsource: SigmaLogsource{Product: "okta", Service: "okta"},
+						Author:    "John Doe",
+					},
+				},
+			},
+			convConfig: ConversionConfig{
+				Name:       "conv",
+				Target:     "loki",
+				DataSource: "my_data_source",
+				RuleGroup:  "Every 5 Minutes",
+				TimeWindow: "5m",
+			},
+			integratorConfig: IntegrationConfig{
+				TemplateLabels: map[string]string{
+					"Level":   "{{.Level}}",
+					"Product": "{{.Logsource.Product}}",
+					"Service": "{{.Logsource.Service}}",
+				},
+				TemplateAnnotations: map[string]string{
+					"Author": "{{.Author}}",
+				},
+			},
+			wantQueryText: "sum(count_over_time({job=`.+`} | json | test=`true`[$__auto]))",
+			wantDuration:  definitions.Duration(300 * time.Second),
+			wantError:     false,
+			wantLabels: map[string]string{
+				"Level":   "high",
+				"Product": "okta",
+				"Service": "okta",
+			},
+			wantAnnotations: map[string]string{
+				"Author":         "John Doe",
+				"ConversionFile": "test_conversion_file.json",
+				"LogSourceType":  "loki",
+				"LogSourceUid":   "my_data_source",
+				"Lookback":       "0s",
+				"Query":          "{job=`.+`} | json | test=`true`",
+				"TimeWindow":     "5m",
+			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			i := NewIntegrator()
-			originalTimestamp := tt.rule.Updated
-			err := i.ConvertToAlert(tt.rule, tt.queries, tt.titles, tt.config, "test_conversion_file.json")
+			i.config.IntegratorConfig = tt.integratorConfig
+			err := i.ConvertToAlert(tt.rule, tt.queries, tt.titles, tt.convConfig, "test_conversion_file.json", tt.convObject)
 			if tt.wantError {
 				assert.NotNil(t, err)
 			} else {
 				assert.NoError(t, err)
-				if tt.wantUpdated != nil {
-					assert.Equal(t, *tt.wantUpdated, tt.rule.Updated, "timestamp should not have changed")
+				if tt.wantUnchanged {
+					// The rule should not be changed as the generated alert rule was identical
+					assert.NotEqual(t, tt.titles, tt.rule.Title)
 				} else {
-					assert.NotEqual(t, originalTimestamp, tt.rule.Updated, "timestamp should have been updated")
-					assert.True(t, tt.rule.Updated.After(originalTimestamp), "new timestamp should be after original")
 					assert.Contains(t, string(tt.rule.Data[0].Model), tt.wantQueryText)
 					assert.Equal(t, tt.wantDuration, tt.rule.Data[0].RelativeTimeRange.From)
-					assert.Equal(t, tt.config.RuleGroup, tt.rule.RuleGroup)
-					assert.Equal(t, tt.config.DataSource, tt.rule.Data[0].DatasourceUID)
+					assert.Equal(t, tt.convConfig.RuleGroup, tt.rule.RuleGroup)
+					assert.Equal(t, tt.convConfig.DataSource, tt.rule.Data[0].DatasourceUID)
 					assert.Equal(t, tt.titles, tt.rule.Title)
 
-					if tt.config.Lookback != "" {
-						lookbackDuration, err := time.ParseDuration(tt.config.Lookback)
+					if tt.convConfig.Lookback != "" {
+						lookbackDuration, err := time.ParseDuration(tt.convConfig.Lookback)
 						assert.NoError(t, err)
 						expectedTo := definitions.Duration(lookbackDuration)
 						assert.Equal(t, tt.wantDuration, tt.rule.Data[0].RelativeTimeRange.From, "From should match expected duration (time window + lookback)")
 						assert.Equal(t, expectedTo, tt.rule.Data[0].RelativeTimeRange.To, "To should be lookback duration")
 					} else {
 						assert.Equal(t, definitions.Duration(0), tt.rule.Data[0].RelativeTimeRange.To, "To should be 0 when no lookback")
+					}
+					if tt.wantLabels != nil {
+						assert.Equal(t, tt.wantLabels, tt.rule.Labels)
+					}
+					if tt.wantAnnotations != nil {
+						assert.Equal(t, tt.wantAnnotations, tt.rule.Annotations)
 					}
 				}
 			}
@@ -843,7 +908,7 @@ func (t *testDatasourceQuery) GetDatasource(dsName, _, _ string, _ time.Duration
 	}, nil
 }
 
-func (t *testDatasourceQuery) ExecuteQuery(query, dsName, _, _, _, _ string, _ time.Duration) ([]byte, error) {
+func (t *testDatasourceQuery) ExecuteQuery(query, dsName, _, _, _, _, _, _ string, _ time.Duration) ([]byte, error) {
 	t.queryLog = append(t.queryLog, query)
 	t.datasourceLog = append(t.datasourceLog, dsName)
 
@@ -1130,17 +1195,473 @@ func (t *testDatasourceQueryWithErrors) AddMockError(query string, err error) {
 	t.mockErrors[query] = err
 }
 
-func (t *testDatasourceQueryWithErrors) ExecuteQuery(query, dsName, baseURL, apiKey, from, to string, timeout time.Duration) ([]byte, error) {
+func (t *testDatasourceQueryWithErrors) ExecuteQuery(query, dsName, baseURL, apiKey, refID, from, to, customModel string, timeout time.Duration) ([]byte, error) {
 	// Check if we should return an error for this query
 	if err, exists := t.mockErrors[query]; exists {
 		return nil, err
 	}
 
 	// Otherwise use the parent implementation
-	return t.testDatasourceQuery.ExecuteQuery(query, dsName, baseURL, apiKey, from, to, timeout)
+	return t.testDatasourceQuery.ExecuteQuery(query, dsName, baseURL, apiKey, refID, from, to, customModel, timeout)
 }
 
 // TestIntegrationWithQueryTestingErrors tests the core behavior of continue_on_query_testing_errors
+func TestGenerateExploreLink(t *testing.T) {
+	tests := []struct {
+		name                 string
+		query                string
+		datasource           string
+		datasourceType       string
+		from                 string
+		to                   string
+		orgID                int64
+		grafanaURL           string
+		wantURLContains      []string
+		wantPanesContains    []string
+		wantPanesNotContains []string
+		wantError            bool
+	}{
+		{
+			name:           "Loki explore link generation",
+			query:          `{job="loki"} |= "error"`,
+			datasource:     "loki-uid-123",
+			datasourceType: Loki,
+			from:           "now-1h",
+			to:             "now",
+			orgID:          1,
+			grafanaURL:     "https://test.grafana.com",
+			wantURLContains: []string{
+				"https://test.grafana.com/explore",
+				"schemaVersion=1",
+				"orgId=1",
+			},
+			wantPanesContains: []string{
+				`"datasource":"loki-uid-123"`,
+				`"type":"loki"`,
+				`"expr":"{job=\"loki\"} |= \"error\""`,
+				`"queryType":"range"`,
+				`"editorMode":"code"`,
+				`"direction":"backward"`,
+				`"from":"now-1h"`,
+				`"to":"now"`,
+			},
+			wantPanesNotContains: []string{
+				`"query":`,
+				`"metrics"`,
+				`"bucketAggs"`,
+				`"timeField"`,
+			},
+			wantError: false,
+		},
+		{
+			name:           "Elasticsearch explore link generation",
+			query:          `type:log AND (level:(ERROR OR FATAL OR CRITICAL))`,
+			datasource:     "es-uid-456",
+			datasourceType: Elasticsearch,
+			from:           "now-2h",
+			to:             "now-1h",
+			orgID:          2,
+			grafanaURL:     "https://prod.grafana.com",
+			wantURLContains: []string{
+				"https://prod.grafana.com/explore",
+				"schemaVersion=1",
+				"orgId=2",
+			},
+			wantPanesContains: []string{
+				`"datasource":"es-uid-456"`,
+				`"type":"elasticsearch"`,
+				`"query":"type:log AND (level:(ERROR OR FATAL OR CRITICAL))"`,
+				`"metrics":[{"type":"count","id":"1"}]`,
+				`"bucketAggs":[{"type":"date_histogram","id":"2","settings":{"interval":"auto"},"field":"@timestamp"}]`,
+				`"timeField":"@timestamp"`,
+				`"compact":false`,
+				`"from":"now-2h"`,
+				`"to":"now-1h"`,
+			},
+			wantPanesNotContains: []string{
+				`"expr":`,
+				`"queryType"`,
+				`"editorMode"`,
+				`"direction"`,
+			},
+			wantError: false,
+		},
+		{
+			name:           "Generic datasource explore link generation",
+			query:          `SELECT * FROM logs WHERE level = 'ERROR'`,
+			datasource:     "generic-uid-789",
+			datasourceType: "prometheus",
+			from:           "now-30m",
+			to:             "now",
+			orgID:          3,
+			grafanaURL:     "https://dev.grafana.com",
+			wantURLContains: []string{
+				"https://dev.grafana.com/explore",
+				"schemaVersion=1",
+				"orgId=3",
+			},
+			wantPanesContains: []string{
+				`"datasource":"generic-uid-789"`,
+				`"type":"prometheus"`,
+				`"query":"SELECT * FROM logs WHERE level = 'ERROR'"`,
+				`"from":"now-30m"`,
+				`"to":"now"`,
+			},
+			wantPanesNotContains: []string{
+				`"expr":`,
+				`"queryType"`,
+				`"editorMode"`,
+				`"direction"`,
+				`"metrics"`,
+				`"bucketAggs"`,
+				`"timeField"`,
+			},
+			wantError: false,
+		},
+		{
+			name:           "Empty datasource should work fine",
+			query:          `{job="test"}`,
+			datasource:     "",
+			datasourceType: Loki,
+			from:           "now-1h",
+			to:             "now",
+			orgID:          1,
+			grafanaURL:     "https://test.grafana.com",
+			wantURLContains: []string{
+				"https://test.grafana.com/explore",
+				"schemaVersion=1",
+				"orgId=1",
+			},
+			wantPanesContains: []string{
+				`"datasource":""`,
+				`"type":"loki"`,
+				`"expr":"{job=\"test\"}"`,
+			},
+			wantPanesNotContains: []string{
+				`"query":`,
+				`"metrics"`,
+				`"bucketAggs"`,
+				`"timeField"`,
+			},
+			wantError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create integrator with test configuration
+			integrator := &Integrator{
+				config: Configuration{
+					IntegratorConfig: IntegrationConfig{
+						From:  tt.from,
+						To:    tt.to,
+						OrgID: tt.orgID,
+					},
+					DeployerConfig: DeploymentConfig{
+						GrafanaInstance: tt.grafanaURL,
+					},
+				},
+			}
+
+			// Test generateExploreLink
+			exploreLink, err := integrator.generateExploreLink(tt.query, tt.datasource, tt.datasourceType, ConversionConfig{}, ConversionConfig{})
+
+			if tt.wantError {
+				assert.Error(t, err)
+				return
+			}
+
+			assert.NoError(t, err)
+			assert.NotEmpty(t, exploreLink)
+
+			// Verify URL components
+			for _, expected := range tt.wantURLContains {
+				assert.Contains(t, exploreLink, expected, "Explore link should contain: %s", expected)
+			}
+
+			// Parse the URL to extract the panes parameter
+			parsedURL, err := url.Parse(exploreLink)
+			assert.NoError(t, err)
+
+			panesParam := parsedURL.Query().Get("panes")
+			assert.NotEmpty(t, panesParam, "panes parameter should be present")
+
+			// URL decode the panes parameter
+			decodedPanes, err := url.QueryUnescape(panesParam)
+			assert.NoError(t, err)
+			assert.NotEmpty(t, decodedPanes, "decoded panes should not be empty")
+
+			// Verify the decoded panes contains expected components
+			for _, expected := range tt.wantPanesContains {
+				assert.Contains(t, decodedPanes, expected, "Decoded panes should contain: %s", expected)
+			}
+
+			// Verify the decoded panes does not contain unexpected components
+			for _, unexpected := range tt.wantPanesNotContains {
+				assert.NotContains(t, decodedPanes, unexpected, "Decoded panes should not contain: %s", unexpected)
+			}
+
+			// Verify the link is properly URL encoded (raw JSON should not be visible in the URL)
+			assert.Contains(t, exploreLink, "panes=")
+			assert.NotContains(t, exploreLink, `{"yyz":`)
+		})
+	}
+}
+
+func TestIntegratorWithExploreLinkGeneration(t *testing.T) {
+	tests := []struct {
+		name                 string
+		datasourceType       string
+		query                string
+		datasource           string
+		wantURLContains      []string
+		wantPanesContains    []string
+		wantPanesNotContains []string
+	}{
+		{
+			name:           "Loki datasource generates correct explore link",
+			datasourceType: Loki,
+			query:          `{job="loki"} |= "error"`,
+			datasource:     "test-loki-datasource",
+			wantURLContains: []string{
+				"https://test.grafana.com/explore",
+				"schemaVersion=1",
+				"orgId=1",
+			},
+			wantPanesContains: []string{
+				`"datasource":"test-loki-datasource"`,
+				`"type":"loki"`,
+				`"expr":"{job=\"loki\"} |= \"error\""`,
+				`"queryType":"range"`,
+			},
+			wantPanesNotContains: []string{
+				`"query":`,
+				`"metrics"`,
+				`"bucketAggs"`,
+				`"timeField"`,
+			},
+		},
+		{
+			name:           "Elasticsearch datasource generates correct explore link",
+			datasourceType: Elasticsearch,
+			query:          `type:log AND (level:(ERROR OR FATAL OR CRITICAL))`,
+			datasource:     "test-elasticsearch-datasource",
+			wantURLContains: []string{
+				"https://test.grafana.com/explore",
+				"schemaVersion=1",
+				"orgId=1",
+			},
+			wantPanesContains: []string{
+				`"datasource":"test-elasticsearch-datasource"`,
+				`"type":"elasticsearch"`,
+				`"query":"type:log AND (level:(ERROR OR FATAL OR CRITICAL))"`,
+				`"metrics":[{"type":"count","id":"1"}]`,
+				`"bucketAggs":[{"type":"date_histogram"`,
+				`"timeField":"@timestamp"`,
+			},
+			wantPanesNotContains: []string{
+				`"expr":`,
+				`"queryType"`,
+				`"editorMode"`,
+				`"direction"`,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create test queries
+			testQueries := []string{tt.query}
+
+			// Create temporary test directory
+			testDir := filepath.Join("testdata", "test_explore_link", tt.name)
+			err := os.MkdirAll(testDir, 0o755)
+			assert.NoError(t, err)
+			defer os.RemoveAll(testDir)
+
+			// Create conversion and deployment subdirectories
+			convPath := filepath.Join(testDir, "conv")
+			deployPath := filepath.Join(testDir, "deploy")
+			err = os.MkdirAll(convPath, 0o755)
+			assert.NoError(t, err)
+			err = os.MkdirAll(deployPath, 0o755)
+			assert.NoError(t, err)
+
+			// Create test conversion output
+			convOutput := ConversionOutput{
+				Queries:        testQueries,
+				ConversionName: "test_explore_link",
+				Rules: []SigmaRule{
+					{
+						ID:    "996f8884-9144-40e7-ac63-29090ccde9a0",
+						Title: "Test Explore Link Rule",
+					},
+				},
+			}
+
+			// Create test configuration with query testing enabled
+			config := Configuration{
+				Folders: FoldersConfig{
+					ConversionPath: convPath,
+					DeploymentPath: deployPath,
+				},
+				ConversionDefaults: ConversionConfig{
+					Target:         tt.datasourceType,
+					DataSource:     tt.datasource,
+					DataSourceType: tt.datasourceType,
+				},
+				Conversions: []ConversionConfig{
+					{
+						Name:           "test_explore_link",
+						RuleGroup:      "Explore Link Test Rules",
+						TimeWindow:     "5m",
+						DataSource:     tt.datasource,
+						DataSourceType: tt.datasourceType,
+					},
+				},
+				IntegratorConfig: IntegrationConfig{
+					FolderID:    "test-folder",
+					OrgID:       1,
+					TestQueries: true,
+					From:        "now-1h",
+					To:          "now",
+				},
+				DeployerConfig: DeploymentConfig{
+					GrafanaInstance: "https://test.grafana.com",
+					Timeout:         "5s",
+				},
+			}
+
+			// Create test conversion output file
+			convBytes, err := json.Marshal(convOutput)
+			assert.NoError(t, err)
+			convFile := filepath.Join(convPath, "test_explore_link.json")
+			err = os.WriteFile(convFile, convBytes, 0o600)
+			assert.NoError(t, err)
+
+			// Create mock query executor
+			mockDatasourceQuery := newTestDatasourceQuery()
+
+			// Add mock response for our test query
+			mockDatasourceQuery.AddMockResponse(tt.query, []byte(`{
+				"results": {
+					"A": {
+						"frames": [{
+							"schema": {
+								"fields": [
+									{"name": "Time", "type": "time"},
+									{"name": "Line", "type": "string"}
+								]
+							},
+							"data": {
+								"values": [
+									[1625126400000, 1625126460000],
+									["test log line", "another test log"]
+								]
+							}
+						}]
+					}
+				}
+			}`))
+
+			// Create a temporary output file for capturing outputs
+			outputFile, err := os.CreateTemp("", "github-output")
+			assert.NoError(t, err)
+			defer os.Remove(outputFile.Name())
+
+			// Setup environment for the test
+			os.Setenv("GITHUB_OUTPUT", outputFile.Name())
+			defer os.Unsetenv("GITHUB_OUTPUT")
+
+			// Set up integrator
+			integrator := &Integrator{
+				config:       config,
+				addedFiles:   []string{convFile},
+				removedFiles: []string{},
+			}
+
+			// Save original executor and restore after test
+			originalDatasourceQuery := DefaultDatasourceQuery
+			DefaultDatasourceQuery = mockDatasourceQuery
+			defer func() {
+				DefaultDatasourceQuery = originalDatasourceQuery
+			}()
+
+			// Set environment variable for API token
+			os.Setenv("INTEGRATOR_GRAFANA_SA_TOKEN", "test-api-token")
+			defer os.Unsetenv("INTEGRATOR_GRAFANA_SA_TOKEN")
+
+			// Run integration
+			err = integrator.Run()
+			assert.NoError(t, err)
+
+			// Read the output file to get the captured outputs
+			outputBytes, err := os.ReadFile(outputFile.Name())
+			assert.NoError(t, err)
+			outputContent := string(outputBytes)
+
+			// Verify test_query_results was captured
+			assert.Contains(t, outputContent, "test_query_results=")
+
+			// Extract the test_query_results value
+			lines := strings.Split(outputContent, "\n")
+			var testQueryResults string
+			for _, line := range lines {
+				if strings.HasPrefix(line, "test_query_results=") {
+					testQueryResults = strings.TrimPrefix(line, "test_query_results=")
+					break
+				}
+			}
+			assert.NotEmpty(t, testQueryResults)
+
+			// Parse and validate the query test results
+			var queryResults map[string][]QueryTestResult
+			err = json.Unmarshal([]byte(testQueryResults), &queryResults)
+			assert.NoError(t, err)
+			assert.Equal(t, len(testQueries), len(queryResults[convFile]))
+
+			// Verify the explore link in the query results
+			for _, results := range queryResults {
+				for _, queryTestResult := range results {
+					assert.Equal(t, tt.datasource, queryTestResult.Datasource)
+					assert.NotEmpty(t, queryTestResult.Link)
+
+					// Verify URL components
+					for _, expected := range tt.wantURLContains {
+						assert.Contains(t, queryTestResult.Link, expected, "Explore link should contain: %s", expected)
+					}
+
+					// Parse the URL to extract the panes parameter
+					parsedURL, err := url.Parse(queryTestResult.Link)
+					assert.NoError(t, err)
+
+					panesParam := parsedURL.Query().Get("panes")
+					assert.NotEmpty(t, panesParam, "panes parameter should be present")
+
+					// URL decode the panes parameter
+					decodedPanes, err := url.QueryUnescape(panesParam)
+					assert.NoError(t, err)
+					assert.NotEmpty(t, decodedPanes, "decoded panes should not be empty")
+
+					// Verify the decoded panes contains expected components
+					for _, expected := range tt.wantPanesContains {
+						assert.Contains(t, decodedPanes, expected, "Decoded panes should contain: %s", expected)
+					}
+
+					// Verify the decoded panes does not contain unexpected components
+					for _, unexpected := range tt.wantPanesNotContains {
+						assert.NotContains(t, decodedPanes, unexpected, "Decoded panes should not contain: %s", unexpected)
+					}
+
+					// Verify the link is properly URL encoded (raw JSON should not be visible in the URL)
+					assert.Contains(t, queryTestResult.Link, "panes=")
+					assert.NotContains(t, queryTestResult.Link, `{"yyz":`)
+				}
+			}
+		})
+	}
+}
+
 func TestIntegrationWithQueryTestingErrors(t *testing.T) {
 	tests := []struct {
 		name                     string

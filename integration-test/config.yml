@@ -1,0 +1,28 @@
+folders:
+  conversion_path: "./conversions"
+  deployment_path: "./deployments"
+conversion_defaults:
+  target: loki
+  format: default
+  skip_unsupported: true
+  file_pattern: "*.yml"
+  data_source: grafanacloud-logs
+conversions:
+  - name: github_audit
+    input:
+      - "rules/test*"
+    backend_options:
+      case_sensitive: true
+    pipelines:
+      - pipelines/datasources/test-1.yml
+      - pipelines/test-1.yml
+    rule_group: Every 1 Hour
+    time_window: 1h
+integration:
+  folder_id: ae9ojcgwmy48wf # sigma-rule-deployment
+  org_id: 1
+  test_queries: false # Whether to test the queries against the datasource
+  from: "now-1h"
+  to: "now"
+deployment:
+  grafana_instance: https://securityops.grafana-dev.net

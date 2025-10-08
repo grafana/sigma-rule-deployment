@@ -1,0 +1,11 @@
+name: test-datasource
+priority: 10
+transformations:
+  - id: custom_log_source
+    type: set_custom_log_source
+    selection:
+      name: test-datasource
+  - id: custom_parser
+    type: set_custom_attribute
+    attribute: loki_parser
+    value: "| json"

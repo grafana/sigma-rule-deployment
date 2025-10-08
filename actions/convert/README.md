@@ -1,6 +1,6 @@
 # Sigma Rule Converter GitHub Action
 
-**Sigma Rule Converter** is a GitHub Action that converts Sigma rules to target query languages using [`sigma-cli`](https://github.com/SigmaHQ/sigma-cli). It supports dynamic plugin installation, custom configurations, and output management.
+**Sigma Rule Converter** is a GitHub Action that converts Sigma rules to target query languages using [`sigma-cli`](https://github.com/SigmaHQ/sigma-cli). It supports dynamic plugin installation, custom configurations and output management. This action is part of the Sigma Rule Deployment GitHub Actions Suite and should be used as a conversion step before running integration and deployment actions.
 
 ## Inputs
 
@@ -13,7 +13,6 @@
 | `all_rules`               | Whether to convert all rules, regardless of changes (`true/false`).                                                                   | No       | `false`                 |
 | `actions_username`        | The username of the github actions bot committer.                                                                                     | No       | `"github-actions[bot]"` |
 | `changed_files_from_base` | Calculate changes from PR base.                                                                                                       | No       | `"false"`               |
-| `conversion_path`         | The path where the conversions will be output to                                                                                      | No       | `"conversions"`         |
 
 ## Usage
 
@@ -41,8 +40,6 @@ jobs:
           render_traceback: "false"
           pretty_print: "true"
           all_rules: "false"
-          changed_files: "rules/example.yml rules/example2.yml"
-          deleted_files: "rules/old.yml rules/old2.yml"
 ```
 
 ## How It Works
@@ -55,7 +52,25 @@ jobs:
    - Applies pipelines and filters
    - Converts rules using the specified backend
    - Generates JSON output with queries and rule metadata
-5. **Output**: Stores the converted files in the specified `folders.conversion_path` directory.
+5. **Output**: Stores the converted files in the specified `folders.conversion_path` directory as JSON files with the following structure:
+
+   ```json
+   {
+     "queries": ["query1", "query2"],
+     "conversion_name": "conversion_name",
+     "input_file": "input_file",
+     "rules": [
+       {
+         "id": "rule_id",
+         "title": "rule_title",
+         "description": "rule_description",
+         "severity": "rule_severity",
+         "query": "rule_query"
+       }
+     ],
+     "output_file": "output_file"
+   }
+   ```
 
 ## Example Plugins
 
@@ -68,14 +83,16 @@ jobs:
 - Use the `render_traceback` input to get detailed error information in case of failures. Essentially this will print the full traceback of the error.
 - The `pretty_print` option affects the JSON output formatting by adding newlines and indentation (2 spaces).
 - The `all_rules` option forces conversion of all matching rules, regardless of changes. By default, only rules that have changed are converted.
-- Input patterns can be glob patterns or specific file paths.
+- Input patterns can be glob patterns or specific file paths. When working with nested directories, use the correct glob syntax:
+  - `rules/**/*.yml` - Matches all `.yml` files in the `rules` directory and all subdirectories
+  - `rules/*.yml` - Only matches `.yml` files directly in the `rules` directory (not in subdirectories)
 - Pipeline files must be relative to the project root.
 - The conversion output includes both queries and rule metadata for deployment.
-- The `changed_files` and `deleted_files` parameters should be space-separated lists of file paths relative to the repository root. These are used to determine which rules need to be converted or removed. Wildcards are NOT supported, so you must specify each file. Usually you will use git commands to get the list of changed and deleted files to pass into these parameters.
+- The action automatically detects changed and deleted files using git diff to determine which rules need to be converted or removed.
 - The output JSON files contain:
   - `queries`: List of converted queries
   - `conversion_name`: Name of the conversion from the config
   - `input_file`: Path to the original Sigma rule file
   - `rules`: List of rule metadata including ID, title, description, severity, and query
   - `output_file`: Path to the output file relative to the repository root
-- For correlation rules to work correctly, all the related rules must be present in the same file using the `---` notation in YAML.
+- For correlation rules to work correctly, all the related rules must be present in the same file using the `---` notation (multi document) in YAML.
