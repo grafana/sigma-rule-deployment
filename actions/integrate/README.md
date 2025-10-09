@@ -21,10 +21,10 @@ The Grafana Query Integrator action bridges the gap between converted Sigma rule
 
 ## Outputs
 
-| Name                 | Description                                                                 |
-| -------------------- | --------------------------------------------------------------------------- |
-| `rules_integrated`   | The repository file names changed (added/updated or removed) by this Action |
-| `test_query_results` | The results of testing the queries against the datasource for the past hour |
+| Name                 | Description                                                                                                |
+| -------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `rules_integrated`   | List of the filenames of alert rule files created, updated or deleted during integration (space-separated) |
+| `test_query_results` | The results of testing the queries against the datasource for the past hour                                |
 
 ## Usage
 
