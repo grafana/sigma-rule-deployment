@@ -78,3 +78,10 @@ jobs:
 - Use this action as a validation step in workflows that trigger on configuration file changes.
 - Include in pull request validation to catch configuration errors early.
 - Consider running before conversion, integration, and deployment actions.
+
+## Notes
+
+This is a composite action relying on the following external actions:
+
+- [actions/checkout v5 by GitHub](https://github.com/actions/checkout)
+- [actions/setup-python v6 by GitHub](https://github.com/actions/setup-python)
