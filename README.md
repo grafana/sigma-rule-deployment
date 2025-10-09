@@ -1,6 +1,8 @@
 # Sigma Rule Deployment GitHub Actions Suite
 
-Automate the conversion, testing, and deployment of [Sigma rules](https://sigmahq.io/) to [Grafana Alerting](https://grafana.com/docs/grafana/latest/alerting/) rules with GitHub Actions using a [SOCless](./README.md#what-is-socless) approach.
+<!-- SOCless that s*cks less! -->
+
+Automate the conversion, testing, and deployment of [Sigma rules](https://sigmahq.io/) to [Grafana Alerting](https://grafana.com/docs/grafana/latest/alerting/) rules with GitHub Actions using a [SOCless](./README.md#what-is-socless) approach using a declarative configuration file.
 
 ## Available Actions
 
@@ -23,32 +25,67 @@ Automate the conversion, testing, and deployment of [Sigma rules](https://sigmah
      - Data sources: Reader
 3. Create a configuration file that defines one or more conversions and add it to the repository
    - See the sample [configuration file](config/config-example.yml)
-   - See also the [configuration file schema](https://github.com/grafana/sigma-rule-deployment/blob/main/config/schema.json) for more details
+   - See also the [configuration file schema](config/schema.json) for more details
 4. Add a workflow to run the conversion/integration Actions on a PR commit or issue comment
    - See the reusable workflow [convert-integrate.yml](.github/workflows/convert-integrate.yml)
 5. Add a workflow to run the deployment Action on a push to main
    - See the reusable workflow [deploy.yml](.github/workflows/deploy.yml)
 6. Create a PR that adds or modify a converted Sigma rule, and add a comment `sigma convert all` to the PR to see the conversion and integration process in action
-7. Once you're happy with the results, merge the PR into main, which will trigger the deployer to provision the rules to your Grafana instance
+7. Once you're happy with the results, merge the PR into main, which will trigger the deployer to provision the Alerting rules to your Grafana instance
 8. With the alert rules successfully provisioned, set up [Alerting notifications](https://grafana.com/docs/grafana/latest/alerting/configure-notifications/) for the relevant folder and/or groups to directly contact affected users. Alternatively you can connect them to [Grafana IRM](https://grafana.com/docs/grafana-cloud/alerting-and-irm/irm/) and use it to manage on-call rotas and simplify alert routing
 
 ## FAQ
 
 ### What backends/data sources do you support?
 
-These Actions can convert rules using **any** Sigma backend and produce valid alert rules for **any** data source, however, to date they have only been thoroughly tested with Loki. In particular, converting log queries into metric queries so they can be used correctly with Grafana Managed Alerting is dependent on the backend supporting that option or by modifying the generated queries.
+These Actions can convert rules using **any** Sigma backend and produce valid alert rules for **any** data source, however, to date they have only been thoroughly tested with Loki and Elasticsearch. In particular, converting log queries into metric queries so they can be used correctly with Grafana Managed Alerting is dependent on the backend supporting that option or by modifying the generated queries using the `query_model` option.
 
 Relevent conversion backends and data sources that can be used in Grafana include:
 
-- [Grafana Loki](https://github.com/grafana/pySigma-backend-loki) and the [Loki data source](https://grafana.com/docs/loki/latest/)
-- [Azure KQL](https://github.com/AttackIQ/pySigma-backend-kusto) and the [Azure Monitor data source](https://grafana.com/docs/grafana/latest/datasources/azure-monitor/)
-- [Datadog](https://github.com/DataDog/pysigma-backend-datadog) and the [Datadog data source](https://grafana.com/grafana/plugins/grafana-datadog-datasource/)
-- [Elasticsearch](https://github.com/SigmaHQ/pySigma-backend-elasticsearch) and the [Elasticsearch data source](https://grafana.com/docs/grafana/latest/datasources/elasticsearch/)
-- [QRadar AQL](https://github.com/IBM/pySigma-backend-QRadar-aql) and the [IBM Security QRadar data source](https://grafana.com/grafana/plugins/ibm-aql-datasource/)
-- [Opensearch](https://github.com/SigmaHQ/pySigma-backend-opensearch) and the [Opensearch data source](https://grafana.com/grafana/plugins/grafana-opensearch-datasource/)
-- [Splunk](https://github.com/SigmaHQ/pySigma-backend-splunk) and the [Splunk data source](https://grafana.com/grafana/plugins/grafana-splunk-datasource/)
-- [SQLite](https://github.com/SigmaHQ/pySigma-backend-sqlite) and the [SQLite data source](https://grafana.com/grafana/plugins/frser-sqlite-datasource/)
-- [SurrealQL](https://github.com/SigmaHQ/pySigma-backend-surrealql) and the [SurrealDB data source](https://grafana.com/grafana/plugins/grafana-surrealdb-datasource/)
+| Sigma Backend                                                             | Data Source                                                                                     | Supported Integration Method |
+| ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ---------------------------- |
+| [Grafana Loki](https://github.com/grafana/pySigma-backend-loki)           | [Loki data source](https://grafana.com/docs/loki/latest/)                                       | Native                       |
+| [Elasticsearch](https://github.com/SigmaHQ/pySigma-backend-elasticsearch) | [Elasticsearch data source](https://grafana.com/docs/grafana/latest/datasources/elasticsearch/) | Native, Custom Model         |
+| [Azure KQL](https://github.com/AttackIQ/pySigma-backend-kusto)            | [Azure Monitor data source](https://grafana.com/docs/grafana/latest/datasources/azure-monitor/) | Custom Model                 |
+| [Datadog](https://github.com/SigmaHQ/pySigma-backend-datadog)             | [Datadog data source](https://grafana.com/grafana/plugins/grafana-datadog-datasource/)          | Custom Model                 |
+| [QRadar AQL](https://github.com/IBM/pySigma-backend-QRadar-aql)           | [IBM Security QRadar data source](https://grafana.com/grafana/plugins/ibm-aql-datasource/)      | Custom Model                 |
+| [Opensearch](https://github.com/SigmaHQ/pySigma-backend-opensearch)       | [Opensearch data source](https://grafana.com/grafana/plugins/grafana-opensearch-datasource/)    | Custom Model                 |
+| [Splunk](https://github.com/SigmaHQ/pySigma-backend-splunk)               | [Splunk data source](https://grafana.com/grafana/plugins/grafana-splunk-datasource/)            | Custom Model                 |
+| [SQLite](https://github.com/SigmaHQ/pySigma-backend-sqlite)               | [SQLite data source](https://grafana.com/grafana/plugins/frser-sqlite-datasource/)              | Custom Model                 |
+| [SurrealQL](https://github.com/SigmaHQ/pySigma-backend-surrealql)         | [SurrealDB data source](https://grafana.com/grafana/plugins/grafana-surrealdb-datasource/)      | Custom Model                 |
+
+- **Native**: The data source plugin is supported by integrate action and the query model is generated automatically.
+- **Custom Model**: The data source plugin is supported by the integrate action but the query model must be passed as a custom model in the conversion configuration.
+
+### Why can't I use log queries with alert rules?
+
+> [!IMPORTANT]
+> [Alert rules](https://grafana.com/docs/grafana/latest/alerting/fundamentals/alert-rules/) only work with metric queries, not log queries.
+
+#### 1. Data source compatibility
+
+Data source plugins vary in their support for metric queries and the generated query from the convert action may only produce a log query, and not a metric query (no Sigma correlation support yet).
+
+- **Native support**: Some data sources, such as Loki, can [apply metric functions](https://grafana.com/docs/loki/latest/query/metric_queries/) to log queries
+- **Limited support**: Other data source, including the [Elasticsearch data source](https://grafana.com/docs/grafana/latest/datasources/elasticsearch/), do not support metric queries through their native query language
+
+#### 2. Custom query models
+
+For data sources that lack native metric query support, you must provide a custom query model using the `query_model` configuration option (see [How can I use a custom query model for a data source?](#how-can-i-use-a-custom-query-model-for-a-data-source)).
+
+The query model is a JSON object that defines the data source query structure for query execution.
+
+<!-- #### SQL expressions for metric queries
+
+When using the `query_model` option, you can leverage Grafana [SQL Expressions](https://grafana.com/docs/grafana/latest/panels-visualizations/query-transform-data/sql-expressions/) to transform log queries into metric queries:
+
+```sql
+SELECT COUNT(*) FROM A
+```
+
+**Note**: SQL expressions are only [compatible](https://grafana.com/docs/grafana/latest/panels-visualizations/query-transform-data/sql-expressions/#compatible-data-sources) with certain data source plugins. -->
+
+### How can I use a custom query model for a data source?
 
 To ensure the data source plugin can execute your queries, you may need to provide a bespoke `query_model` in the conversion configuration. You do this by specifing a [fmt.Sprintf](https://pkg.go.dev/fmt#pkg-overview) formatted JSON string, which receives the following arguments:
 
@@ -60,6 +97,12 @@ An example query model would be:
 
 ```yaml
 query_model: '{"refId":"%s","datasource":{"type":"my_data_source_type","uid":"%s"},"query":"%s","customKey":"customValue"}'
+```
+
+Or for Elasticsearch:
+
+```yaml
+query_model: '{"refId":"%s","datasource":{"type":"elasticsearch","uid":"%s"},"query":"%s","alias":"","metrics":[{"type":"count","id":"1"}],"bucketAggs":[{"type":"date_histogram","id":"2","settings":{"interval":"auto"}}],"intervalMs":2000,"maxDataPoints":1354,"timeField":"@timestamp"}'
 ```
 
 Other than the `refId` and `datasource` (which are required by Grafana), the keys used for the query model are data source dependent. They can be identified by testing a query against the data source with the [Query inspector](https://grafana.com/docs/grafana/latest/explore/explore-inspector/) open, going to the Query tab, and examining the items used in the `request.data.queries` list.
