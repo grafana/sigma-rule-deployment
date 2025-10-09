@@ -94,15 +94,6 @@ jobs:
 - **Normal Mode** (default): Only processes changed files, making it safe for regular deployments
 - **Fresh Deploy Mode**: Completely replaces all alerts in the target folder - use with extreme caution
 
-### Grafana Permissions
-
-The `grafana_sa_token` must have the following permissions:
-
-- Alerting: Rule Reader
-- Alerting: Rule Writer
-- Alerting: Access to alert rules provisioning API
-- Alerting: Set provisioning status
-
 ### Best Practices
 
 - Use normal mode for regular deployments triggered by pushes to main branch
