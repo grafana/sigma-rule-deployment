@@ -10,7 +10,7 @@ The Grafana Query Integrator action bridges the gap between converted Sigma rule
 
 | Name                               | Description                                                                                          | Required | Default               |
 | ---------------------------------- | ---------------------------------------------------------------------------------------------------- | -------- | --------------------- |
-| `config_path`                      | Path to the configuration file for the Sigma Rule Deployer                                           | Yes      | `""`                  |
+| `config_path`                      | Path to the configuration file for the Sigma Rule Integrator                                         | Yes      | `""`                  |
 | `grafana_sa_token`                 | Service account token for Grafana for query testing                                                  | No       | `""`                  |
 | `pretty_print`                     | Pretty print the JSON output                                                                         | No       | `false`               |
 | `output_log_lines`                 | Output log lines to the outputs of the test_query_results                                            | No       | `false`               |
