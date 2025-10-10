@@ -124,6 +124,24 @@ runs:
         echo all_changed_files=${CHANGED_FILES//\\n/} >> "$GITHUB_OUTPUT"
         echo deleted_files=${DELETED_FILES//\\n/} >> "$GITHUB_OUTPUT"
 
+    - name: Determine Image Reference
+      id: image-ref
+      shell: bash
+      env:
+        ACTION_REF: ${{ github.action_ref }}
+      run: |
+        # Check if the ACTION_REF is a tag (starts with v followed by numbers/dots)
+        if [[ "$ACTION_REF" =~ ^v[0-9]+(\.[0-9]+)*(\.[0-9]+)?$ ]]; then
+          echo "image_ref=$ACTION_REF" >> $GITHUB_OUTPUT
+          echo "Using tag: $ACTION_REF"
+        elif [[ "$ACTION_REF" == "latest" ]]; then
+          echo "image_ref=latest" >> $GITHUB_OUTPUT
+          echo "Using latest tag"
+        else
+          echo "image_ref=sha-$ACTION_REF" >> $GITHUB_OUTPUT
+          echo "Using SHA: sha-$ACTION_REF"
+        fi
+
     - name: Run Sigma Rule Converter
       id: convert
       shell: bash
@@ -135,7 +153,7 @@ runs:
         ALL_RULES: ${{ inputs.all_rules }}
         CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
         DELETED_FILES: ${{ steps.changed-files.outputs.deleted_files }}
-        ACTION_REF: ${{ github.action_ref }}
+        IMAGE_REF: ${{ steps.image-ref.outputs.image_ref }}
       run: |
         docker run --rm \
             -v "$(pwd):/sigma-rules" \
@@ -148,7 +166,7 @@ runs:
             -e ALL_RULES="$ALL_RULES" \
             -e CHANGED_FILES="$CHANGED_FILES" \
             -e DELETED_FILES="$DELETED_FILES" \
-            "ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-$ACTION_REF" \
+            "ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:$IMAGE_REF" \
             convert
 
     - name: Generate Comment Data
