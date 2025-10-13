@@ -210,6 +210,7 @@ func (h *HTTPDatasourceQuery) ExecuteQuery(
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
+	req.Header.Set("User-Agent", "sigma-rule-deployment/integrator")
 
 	client := &http.Client{
 		Timeout: timeout,
@@ -289,6 +290,7 @@ func (h *HTTPDatasourceQuery) getDatasourceRequest(
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "sigma-rule-deployment/integrator")
 
 	client := &http.Client{
 		Timeout: timeout,
