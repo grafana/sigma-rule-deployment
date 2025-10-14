@@ -14,105 +14,101 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestGetDatasourceByName(t *testing.T) {
-	// Activate httpmock
-	httpmock.Activate(t)
-	defer httpmock.DeactivateAndReset()
-
-	baseURL := "http://grafana:3000"
-	apiKey := "test-api-key"
-	dsName := "test-datasource"
-	timeout := 5 * time.Second
-
-	// Mock datasource response
-	mockDatasource := &GrafanaDatasource{
-		ID:     1,
-		UID:    "abc123",
-		OrgID:  1,
-		Name:   "test-datasource",
-		Type:   Loki,
-		Access: "proxy",
-		URL:    "http://loki:3100",
+func TestGetDatasource(t *testing.T) {
+	tests := []struct {
+		name              string
+		dsNameOrUID       string
+		mockEndpoint      string
+		mockStatusCode    int
+		mockResponse      string
+		expectedUID       string
+		expectedType      string
+		expectedName      string
+		expectedError     bool
+		expectedErrorMsg  string
+		expectedCallCount map[string]int
+	}{
+		{
+			name:           "successful lookup by name",
+			dsNameOrUID:    "test-datasource",
+			mockEndpoint:   "/api/datasources/name/test-datasource",
+			mockStatusCode: 200,
+			mockResponse:   `{"id":1,"uid":"abc123","orgId":1,"name":"test-datasource","type":"loki","access":"proxy","url":"http://loki:3100"}`,
+			expectedUID:    "abc123",
+			expectedType:   Loki,
+			expectedName:   "test-datasource",
+			expectedError:  false,
+			expectedCallCount: map[string]int{
+				"GET http://grafana:3000/api/datasources/name/test-datasource": 1,
+			},
+		},
+		{
+			name:           "successful lookup by UID",
+			dsNameOrUID:    "abc123",
+			mockEndpoint:   "/api/datasources/uid/abc123",
+			mockStatusCode: 200,
+			mockResponse:   `{"id":1,"uid":"abc123","orgId":1,"name":"test-datasource","type":"loki","access":"proxy","url":"http://loki:3100"}`,
+			expectedUID:    "abc123",
+			expectedType:   Loki,
+			expectedName:   "test-datasource",
+			expectedError:  false,
+			expectedCallCount: map[string]int{
+				"GET http://grafana:3000/api/datasources/uid/abc123": 1,
+			},
+		},
+		{
+			name:             "datasource not found",
+			dsNameOrUID:      "nonexistent-datasource",
+			mockEndpoint:     "/api/datasources/name/nonexistent-datasource",
+			mockStatusCode:   404,
+			mockResponse:     `{"message": "Data source not found"}`,
+			expectedError:    true,
+			expectedErrorMsg: "HTTP error getting datasource: 404 Not Found",
+			expectedCallCount: map[string]int{
+				"GET http://grafana:3000/api/datasources/name/nonexistent-datasource": 1,
+			},
+		},
 	}
 
-	datasourceJSON, err := json.Marshal(mockDatasource)
-	require.NoError(t, err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Activate httpmock for this subtest
+			httpmock.Activate(t)
+			defer httpmock.DeactivateAndReset()
 
-	// Register mock for datasource by name endpoint
-	httpmock.RegisterResponder("GET", fmt.Sprintf("%s/api/datasources/name/%s", baseURL, dsName),
-		httpmock.NewStringResponder(200, string(datasourceJSON)))
+			baseURL := "http://grafana:3000"
+			apiKey := "test-api-key"
+			timeout := 5 * time.Second
 
-	// Test successful case
-	ds, err := GetDatasourceByName(dsName, baseURL, apiKey, timeout)
-	require.NoError(t, err)
-	assert.Equal(t, "abc123", ds.UID)
-	assert.Equal(t, Loki, ds.Type)
-	assert.Equal(t, "test-datasource", ds.Name)
+			// Register mock for the endpoint
+			httpmock.RegisterResponder("GET", fmt.Sprintf("%s%s", baseURL, tt.mockEndpoint),
+				httpmock.NewStringResponder(tt.mockStatusCode, tt.mockResponse))
 
-	// Verify the request was made
-	info := httpmock.GetCallCountInfo()
-	assert.Equal(t, 1, info["GET http://grafana:3000/api/datasources/name/test-datasource"])
-}
+			// Execute the function under test
+			ds, err := GetDatasourceByName(tt.dsNameOrUID, baseURL, apiKey, timeout)
 
-func TestGetDatasourceByNameByUID(t *testing.T) {
-	// Activate httpmock
-	httpmock.Activate(t)
-	defer httpmock.DeactivateAndReset()
+			// Verify results
+			if tt.expectedError {
+				require.Error(t, err)
+				assert.Nil(t, ds)
+				assert.Contains(t, err.Error(), tt.expectedErrorMsg)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.expectedUID, ds.UID)
+				assert.Equal(t, tt.expectedType, ds.Type)
+				assert.Equal(t, tt.expectedName, ds.Name)
+			}
 
-	baseURL := "http://grafana:3000"
-	apiKey := "test-api-key"
-	dsUID := "abc123"
-	timeout := 5 * time.Second
-
-	// Mock datasource response
-	mockDatasource := &GrafanaDatasource{
-		ID:     1,
-		UID:    "abc123",
-		OrgID:  1,
-		Name:   "test-datasource",
-		Type:   Loki,
-		Access: "proxy",
-		URL:    "http://loki:3100",
+			// Verify the request was made
+			info := httpmock.GetCallCountInfo()
+			for url, count := range tt.expectedCallCount {
+				assert.Equal(t, count, info[url], "Request count for %s should be %d", url, count)
+			}
+			for call := range info {
+				assert.Contains(t, tt.expectedCallCount, call, "Unexpected request made: %s", call)
+			}
+		})
 	}
-
-	datasourceJSON, err := json.Marshal(mockDatasource)
-	require.NoError(t, err)
-
-	// Register mock for datasource by UID endpoint
-	httpmock.RegisterResponder("GET", fmt.Sprintf("%s/api/datasources/uid/%s", baseURL, dsUID),
-		httpmock.NewStringResponder(200, string(datasourceJSON)))
-
-	// Test successful case
-	ds, err := GetDatasourceByName(dsUID, baseURL, apiKey, timeout)
-	require.NoError(t, err)
-	assert.Equal(t, "abc123", ds.UID)
-	assert.Equal(t, Loki, ds.Type)
-	assert.Equal(t, "test-datasource", ds.Name)
-
-	// Verify the request was made
-	info := httpmock.GetCallCountInfo()
-	assert.Equal(t, 1, info["GET http://grafana:3000/api/datasources/uid/abc123"])
-}
-
-func TestGetDatasourceByNameNotFound(t *testing.T) {
-	// Activate httpmock
-	httpmock.Activate(t)
-	defer httpmock.DeactivateAndReset()
-
-	baseURL := "http://grafana:3000"
-	apiKey := "test-api-key"
-	dsName := "nonexistent-datasource"
-	timeout := 5 * time.Second
-
-	// Register mock for 404 response
-	httpmock.RegisterResponder("GET", fmt.Sprintf("%s/api/datasources/name/%s", baseURL, dsName),
-		httpmock.NewStringResponder(404, `{"message": "Data source not found"}`))
-
-	// Test error case
-	ds, err := GetDatasourceByName(dsName, baseURL, apiKey, timeout)
-	require.Error(t, err)
-	assert.Nil(t, ds)
-	assert.Contains(t, err.Error(), "HTTP error getting datasource: 404 Not Found")
 }
 
 func TestTestQueryLoki(t *testing.T) {
