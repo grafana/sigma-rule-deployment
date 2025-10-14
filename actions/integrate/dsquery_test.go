@@ -29,20 +29,6 @@ func TestGetDatasource(t *testing.T) {
 		expectedCallCount map[string]int
 	}{
 		{
-			name:           "successful lookup by name",
-			dsNameOrUID:    "test-datasource",
-			mockEndpoint:   "/api/datasources/name/test-datasource",
-			mockStatusCode: 200,
-			mockResponse:   `{"id":1,"uid":"abc123","orgId":1,"name":"test-datasource","type":"loki","access":"proxy","url":"http://loki:3100"}`,
-			expectedUID:    "abc123",
-			expectedType:   Loki,
-			expectedName:   "test-datasource",
-			expectedError:  false,
-			expectedCallCount: map[string]int{
-				"GET http://grafana:3000/api/datasources/name/test-datasource": 1,
-			},
-		},
-		{
 			name:           "successful lookup by UID",
 			dsNameOrUID:    "abc123",
 			mockEndpoint:   "/api/datasources/uid/abc123",
@@ -59,13 +45,13 @@ func TestGetDatasource(t *testing.T) {
 		{
 			name:             "datasource not found",
 			dsNameOrUID:      "nonexistent-datasource",
-			mockEndpoint:     "/api/datasources/name/nonexistent-datasource",
+			mockEndpoint:     "/api/datasources/uid/nonexistent-datasource",
 			mockStatusCode:   404,
 			mockResponse:     `{"message": "Data source not found"}`,
 			expectedError:    true,
 			expectedErrorMsg: "HTTP error getting datasource: 404 Not Found",
 			expectedCallCount: map[string]int{
-				"GET http://grafana:3000/api/datasources/name/nonexistent-datasource": 1,
+				"GET http://grafana:3000/api/datasources/uid/nonexistent-datasource": 1,
 			},
 		},
 	}
@@ -165,8 +151,8 @@ func TestTestQuery(t *testing.T) {
 			}`,
 			expectedError: false,
 			expectedCallCount: map[string]int{
-				"GET http://grafana:3000/api/datasources/name/test-loki": 1,
-				"POST http://grafana:3000/api/ds/query":                  1,
+				"GET http://grafana:3000/api/datasources/uid/test-loki": 1,
+				"POST http://grafana:3000/api/ds/query":                 1,
 			},
 		},
 		{
@@ -222,8 +208,8 @@ func TestTestQuery(t *testing.T) {
 			}`,
 			expectedError: false,
 			expectedCallCount: map[string]int{
-				"GET http://grafana:3000/api/datasources/name/test-elasticsearch": 1,
-				"POST http://grafana:3000/api/ds/query":                           1,
+				"GET http://grafana:3000/api/datasources/uid/test-elasticsearch": 1,
+				"POST http://grafana:3000/api/ds/query":                          1,
 			},
 		},
 		{
@@ -244,7 +230,7 @@ func TestTestQuery(t *testing.T) {
 			expectedError:    true,
 			expectedErrorMsg: "unsupported datasource type: prometheus",
 			expectedCallCount: map[string]int{
-				"GET http://grafana:3000/api/datasources/name/test-prometheus": 1,
+				"GET http://grafana:3000/api/datasources/uid/test-prometheus": 1,
 			},
 		},
 		{
@@ -267,8 +253,8 @@ func TestTestQuery(t *testing.T) {
 			expectedError:       true,
 			expectedErrorMsg:    "HTTP error 500 when querying datasource",
 			expectedCallCount: map[string]int{
-				"GET http://grafana:3000/api/datasources/name/test-loki": 1,
-				"POST http://grafana:3000/api/ds/query":                  1,
+				"GET http://grafana:3000/api/datasources/uid/test-loki": 1,
+				"POST http://grafana:3000/api/ds/query":                 1,
 			},
 		},
 		{
@@ -291,8 +277,8 @@ func TestTestQuery(t *testing.T) {
 			expectedError:       true,
 			expectedErrorMsg:    "invalid JSON response",
 			expectedCallCount: map[string]int{
-				"GET http://grafana:3000/api/datasources/name/test-loki": 1,
-				"POST http://grafana:3000/api/ds/query":                  1,
+				"GET http://grafana:3000/api/datasources/uid/test-loki": 1,
+				"POST http://grafana:3000/api/ds/query":                 1,
 			},
 		},
 		{
@@ -390,8 +376,31 @@ func TestTestQuery(t *testing.T) {
 			},
 			expectedError: false,
 			expectedCallCount: map[string]int{
-				"GET http://grafana:3000/api/datasources/name/test-elasticsearch": 1,
-				"POST http://grafana:3000/api/ds/query":                           1,
+				"GET http://grafana:3000/api/datasources/uid/test-elasticsearch": 1,
+				"POST http://grafana:3000/api/ds/query":                          1,
+			},
+		},
+		{
+			name:   "datasource by name",
+			dsName: "nonexistent-datasource",
+			query:  "my custom query",
+			from:   "now-1h",
+			to:     "now",
+			mockDatasource: &GrafanaDatasource{
+				ID:     1,
+				UID:    "no-such-datasource",
+				OrgID:  1,
+				Name:   "nonexistent-datasource",
+				Type:   Loki,
+				Access: "proxy",
+			},
+			mockQueryStatusCode: 404,
+			mockQueryResponse:   `{"message": "Data source not found"}`,
+			expectedError:       true,
+			expectedErrorMsg:    "404 Not Found, Response: {\"message\": \"Data source not found\"}",
+			expectedCallCount: map[string]int{
+				"GET http://grafana:3000/api/datasources/uid/nonexistent-datasource": 1,
+				"POST http://grafana:3000/api/ds/query":                              1,
 			},
 		},
 	}
@@ -410,7 +419,7 @@ func TestTestQuery(t *testing.T) {
 			datasourceJSON, err := json.Marshal(tt.mockDatasource)
 			require.NoError(t, err)
 
-			httpmock.RegisterResponder("GET", fmt.Sprintf("%s/api/datasources/name/%s", baseURL, tt.dsName),
+			httpmock.RegisterResponder("GET", fmt.Sprintf("%s/api/datasources/uid/%s", baseURL, tt.dsName),
 				httpmock.NewStringResponder(200, string(datasourceJSON)))
 
 			// Mock query response if needed
@@ -487,7 +496,7 @@ func TestElasticsearchQueryStructure(t *testing.T) {
 	require.NoError(t, err)
 
 	// Register mocks
-	httpmock.RegisterResponder("GET", fmt.Sprintf("%s/api/datasources/name/%s", baseURL, dsName),
+	httpmock.RegisterResponder("GET", fmt.Sprintf("%s/api/datasources/uid/%s", baseURL, dsName),
 		httpmock.NewStringResponder(200, string(datasourceJSON)))
 
 	// Capture the request body to verify the query structure
@@ -567,7 +576,7 @@ func TestElasticsearchQueryStructure(t *testing.T) {
 
 	// Verify the requests were made
 	info := httpmock.GetCallCountInfo()
-	assert.Equal(t, 1, info["GET http://grafana:3000/api/datasources/name/test-elasticsearch"])
+	assert.Equal(t, 1, info["GET http://grafana:3000/api/datasources/uid/test-elasticsearch"])
 	assert.Equal(t, 1, info["POST http://grafana:3000/api/ds/query"])
 }
 
@@ -611,7 +620,7 @@ func TestLokiQueryStructure(t *testing.T) {
 	require.NoError(t, err)
 
 	// Register mocks
-	httpmock.RegisterResponder("GET", fmt.Sprintf("%s/api/datasources/name/%s", baseURL, dsName),
+	httpmock.RegisterResponder("GET", fmt.Sprintf("%s/api/datasources/uid/%s", baseURL, dsName),
 		httpmock.NewStringResponder(200, string(datasourceJSON)))
 
 	// Capture the request body to verify the query structure
@@ -670,6 +679,6 @@ func TestLokiQueryStructure(t *testing.T) {
 
 	// Verify the requests were made
 	info := httpmock.GetCallCountInfo()
-	assert.Equal(t, 1, info["GET http://grafana:3000/api/datasources/name/test-loki"])
+	assert.Equal(t, 1, info["GET http://grafana:3000/api/datasources/uid/test-loki"])
 	assert.Equal(t, 1, info["POST http://grafana:3000/api/ds/query"])
 }
