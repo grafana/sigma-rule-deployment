@@ -6,14 +6,14 @@ conversion_defaults:
   format: default
   skip_unsupported: true
   file_pattern: "*.yml"
-  data_source: grafanacloud-logs
+  data_source: grafanacloud-logs # The UID of a data source
   required_rule_fields:
     - level
     - logsource
     - author
 conversions:
   - name: aws_cloudtrail
-    input: "rules-development/cloud/aws/cloudtrail/*"
+    input: "rules/cloud/aws/cloudtrail/*"
     backend_options:
       case_sensitive: true
     pipelines:
@@ -22,7 +22,7 @@ conversions:
     rule_group: Every 5 Minutes
     time_window: 5m
   - name: gcp_k8s
-    input: "rules-development/cloud/kubernetes/audit/*"
+    input: "rules/cloud/kubernetes/audit/*"
     pipeline_check: false
     encoding: utf-8
     pipelines:
@@ -30,7 +30,7 @@ conversions:
     rule_group: Every 5 Minutes
     time_window: 5m
   - name: okta_audit
-    input: "rules-development/cloud/okta/*"
+    input: "rules/cloud/okta/*"
     backend_options:
       case_sensitive: false
       add_line_filters: true
@@ -38,20 +38,8 @@ conversions:
       - loki_okta_system_log
     rule_group: Every 1 Hour
     time_window: 1h
-  - name: gcom_logins
-    input:
-      - "rules-private/grafana/grafana-com/grafana-com_failed_login_attempts_ip.yml"
-      - "rules-private/grafana/grafana-com/grafana-com_failed_login_attempts_user.yml"
-      - "rules-correlation/grafana/grafana-com/grafana-com_multiple_failed_login_attempts_by_ip.yml"
-      - "rules-correlation/grafana/grafana-com/grafana-com_multiple_failed_login_attempts_by_username.yml"
-    correlation_method: default
-    backend_options:
-      case_sensitive: true
-      add_line_filters: true
-    rule_group: Every 6 Hours
-    time_window: 6h
-    data_source_type: loki
-    query_model: '{"refId":"%s","datasource":{"type":"loki","uid":"%s"},"query":"%s"}'
+    data_source: okta-loki
+    query_model: '{"refId":"%s","datasource":{"type":"loki","uid":"%s"},"query":"%s"}' # A custom query model
 integration:
   folder_id: XXXX # Use a dedicated folder that will only contain the alerts created by these actions
   org_id: 1

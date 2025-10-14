@@ -48,3 +48,7 @@ Other than the `refId` and `datasource` (which are required by Grafana), the key
 ### Q: Are there any restrictions on the Sigma rule files?
 
 The main restriction are they need to be valid Sigma rules, including the `id` and `title` [metadata fields](https://sigmahq.io/docs/basics/rules.html#available-sigma-metadata-fields). If you are using [Correlation rules](https://github.com/SigmaHQ/sigma-specification/blob/main/specification/sigma-correlation-rules-specification.md), the rule files must contain **all** the referenced rules within the rule file (using [YAML's multiple document feature](https://gettaurus.org/docs/YAMLTutorial/#YAML-Multi-Documents), i.e., combined with `---`).
+
+### Q: What value should be provided for the `data_source` field in the `conversion` settings?
+
+This should be the UID (Unique IDentifier) of the data source, not the data source name. You can find the UID for a data source by opening the Explore page, selecting the relevant data source, and examining the page URL for the text `"datasource":"XXX"` - that value (i.e., `XXX`) is the UID.
