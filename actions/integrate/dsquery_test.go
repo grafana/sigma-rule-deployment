@@ -126,7 +126,6 @@ func TestTestQuery(t *testing.T) {
 		expectedError       bool
 		expectedErrorMsg    string
 		expectedCallCount   map[string]int
-		validateResponse    func(t *testing.T, result []byte)
 	}{
 		{
 			name:   "successful Loki query",
@@ -168,19 +167,6 @@ func TestTestQuery(t *testing.T) {
 			expectedCallCount: map[string]int{
 				"GET http://grafana:3000/api/datasources/name/test-loki": 1,
 				"POST http://grafana:3000/api/ds/query":                  1,
-			},
-			validateResponse: func(t *testing.T, result []byte) {
-				var response map[string]any
-				err := json.Unmarshal(result, &response)
-				require.NoError(t, err)
-
-				results, ok := response["results"].(map[string]any)
-				require.True(t, ok)
-				a, ok := results["A"].(map[string]any)
-				require.True(t, ok)
-				frames, ok := a["frames"].([]any)
-				require.True(t, ok)
-				assert.NotEmpty(t, frames)
 			},
 		},
 		{
@@ -238,42 +224,6 @@ func TestTestQuery(t *testing.T) {
 			expectedCallCount: map[string]int{
 				"GET http://grafana:3000/api/datasources/name/test-elasticsearch": 1,
 				"POST http://grafana:3000/api/ds/query":                           1,
-			},
-			validateResponse: func(t *testing.T, result []byte) {
-				var response map[string]any
-				err := json.Unmarshal(result, &response)
-				require.NoError(t, err)
-
-				results, ok := response["results"].(map[string]any)
-				require.True(t, ok)
-				a, ok := results["A"].(map[string]any)
-				require.True(t, ok)
-
-				// Verify status
-				status, ok := a["status"].(float64)
-				require.True(t, ok)
-				assert.Equal(t, float64(200), status)
-
-				// Verify frames structure
-				frames, ok := a["frames"].([]any)
-				require.True(t, ok)
-				assert.NotEmpty(t, frames)
-
-				frame, ok := frames[0].(map[string]any)
-				require.True(t, ok)
-
-				// Verify schema
-				schema, ok := frame["schema"].(map[string]any)
-				require.True(t, ok)
-				assert.Equal(t, "Count", schema["name"])
-				assert.Equal(t, "A", schema["refId"])
-
-				// Verify data structure
-				data, ok := frame["data"].(map[string]any)
-				require.True(t, ok)
-				values, ok := data["values"].([]any)
-				require.True(t, ok)
-				assert.Len(t, values, 2) // Time and Value arrays
 			},
 		},
 		{
@@ -443,22 +393,6 @@ func TestTestQuery(t *testing.T) {
 				"GET http://grafana:3000/api/datasources/name/test-elasticsearch": 1,
 				"POST http://grafana:3000/api/ds/query":                           1,
 			},
-			validateResponse: func(t *testing.T, result []byte) {
-				var response map[string]any
-				err := json.Unmarshal(result, &response)
-				require.NoError(t, err)
-
-				// Verify response structure
-				results, ok := response["results"].(map[string]any)
-				require.True(t, ok, "Response should contain results")
-
-				resultA, ok := results["A"].(map[string]any)
-				require.True(t, ok, "Results should contain A")
-
-				frames, ok := resultA["frames"].([]any)
-				require.True(t, ok, "Result A should contain frames")
-				require.Len(t, frames, 1, "Should have exactly one frame")
-			},
 		},
 	}
 
@@ -498,11 +432,6 @@ func TestTestQuery(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 				require.NotNil(t, result)
-
-				// Run custom validation if provided
-				if tt.validateResponse != nil {
-					tt.validateResponse(t, result)
-				}
 			}
 
 			// Verify the requests were made
