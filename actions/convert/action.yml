@@ -3,245 +3,245 @@ description: "Convert Sigma rules to target query languages using sigma-cli."
 author: "Mostafa Moradian"
 
 inputs:
-  config_path:
-    description: "Path to the Sigma conversion config file."
-    required: true
-    default: "./config.yaml"
-  plugin_packages:
-    description: "Comma-separated list of Sigma CLI plugin packages to install."
-    required: false
-    default: ""
-  render_traceback:
-    description: "Whether to render the traceback in the output."
-    required: false
-    default: "false"
-  pretty_print:
-    description: "Pretty print the JSON output"
-    required: false
-    default: "false"
-  all_rules:
-    description: "Convert all rules specified in the config file."
-    required: false
-    default: "false"
-  actions_username:
-    description: "Username of the automation that commits conversions"
-    required: false
-    default: "github-actions[bot]"
-  changed_files_from_base:
-    description: "Whether to use the changed files from the base branch"
-    required: false
-    default: "false"
+    config_path:
+        description: "Path to the Sigma conversion config file."
+        required: true
+        default: "./config.yaml"
+    plugin_packages:
+        description: "Comma-separated list of Sigma CLI plugin packages to install."
+        required: false
+        default: ""
+    render_traceback:
+        description: "Whether to render the traceback in the output."
+        required: false
+        default: "false"
+    pretty_print:
+        description: "Pretty print the JSON output"
+        required: false
+        default: "false"
+    all_rules:
+        description: "Convert all rules specified in the config file."
+        required: false
+        default: "false"
+    actions_username:
+        description: "Username of the automation that commits conversions"
+        required: false
+        default: "github-actions[bot]"
+    changed_files_from_base:
+        description: "Whether to use the changed files from the base branch"
+        required: false
+        default: "false"
 
 runs:
-  using: "composite"
-  steps:
-    - name: Retrieve conversion and deployment paths from config
-      id: config-paths
-      shell: bash
-      env:
-        CONFIG_PATH: ${{ inputs.config_path }}
-      run: |
-        sudo apt-get install -y yq
-        CONVERSION_PATH=$(yq --raw-output '.folders.conversion_path' "${CONFIG_PATH}")
-        echo "conversion_path=${CONVERSION_PATH}" >> $GITHUB_OUTPUT
-    - name: Login to GitHub Container Registry
-      uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 #v3.4.0
-      with:
-        registry: ghcr.io
-        username: ${{ github.actor }}
-        password: ${{ github.token }}
-    - name: Identify relevant commits
-      if: ${{ github.event_name == 'pull_request' && inputs.changed_files_from_base == 'false' }}
-      id: commits
-      uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea #v7.0.1
-      env:
-        ACTIONS_USERNAME: ${{ inputs.actions_username }}
-      with:
-        script: |
-          const iterator = await github.paginate(github.rest.pulls.listCommits.endpoint.merge({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            pull_number: context.payload.pull_request.number,
-            per_page: 1
-          }));
-          let commit = "";
-          let first_commit = "";
-          let last_commit = "";
-          for (const remote_commit of iterator) {
-            if (commit === "" && remote_commit.parents.length > 0) {
-              commit = remote_commit.parents[0].sha;
-              first_commit = remote_commit.sha;
-            }
-            if (remote_commit.commit.committer.name === process.env.ACTIONS_USERNAME) {
-              commit = remote_commit.sha;
-              last_commit = remote_commit.sha;
-            }
-          }
-          console.log(`Last commit or base ref: ${commit}`);
-          core.setOutput('previous-commit', commit);
-          console.log(`PR First Commit: ${first_commit}`);
-          core.setOutput('first-commit', first_commit);
-          console.log(`PR Last Commit by automation: ${last_commit}`);
-          core.setOutput('last-commit', last_commit);
+    using: "composite"
+    steps:
+        - name: Retrieve conversion and deployment paths from config
+          id: config-paths
+          shell: bash
+          env:
+              CONFIG_PATH: ${{ inputs.config_path }}
+          run: |
+              sudo apt-get install -y yq
+              CONVERSION_PATH=$(yq --raw-output '.folders.conversion_path' "${CONFIG_PATH}")
+              echo "conversion_path=${CONVERSION_PATH}" >> $GITHUB_OUTPUT
+        - name: Login to GitHub Container Registry
+          uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 #v3.4.0
+          with:
+              registry: ghcr.io
+              username: ${{ github.actor }}
+              password: ${{ github.token }}
+        - name: Identify relevant commits
+          if: ${{ github.event_name == 'pull_request' && inputs.changed_files_from_base == 'false' }}
+          id: commits
+          uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea #v7.0.1
+          env:
+              ACTIONS_USERNAME: ${{ inputs.actions_username }}
+          with:
+              script: |
+                  const iterator = await github.paginate(github.rest.pulls.listCommits.endpoint.merge({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    pull_number: context.payload.pull_request.number,
+                    per_page: 1
+                  }));
+                  let commit = "";
+                  let first_commit = "";
+                  let last_commit = "";
+                  for (const remote_commit of iterator) {
+                    if (commit === "" && remote_commit.parents.length > 0) {
+                      commit = remote_commit.parents[0].sha;
+                      first_commit = remote_commit.sha;
+                    }
+                    if (remote_commit.commit.committer.name === process.env.ACTIONS_USERNAME) {
+                      commit = remote_commit.sha;
+                      last_commit = remote_commit.sha;
+                    }
+                  }
+                  console.log(`Last commit or base ref: ${commit}`);
+                  core.setOutput('previous-commit', commit);
+                  console.log(`PR First Commit: ${first_commit}`);
+                  core.setOutput('first-commit', first_commit);
+                  console.log(`PR Last Commit by automation: ${last_commit}`);
+                  core.setOutput('last-commit', last_commit);
 
-          return {
-            commit,
-            first_commit,
-            last_commit
-          };
-    - name: Output Commits
-      id: commits-usable
-      shell: bash
-      env:
-        COMMITS: "${{ steps.commits.outputs.result }}"
-      run: |
-        COMMIT=$(echo "$COMMITS" | jq -r '.commit')
-        FIRST_COMMIT=$(echo "$COMMITS" | jq -r '.first_commit')
-        LAST_COMMIT=$(echo "$COMMITS" | jq -r '.last_commit')
+                  return {
+                    commit,
+                    first_commit,
+                    last_commit
+                  };
+        - name: Output Commits
+          id: commits-usable
+          shell: bash
+          env:
+              COMMITS: "${{ steps.commits.outputs.result }}"
+          run: |
+              COMMIT=$(echo "$COMMITS" | jq -r '.commit')
+              FIRST_COMMIT=$(echo "$COMMITS" | jq -r '.first_commit')
+              LAST_COMMIT=$(echo "$COMMITS" | jq -r '.last_commit')
 
-        echo "commit=${COMMIT}" >> $GITHUB_OUTPUT
-        echo "first_commit=${FIRST_COMMIT}" >> $GITHUB_OUTPUT
-        echo "last_commit=${LAST_COMMIT}" >> $GITHUB_OUTPUT
+              echo "commit=${COMMIT}" >> $GITHUB_OUTPUT
+              echo "first_commit=${FIRST_COMMIT}" >> $GITHUB_OUTPUT
+              echo "last_commit=${LAST_COMMIT}" >> $GITHUB_OUTPUT
 
-    - name: Get Changed Files
-      id: changed-files
-      shell: bash
-      env:
-        BASE_REF: ${{ steps.commits-usable.outputs.last_commit || steps.commits-usable.outputs.commit || github.event.pull_request.base.ref || format('origin/{0}', github.event.repository.default_branch) }}
-        CONVERSION_PATH: ${{ steps.config-paths.outputs.conversion_path }}
-        CONFIG_PATH: ${{ inputs.config_path }}
-      run: |
-        # Diff Commands are constructed in conversion to discover the change for the **inputs** into the conversion process. This means that changes to the configuration or rules will
-        # be registered as changed files, **but** changes to the output file will not register a change and will cause the conversion to pass but not run.
+        - name: Get Changed Files
+          id: changed-files
+          shell: bash
+          env:
+              BASE_REF: ${{ steps.commits-usable.outputs.last_commit || steps.commits-usable.outputs.commit || github.event.pull_request.base.ref || format('origin/{0}', github.event.repository.default_branch) }}
+              CONVERSION_PATH: ${{ steps.config-paths.outputs.conversion_path }}
+              CONFIG_PATH: ${{ inputs.config_path }}
+          run: |
+              # Diff Commands are constructed in conversion to discover the change for the **inputs** into the conversion process. This means that changes to the configuration or rules will
+              # be registered as changed files, **but** changes to the output file will not register a change and will cause the conversion to pass but not run.
 
-        ACMR_DIFF_COMMAND="git diff ${BASE_REF} --name-only --diff-filter=ACMR -- '${CONFIG_PATH}' $(yq -r "[.conversions.[].input] | flatten | unique | [\"':(glob)\" + .[] + \"'\"] | join(\" \")" ${CONFIG_PATH})"
-        D_DIFF_COMMAND="git diff ${BASE_REF} --name-only --diff-filter=D -- '${CONFIG_PATH}' $(yq -r "[.conversions.[].input] | flatten | unique | [\"':(glob)\" + .[] + \"'\"] | join(\" \")" ${CONFIG_PATH})"
+              ACMR_DIFF_COMMAND="git diff ${BASE_REF} --name-only --diff-filter=ACMR -- '${CONFIG_PATH}' $(yq -r "[.conversions.[].input] | flatten | unique | [\"':(glob)\" + .[] + \"'\"] | join(\" \")" ${CONFIG_PATH}) $(yq -r "[.conversions.[].pipelines] | flatten | unique | [\"':(glob)\" + .[] + \"'\"] | join(\" \")" ${CONFIG_PATH})"
+              D_DIFF_COMMAND="git diff ${BASE_REF} --name-only --diff-filter=D -- '${CONFIG_PATH}' $(yq -r \"[.conversions.[].input] | flatten | unique | [\\\"':(glob)\\\" + .[] + \\\"'\\\"] | join(\\\" \\\")\" ${CONFIG_PATH}) $(yq -r "[.conversions.[].pipelines] | flatten | unique | [\"':(glob)\" + .[] + \"'\"] | join(\" \")" ${CONFIG_PATH})"
 
-        # We want to only include the input files in the lists of changed and deleted files
-        CHANGED_FILES=$(eval $ACMR_DIFF_COMMAND)
-        DELETED_FILES=$(eval $D_DIFF_COMMAND)
+              # We want to only include the input files in the lists of changed and deleted files
+              CHANGED_FILES=$(eval $ACMR_DIFF_COMMAND)
+              DELETED_FILES=$(eval $D_DIFF_COMMAND)
 
-        echo all_changed_files=${CHANGED_FILES//\\n/} >> "$GITHUB_OUTPUT"
-        echo deleted_files=${DELETED_FILES//\\n/} >> "$GITHUB_OUTPUT"
+              echo all_changed_files=${CHANGED_FILES//\\n/} >> "$GITHUB_OUTPUT"
+              echo deleted_files=${DELETED_FILES//\\n/} >> "$GITHUB_OUTPUT"
 
-    - name: Determine Image Reference
-      id: image-ref
-      shell: bash
-      env:
-        ACTION_REF: ${{ github.action_ref }}
-      run: |
-        # Check if the ACTION_REF is a tag (starts with v followed by numbers/dots)
-        if [[ "$ACTION_REF" =~ ^v[0-9]+(\.[0-9]+)*(\.[0-9]+)?$ ]]; then
-          echo "image_ref=$ACTION_REF" >> $GITHUB_OUTPUT
-          echo "Using tag: $ACTION_REF"
-        elif [[ "$ACTION_REF" == "latest" ]]; then
-          echo "image_ref=latest" >> $GITHUB_OUTPUT
-          echo "Using latest tag"
-        else
-          echo "image_ref=sha-$ACTION_REF" >> $GITHUB_OUTPUT
-          echo "Using SHA: sha-$ACTION_REF"
-        fi
+        - name: Determine Image Reference
+          id: image-ref
+          shell: bash
+          env:
+              ACTION_REF: ${{ github.action_ref }}
+          run: |
+              # Check if the ACTION_REF is a tag (starts with v followed by numbers/dots)
+              if [[ "$ACTION_REF" =~ ^v[0-9]+(\.[0-9]+)*(\.[0-9]+)?$ ]]; then
+                echo "image_ref=$ACTION_REF" >> $GITHUB_OUTPUT
+                echo "Using tag: $ACTION_REF"
+              elif [[ "$ACTION_REF" == "latest" ]]; then
+                echo "image_ref=latest" >> $GITHUB_OUTPUT
+                echo "Using latest tag"
+              else
+                echo "image_ref=sha-$ACTION_REF" >> $GITHUB_OUTPUT
+                echo "Using SHA: sha-$ACTION_REF"
+              fi
 
-    - name: Run Sigma Rule Converter
-      id: convert
-      shell: bash
-      env:
-        CONFIG_PATH: ${{ inputs.config_path }}
-        PLUGIN_PACKAGES: ${{ inputs.plugin_packages }}
-        RENDER_TRACEBACK: ${{ inputs.render_traceback }}
-        PRETTY_PRINT: ${{ inputs.pretty_print }}
-        ALL_RULES: ${{ inputs.all_rules }}
-        CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
-        DELETED_FILES: ${{ steps.changed-files.outputs.deleted_files }}
-        IMAGE_REF: ${{ steps.image-ref.outputs.image_ref }}
-      run: |
-        docker run --rm \
-            -v "$(pwd):/sigma-rules" \
-            -w /sigma-rules \
-            -e GITHUB_WORKSPACE=/sigma-rules \
-            -e CONFIG_PATH="$CONFIG_PATH" \
-            -e PLUGIN_PACKAGES="$PLUGIN_PACKAGES" \
-            -e RENDER_TRACEBACK="$RENDER_TRACEBACK" \
-            -e PRETTY_PRINT="$PRETTY_PRINT" \
-            -e ALL_RULES="$ALL_RULES" \
-            -e CHANGED_FILES="$CHANGED_FILES" \
-            -e DELETED_FILES="$DELETED_FILES" \
-            "ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:$IMAGE_REF" \
-            convert
+        - name: Run Sigma Rule Converter
+          id: convert
+          shell: bash
+          env:
+              CONFIG_PATH: ${{ inputs.config_path }}
+              PLUGIN_PACKAGES: ${{ inputs.plugin_packages }}
+              RENDER_TRACEBACK: ${{ inputs.render_traceback }}
+              PRETTY_PRINT: ${{ inputs.pretty_print }}
+              ALL_RULES: ${{ inputs.all_rules }}
+              CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
+              DELETED_FILES: ${{ steps.changed-files.outputs.deleted_files }}
+              IMAGE_REF: ${{ steps.image-ref.outputs.image_ref }}
+          run: |
+              docker run --rm \
+                  -v "$(pwd):/sigma-rules" \
+                  -w /sigma-rules \
+                  -e GITHUB_WORKSPACE=/sigma-rules \
+                  -e CONFIG_PATH="$CONFIG_PATH" \
+                  -e PLUGIN_PACKAGES="$PLUGIN_PACKAGES" \
+                  -e RENDER_TRACEBACK="$RENDER_TRACEBACK" \
+                  -e PRETTY_PRINT="$PRETTY_PRINT" \
+                  -e ALL_RULES="$ALL_RULES" \
+                  -e CHANGED_FILES="$CHANGED_FILES" \
+                  -e DELETED_FILES="$DELETED_FILES" \
+                  "ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:$IMAGE_REF" \
+                  convert
 
-    - name: Generate Comment Data
-      id: generate-comment-data
-      shell: bash
-      env:
-        BASE_REF: ${{ steps.commits-usable.outputs.last_commit || steps.commits-usable.outputs.commit || github.base_ref || github.event.pull_request.base.ref || format('origin/{0}', github.event.repository.default_branch) }}
-        CONVERSION_PATH: ${{ steps.config-paths.outputs.conversion_path }}
-      run: |
-        git add "$CONVERSION_PATH"
-        CHANGED_FILES=$(git diff "$BASE_REF" --name-only --diff-filter=ACMR -- "$CONVERSION_PATH")
-        DELETED_FILES=$(git diff "$BASE_REF" --name-only --diff-filter=D -- "$CONVERSION_PATH")
-        echo changed_files=${CHANGED_FILES//\\n/} >> $GITHUB_OUTPUT
-        echo deleted_files=${DELETED_FILES//\\n/} >> $GITHUB_OUTPUT
+        - name: Generate Comment Data
+          id: generate-comment-data
+          shell: bash
+          env:
+              BASE_REF: ${{ steps.commits-usable.outputs.last_commit || steps.commits-usable.outputs.commit || github.base_ref || github.event.pull_request.base.ref || format('origin/{0}', github.event.repository.default_branch) }}
+              CONVERSION_PATH: ${{ steps.config-paths.outputs.conversion_path }}
+          run: |
+              git add "$CONVERSION_PATH"
+              CHANGED_FILES=$(git diff "$BASE_REF" --name-only --diff-filter=ACMR -- "$CONVERSION_PATH")
+              DELETED_FILES=$(git diff "$BASE_REF" --name-only --diff-filter=D -- "$CONVERSION_PATH")
+              echo changed_files=${CHANGED_FILES//\\n/} >> $GITHUB_OUTPUT
+              echo deleted_files=${DELETED_FILES//\\n/} >> $GITHUB_OUTPUT
 
-    - name: Comment Conversions
-      id: comment-conversions
-      uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea #v7.0.1
-      env:
-        PULL_REQUEST_NUMBER: ${{ github.event.number || github.event.issue.number }}
-        CHANGED_FILES: ${{ steps.generate-comment-data.outputs.changed_files }}
-        DELETED_FILES: ${{ steps.generate-comment-data.outputs.deleted_files }}
-      with:
-        script: |
-          const changedFiles = process.env.CHANGED_FILES.split(' ').filter(file => file.trim() !== '');
-          const deletedFiles = process.env.DELETED_FILES.split(' ').filter(file => file.trim() !== '');
+        - name: Comment Conversions
+          id: comment-conversions
+          uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea #v7.0.1
+          env:
+              PULL_REQUEST_NUMBER: ${{ github.event.number || github.event.issue.number }}
+              CHANGED_FILES: ${{ steps.generate-comment-data.outputs.changed_files }}
+              DELETED_FILES: ${{ steps.generate-comment-data.outputs.deleted_files }}
+          with:
+              script: |
+                  const changedFiles = process.env.CHANGED_FILES.split(' ').filter(file => file.trim() !== '');
+                  const deletedFiles = process.env.DELETED_FILES.split(' ').filter(file => file.trim() !== '');
 
-          const prData = await github.rest.pulls.get({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            pull_number: process.env.PULL_REQUEST_NUMBER,
-          });
-          if (!prData.data) {
-            console.log(`No pull request found for ${context.repo.owner}/${context.repo.repo}#${process.env.PULL_REQUEST_NUMBER}`);
-            return '';
-          }
+                  const prData = await github.rest.pulls.get({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    pull_number: process.env.PULL_REQUEST_NUMBER,
+                  });
+                  if (!prData.data) {
+                    console.log(`No pull request found for ${context.repo.owner}/${context.repo.repo}#${process.env.PULL_REQUEST_NUMBER}`);
+                    return '';
+                  }
 
-          const nodeId = prData.data.node_id;
+                  const nodeId = prData.data.node_id;
 
-          const comment = `
-          ### Sigma Rule Conversions
+                  const comment = `
+                  ### Sigma Rule Conversions
 
-          | Changed | Deleted |
-          | --- | --- |
-          | ${changedFiles.length} | ${deletedFiles.length} |
+                  | Changed | Deleted |
+                  | --- | --- |
+                  | ${changedFiles.length} | ${deletedFiles.length} |
 
-          ### Changed Files
+                  ### Changed Files
 
-          ${changedFiles.length ? changedFiles.map(file => `- [${file}](https://github.com/${context.repo.owner}/${context.repo.repo}/blob/${prData.data.head.ref}/${file})`).join("\n") : "No files changed"}
+                  ${changedFiles.length ? changedFiles.map(file => `- [${file}](https://github.com/${context.repo.owner}/${context.repo.repo}/blob/${prData.data.head.ref}/${file})`).join("\n") : "No files changed"}
 
-          ### Deleted Files
+                  ### Deleted Files
 
-          ${deletedFiles.length ? deletedFiles.map(file => `- ${file}`).join("\n") : "No files deleted"}
+                  ${deletedFiles.length ? deletedFiles.map(file => `- ${file}`).join("\n") : "No files deleted"}
 
-          `;
+                  `;
 
-          const query = `mutation AddComment($body: String!, $subjectId: ID!) {
-            addComment(input: {
-              body: $body,
-              subjectId: $subjectId,
-            }) {
-              subject {
-                id
-                ... on PullRequest {
-                  number
-                }
-              }
-            }
-          }`
+                  const query = `mutation AddComment($body: String!, $subjectId: ID!) {
+                    addComment(input: {
+                      body: $body,
+                      subjectId: $subjectId,
+                    }) {
+                      subject {
+                        id
+                        ... on PullRequest {
+                          number
+                        }
+                      }
+                    }
+                  }`
 
-          const variables = {
-            body: comment,
-            subjectId: nodeId
-          };
+                  const variables = {
+                    body: comment,
+                    subjectId: nodeId
+                  };
 
-          await github.graphql(query, variables);
+                  await github.graphql(query, variables);
 
-          return '';
+                  return '';
