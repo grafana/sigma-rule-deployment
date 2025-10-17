@@ -115,7 +115,7 @@ runs:
         # be registered as changed files, **but** changes to the output file will not register a change and will cause the conversion to pass but not run.
 
         ACMR_DIFF_COMMAND="git diff ${BASE_REF} --name-only --diff-filter=ACMR -- '${CONFIG_PATH}' $(yq -r "[.conversions.[].input] | flatten | unique | [\"':(glob)\" + .[] + \"'\"] | join(\" \")" ${CONFIG_PATH}) $(yq -r "[.conversions.[].pipelines] | flatten | unique | [\"':(glob)\" + .[] + \"'\"] | join(\" \")" ${CONFIG_PATH})"
-        D_DIFF_COMMAND="git diff ${BASE_REF} --name-only --diff-filter=D -- '${CONFIG_PATH}' $(yq -r \"[.conversions.[].input] | flatten | unique | [\\\"':(glob)\\\" + .[] + \\\"'\\\"] | join(\\\" \\\")\" ${CONFIG_PATH}) $(yq -r "[.conversions.[].pipelines] | flatten | unique | [\"':(glob)\" + .[] + \"'\"] | join(\" \")" ${CONFIG_PATH})"
+        D_DIFF_COMMAND="git diff ${BASE_REF} --name-only --diff-filter=D -- '${CONFIG_PATH}' $(yq -r "[.conversions.[].input] | flatten | unique | [\"':(glob)\" + .[] + \"'\"] | join(\" \")" ${CONFIG_PATH}) $(yq -r "[.conversions.[].pipelines] | flatten | unique | [\"':(glob)\" + .[] + \"'\"] | join(\" \")" ${CONFIG_PATH})"
 
         # We want to only include the input files in the lists of changed and deleted files
         CHANGED_FILES=$(eval $ACMR_DIFF_COMMAND)
