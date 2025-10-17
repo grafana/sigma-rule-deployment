@@ -821,7 +821,16 @@ func (i *Integrator) TestQueries(queries map[string]string, config, defaultConf 
 			timeoutDuration,
 		)
 		if err != nil {
-			return nil, fmt.Errorf("error testing query %s: %v", query, err)
+			return []QueryTestResult{
+				{
+					Datasource: datasource,
+					Link:       "",
+					Stats: Stats{
+						Fields: make(map[string]string),
+						Errors: []string{err.Error()},
+					},
+				},
+			}, fmt.Errorf("error testing query %s: %v", query, err)
 		}
 
 		// Generate explore link based on datasource type
