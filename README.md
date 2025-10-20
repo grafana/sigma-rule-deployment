@@ -2,7 +2,7 @@
 
 <!-- SOCless that s*cks less! -->
 
-Automate the conversion, testing, and deployment of [Sigma rules](https://sigmahq.io/) to [Grafana Alerting](https://grafana.com/docs/grafana/latest/alerting/) rules with GitHub Actions using a [SOCless](./README.md#what-is-socless) approach using a declarative configuration file.
+Automate the conversion, testing, and deployment of [Sigma rules](https://sigmahq.io/) to [Grafana Alerting](https://grafana.com/docs/grafana/latest/alerting/) rules with GitHub Actions using a Detection as Code [SOCless](./README.md#what-is-socless) approach using a declarative configuration file.
 
 ## Available Actions
 
@@ -111,7 +111,11 @@ Other than the `refId` and `datasource` (which are required by Grafana), the key
 
 The main restriction are they need to be valid Sigma rules, including the `id` and `title` [metadata fields](https://sigmahq.io/docs/basics/rules.html#available-sigma-metadata-fields). If you are using [Correlation rules](https://github.com/SigmaHQ/sigma-specification/blob/main/specification/sigma-correlation-rules-specification.md), the rule files must contain **all** the referenced rules within the rule file (using [YAML's multiple document feature](https://gettaurus.org/docs/YAMLTutorial/#YAML-Multi-Documents), i.e., combined with `---`).
 
-### How do these Actions work?
+### What value should be provided for the `data_source` field in the `conversion` settings?
+
+This should be the UID (Unique IDentifier) of the data source, not the data source name. You can find the UID for a data source by opening the Explore page, selecting the relevant data source, and examining the page URL for the text `"datasource":"XXX"` - that value (i.e., `XXX`) is the UID.
+
+### How do these Actions interact?
 
 ![Sequence Diagram](./assets/sequence-diagram.png)
 
@@ -129,3 +133,4 @@ The suite enables teams to:
 - **Maintain configuration consistency**: Use version-controlled workflows and standardized pipelines to ensure reproducible deployments across environments
 
 By shifting detection engineering into a CI/CD-driven model, the SOCless approach transforms traditional SOC operations into an automated, auditable, and scalable system, which allows security teams to focus on analysis and improvement rather than manual rule maintenance.
+

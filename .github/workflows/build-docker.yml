@@ -7,6 +7,9 @@ on:
   pull_request:
     branches:
       - main
+  release:
+    types:
+      - published
 
 permissions: {}
 
@@ -46,6 +49,17 @@ jobs:
           tags: |
             ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${{ github.sha }}
           push: true
+      - name: "Build and Push (Release)"
+        uses: docker/build-push-action@471d1dc4e07e5cdedd4c2171150001c434f0b7a4 #v6.15.0
+        if: github.event_name == 'release'
+        with:
+          context: ./actions
+          file: actions/Dockerfile
+          tags: |
+            ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:${{ github.event.release.tag_name }}
+            ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:latest
+          push: true
+
   test-pr:
     if: github.event_name == 'pull_request'
     name: "Integration Testing"

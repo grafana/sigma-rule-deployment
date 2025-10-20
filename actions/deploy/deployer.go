@@ -431,6 +431,7 @@ func (d *Deployer) createAlert(ctx context.Context, content string, updateIfExis
 
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", d.config.saToken))
+	req.Header.Add("User-Agent", "sigma-rule-deployment/deployer")
 
 	res, err := d.client.Do(req)
 	if err != nil {
@@ -517,6 +518,7 @@ func (d *Deployer) updateAlert(ctx context.Context, content string, createIfNotF
 	}
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", d.config.saToken))
+	req.Header.Add("User-Agent", "sigma-rule-deployment/deployer")
 
 	res, err := d.client.Do(req)
 	if err != nil {

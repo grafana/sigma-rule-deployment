@@ -65,6 +65,23 @@ runs:
         registry: ghcr.io
         username: ${{ github.actor }}
         password: ${{ github.token }}
+    - name: Determine Image Reference
+      id: image-ref
+      shell: bash
+      env:
+        ACTION_REF: ${{ github.action_ref }}
+      run: |
+        # Check if the action_ref is a tag (starts with v followed by numbers/dots)
+        if [[ "$ACTION_REF" =~ ^v[0-9]+(\.[0-9]+)*(\.[0-9]+)?$ ]]; then
+          echo "image_ref=$ACTION_REF" >> $GITHUB_OUTPUT
+          echo "Using tag: $ACTION_REF"
+        elif [[ "$ACTION_REF" == "latest" ]]; then
+          echo "image_ref=latest" >> $GITHUB_OUTPUT
+          echo "Using latest tag"
+        else
+          echo "image_ref=sha-$ACTION_REF" >> $GITHUB_OUTPUT
+          echo "Using SHA: sha-$ACTION_REF"
+        fi
     - name: Identify relevant commits
       if: ${{ github.event_name == 'pull_request' && inputs.changed_files_from_base == 'false' }}
       id: commits
@@ -104,12 +121,25 @@ runs:
             first_commit,
             last_commit
           };
+    - name: Output Commits
+      id: commits-usable
+      shell: bash
+      env:
+        COMMITS: "${{ steps.commits.outputs.result }}"
+      run: |
+        COMMIT=$(echo "$COMMITS" | jq -r '.commit')
+        FIRST_COMMIT=$(echo "$COMMITS" | jq -r '.first_commit')
+        LAST_COMMIT=$(echo "$COMMITS" | jq -r '.last_commit')
+
+        echo "commit=${COMMIT}" >> $GITHUB_OUTPUT
+        echo "first_commit=${FIRST_COMMIT}" >> $GITHUB_OUTPUT
+        echo "last_commit=${LAST_COMMIT}" >> $GITHUB_OUTPUT
     - name: Calculate Change Files
       id: changed-files
       shell: bash
       env:
         CONVERSION_PATH: ${{ steps.config-paths.outputs.conversion_path }}
-        BASE_REF: ${{ steps.commits.outputs.previous-commit || github.base_ref || github.event.pull_request.base.ref || format('origin/{0}', github.event.repository.default_branch) }}
+        BASE_REF: ${{ steps.commits-usable.outputs.last_commit || steps.commits-usable.outputs.commit || github.base_ref || github.event.pull_request.base.ref || format('origin/{0}', github.event.repository.default_branch) }}
       run: |
         git fetch
         CHANGED_FILES=$(git diff "$BASE_REF" --name-only --diff-filter=ACMR -- "$CONVERSION_PATH")
@@ -128,7 +158,7 @@ runs:
         DELETED_FILES: ${{ steps.changed-files.outputs.deleted_files }}
         ALL_RULES: ${{ inputs.all_rules }}
         CONTINUE_ON_QUERY_TESTING_ERRORS: ${{ inputs.continue_on_query_testing_errors }}
-        IMAGE_REF: ${{ github.action_ref == 'latest' && 'latest' || format('sha-{0}', github.action_ref) }}
+        IMAGE_REF: ${{ steps.image-ref.outputs.image_ref }}
       run: |
         docker run --rm \
             -v "$(pwd):/sigma-rules" \
@@ -153,7 +183,7 @@ runs:
       id: generate-comment-data
       shell: bash
       env:
-        BASE_REF: ${{ steps.commits.outputs.last-commit || steps.commits.outputs.first-commit || github.base_ref || github.event.pull_request.base.ref || format('origin/{0}', github.event.repository.default_branch) }}
+        BASE_REF: ${{ steps.commits-usable.outputs.last_commit || steps.commits-usable.outputs.commit || github.base_ref || github.event.pull_request.base.ref || format('origin/{0}', github.event.repository.default_branch) }}
         DEPLOYMENT_PATH: ${{ steps.config-paths.outputs.deployment_path }}
       run: |
         git add "$DEPLOYMENT_PATH"

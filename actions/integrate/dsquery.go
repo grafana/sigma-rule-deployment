@@ -210,6 +210,7 @@ func (h *HTTPDatasourceQuery) ExecuteQuery(
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
+	req.Header.Set("User-Agent", "sigma-rule-deployment/integrator")
 
 	client := &http.Client{
 		Timeout: timeout,
@@ -247,23 +248,7 @@ func (h *HTTPDatasourceQuery) ExecuteQuery(
 func (h *HTTPDatasourceQuery) GetDatasource(
 	dsName, baseURL, apiKey string, timeout time.Duration,
 ) (*GrafanaDatasource, error) {
-	ds, err := h.getDatasourceByUID(dsName, baseURL, apiKey, timeout)
-	if err != nil {
-		return h.getDatasourceByName(dsName, baseURL, apiKey, timeout)
-	}
-	return ds, err
-}
-
-// getDatasourceByName uses the default executor to get datasource information
-func (h *HTTPDatasourceQuery) getDatasourceByName(
-	dsName, baseURL, apiKey string, timeout time.Duration,
-) (*GrafanaDatasource, error) {
-	dsURL, err := url.JoinPath(baseURL, "api/datasources/name", dsName)
-	if err != nil {
-		return nil, fmt.Errorf("failed to construct API URL: %v", err)
-	}
-
-	return h.getDatasourceRequest(dsURL, apiKey, timeout)
+	return h.getDatasourceByUID(dsName, baseURL, apiKey, timeout)
 }
 
 // getDatasourceByUID uses the default executor to get datasource information
@@ -289,6 +274,7 @@ func (h *HTTPDatasourceQuery) getDatasourceRequest(
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "sigma-rule-deployment/integrator")
 
 	client := &http.Client{
 		Timeout: timeout,

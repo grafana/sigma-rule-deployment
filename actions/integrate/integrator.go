@@ -413,10 +413,16 @@ func (i *Integrator) Run() error {
 
 			if len(queryResults) > 0 {
 				fmt.Printf("Query testing completed successfully for file %s\n", inputFile)
-				fmt.Printf("Query returned results: %d\n", len(queryResults))
+				if len(queryResults) == 1 {
+					fmt.Printf("Query returned results: %d\n", queryResults[0].Stats.Count)
+				} else {
+					fmt.Printf("Queries returned results:\n")
+					for i, result := range queryResults {
+						fmt.Printf("Query %d: %d\n", i, result.Stats.Count)
+					}
+				}
 			} else if err == nil {
 				fmt.Printf("Query testing completed successfully for file %s\n", inputFile)
-				fmt.Printf("Yet, query returned no results\n")
 			}
 
 			queryTestResults[inputFile] = queryResults
@@ -815,7 +821,16 @@ func (i *Integrator) TestQueries(queries map[string]string, config, defaultConf 
 			timeoutDuration,
 		)
 		if err != nil {
-			return nil, fmt.Errorf("error testing query %s: %v", query, err)
+			return []QueryTestResult{
+				{
+					Datasource: datasource,
+					Link:       "",
+					Stats: Stats{
+						Fields: make(map[string]string),
+						Errors: []string{err.Error()},
+					},
+				},
+			}, fmt.Errorf("error testing query %s: %v", query, err)
 		}
 
 		// Generate explore link based on datasource type
