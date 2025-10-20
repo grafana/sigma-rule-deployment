@@ -2,6 +2,10 @@
 
 **Sigma Rule Converter** is a GitHub Action that converts Sigma rules to target query languages using [`sigma-cli`](https://github.com/SigmaHQ/sigma-cli). It supports dynamic plugin installation, custom configurations and output management. This action is part of the Sigma Rule Deployment GitHub Actions Suite and should be used as a conversion step before running integration and deployment actions.
 
+## Overview
+
+The Sigma Rule Converter action transforms Sigma detection rules into target-specific query languages (such as Loki, Elasticsearch, Splunk, etc.) using the Sigma CLI toolchain. It processes YAML-based Sigma rules and generates JSON output files containing converted queries and rule metadata. This action should be used as the first step in your CI/CD pipeline, typically triggered by changes to Sigma rule files in pull requests.
+
 ## Inputs
 
 | Name                      | Description                                                                                                                           | Required | Default                 |
@@ -33,7 +37,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run Sigma Rule Converter
-        uses: ./path-to-your-action
+        uses: grafana/sigma-rule-deployment/actions/convert@<HASH>
         with:
           config_path: "./config.yaml"
           plugin_packages: "pysigma-backend-loki,pysigma-backend-elasticsearch"
@@ -96,3 +100,10 @@ jobs:
   - `rules`: List of rule metadata including ID, title, description, severity, and query
   - `output_file`: Path to the output file relative to the repository root
 - For correlation rules to work correctly, all the related rules must be present in the same file using the `---` notation (multi document) in YAML.
+
+## External Dependencies
+
+This is a composite action relying on the following external actions:
+
+- [docker/login-action v3 by Docker](https://github.com/docker/login-action)
+- [actions/github-script v7 by GitHub](https://github.com/actions/github-script)

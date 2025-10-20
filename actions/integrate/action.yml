@@ -4,7 +4,7 @@ author: "security-operations"
 
 inputs:
   config_path:
-    description: "Path to the configuration file for the Sigma Rule Deployer"
+    description: "Path to the configuration file for the Sigma Rule Integrator"
     required: true
     default: ""
   grafana_sa_token:
