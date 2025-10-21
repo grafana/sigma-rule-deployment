@@ -45,7 +45,7 @@ Relevent conversion backends and data sources that can be used in Grafana includ
 | Sigma Backend                                                             | Data Source                                                                                     | Supported Integration Method |
 | ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ---------------------------- |
 | [Grafana Loki](https://github.com/grafana/pySigma-backend-loki)           | [Loki data source](https://grafana.com/docs/loki/latest/)                                       | Native                       |
-| [Elasticsearch](https://github.com/SigmaHQ/pySigma-backend-elasticsearch) | [Elasticsearch data source](https://grafana.com/docs/grafana/latest/datasources/elasticsearch/) | Native, Custom Model         |
+| [Elasticsearch](https://github.com/SigmaHQ/pySigma-backend-elasticsearch) | [Elasticsearch data source](https://grafana.com/docs/grafana/latest/datasources/elasticsearch/) | Native                       |
 | [Azure KQL](https://github.com/AttackIQ/pySigma-backend-kusto)            | [Azure Monitor data source](https://grafana.com/docs/grafana/latest/datasources/azure-monitor/) | Custom Model                 |
 | [Datadog](https://github.com/SigmaHQ/pySigma-backend-datadog)             | [Datadog data source](https://grafana.com/grafana/plugins/grafana-datadog-datasource/)          | Custom Model                 |
 | [QRadar AQL](https://github.com/IBM/pySigma-backend-QRadar-aql)           | [IBM Security QRadar data source](https://grafana.com/grafana/plugins/ibm-aql-datasource/)      | Custom Model                 |
@@ -64,10 +64,10 @@ Relevent conversion backends and data sources that can be used in Grafana includ
 
 #### 1. Data source compatibility
 
-Data source plugins vary in their support for metric queries and the generated query from the convert action may only produce a log query, and not a metric query (no Sigma correlation support yet).
+Data source plugins vary in their support for metric queries and the generated query from the convert action for Sigma rules will often only produce a log query, not a metric query. In contract, a converted Sigma Correlation rule will generally produce a metric query, which can be used directly.
 
 - **Native support**: Some data sources, such as Loki, can [apply metric functions](https://grafana.com/docs/loki/latest/query/metric_queries/) to log queries
-- **Limited support**: Other data source, including the [Elasticsearch data source](https://grafana.com/docs/grafana/latest/datasources/elasticsearch/), do not support metric queries through their native query language
+- **Limited support**: Other data source, including the [Elasticsearch data source](https://grafana.com/docs/grafana/latest/datasources/elasticsearch/), do not support metric queries through their native query language, but their log query response can include metric metadata (e.g., counts)
 
 #### 2. Custom query models
 
@@ -110,6 +110,9 @@ Other than the `refId` and `datasource` (which are required by Grafana), the key
 ### Are there any restrictions on the Sigma rule files?
 
 The main restriction are they need to be valid Sigma rules, including the `id` and `title` [metadata fields](https://sigmahq.io/docs/basics/rules.html#available-sigma-metadata-fields). If you are using [Correlation rules](https://github.com/SigmaHQ/sigma-specification/blob/main/specification/sigma-correlation-rules-specification.md), the rule files must contain **all** the referenced rules within the rule file (using [YAML's multiple document feature](https://gettaurus.org/docs/YAMLTutorial/#YAML-Multi-Documents), i.e., combined with `---`).
+
+> [!IMPORTANT]
+> The [Sigma Rules Validator](https://github.com/SigmaHQ/sigma-rules-validator) action does not currently work with multiple documents in a single YAML and hence we recommend storing such rules in a separate directory from the Sigma rules.
 
 ### What value should be provided for the `data_source` field in the `conversion` settings?
 
