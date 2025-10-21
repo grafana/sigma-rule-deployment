@@ -64,7 +64,7 @@ Relevent conversion backends and data sources that can be used in Grafana includ
 
 #### 1. Data source compatibility
 
-Data source plugins vary in their support for metric queries and the generated query from the convert action for Sigma rules will often only produce a log query, not a metric query. In contract, a converted Sigma Correlation rule will generally produce a metric query, which can be used directly.
+Data source plugins vary in their support for metric queries and the generated query from the convert action for Sigma rules will often only produce a log query, not a metric query. In contrast, a converted Sigma Correlation rule will generally produce a metric query, which can be used directly in the alert rule.
 
 - **Native support**: Some data sources, such as Loki, can [apply metric functions](https://grafana.com/docs/loki/latest/query/metric_queries/) to log queries
 - **Limited support**: Other data source, including the [Elasticsearch data source](https://grafana.com/docs/grafana/latest/datasources/elasticsearch/), do not support metric queries through their native query language, but their log query response can include metric metadata (e.g., counts)
