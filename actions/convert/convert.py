@@ -319,7 +319,7 @@ def convert_rules(
                 queries = [
                     line
                     for line in result.stdout.splitlines()
-                    if "Parsing Sigma rules" not in line
+                    if "Parsing Sigma rules" not in line and len(line.strip()) != 0
                 ]
 
                 if not queries:
