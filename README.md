@@ -118,6 +118,18 @@ The main restriction are they need to be valid Sigma rules, including the `id` a
 
 This should be the UID (Unique IDentifier) of the data source, not the data source name. You can find the UID for a data source by opening the Explore page, selecting the relevant data source, and examining the page URL for the text `"datasource":"XXX"` - that value (i.e., `XXX`) is the UID.
 
+### What impact do the Loki backend options `add_line_filters` and `case_sensitive` have on my queries?
+
+The pySigma Loki backend supports two optional boolean flags:
+
+1. `add_line_filters`: adds an additional line filter to each query without one, using the longest values being searched for, to help reduce the volume of results being parsed
+2. `case_sensitive`: changes the default behaviour of Sigma string matches to be case sensitive
+
+The imapct of these two flags are different:
+
+1. Line filters can basically be enabled in all contexts - it's a performance enhancement that should never affect the results a query brings back
+2. Changing the case sensitivity of Sigma rules carries some risk. Whilst some logs, like audit logs should be case sensitive, others may not be which _could_ mean certain rules potentially miss logs with it enabled, and some rules may not bring back **any** results. In general, if there's **any** possibility the values being searched for in the rules are user-entered, we would strongly recommend using `case_sensitive: false` (which is also the default), otherwise it can usually be true (but you may want to try testing it with a known example)
+
 ### How do these Actions interact?
 
 ![Sequence Diagram](./assets/sequence-diagram.png)
