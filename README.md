@@ -128,7 +128,7 @@ The pySigma Loki backend supports two optional boolean flags:
 The imapct of these two flags are different:
 
 1. Line filters can basically be enabled in all contexts - it's a performance enhancement that should never affect the results a query brings back
-2. Changing the case sensitivity of Sigma rules carries some risk. Whilst some logs, like audit logs should be case sensitive, others may not be which _could_ mean certain rules potentially miss logs with it enabled, and some rules may not bring back **any** results. In general, if there's **any** possibility the values being searched for in the rules are user-entered, we would strongly recommend using `case_sensitive: false` (which is also the default), otherwise it can usually be true (but you may want to try testing it with a known example)
+2. Changing the case sensitivity of Sigma rules carries some risk. Whilst some logs, like audit logs should be case sensitive, others may not be which _could_ mean certain rules potentially miss logs with it enabled, and some rules may not bring back **any** results. In general, if there's **any** possibility the values being searched for in the rules are user-entered, we would strongly recommend using `case_sensitive: false` (which is also the default), otherwise it can usually be true as its queries will be more performant (but you may want to try testing it with a known example)
 
 ### How do these Actions interact?
 
