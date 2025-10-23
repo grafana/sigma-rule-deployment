@@ -71,7 +71,7 @@ jobs:
       id-token: write
     steps:
       - name: Setup Integration Tests
-        uses: grafana/shared-workflows/actions/get-vault-secrets@get-vault-secrets/v1.3.0
+        uses: grafana/shared-workflows/actions/get-vault-secrets@a37de51f3d713a30a9e4b21bcdfbd38170020593 # get-vault-secrets/v1.3.0
         with:
           repo_secrets: |
             GITHUB_APP_ID=github-app:app-id
@@ -80,7 +80,7 @@ jobs:
             GITHUB_APP_PRIVATE_KEY=github-app:client-pem
       - name: Generate Token
         id: generate-token
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@67018539274d69449ef7c02e8e71183d1719ab42 # v2
         with:
           app-id: ${{ env.GITHUB_APP_ID }}
           private-key: ${{ env.GITHUB_APP_PRIVATE_KEY }}
@@ -89,13 +89,13 @@ jobs:
             sigma-rule-deployment
             sigma-rule-deployment-integration-test
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
         with:
           token: ${{ steps.generate-token.outputs.token }}
           persist-credentials: false
           path: ./sigma-rule-deployment
       - name: Checkout Integration Test
-        uses: actions/checkout@v4
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
         with:
           token: ${{ steps.generate-token.outputs.token }}
           persist-credentials: true
