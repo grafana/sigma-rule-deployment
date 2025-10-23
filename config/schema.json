@@ -376,6 +376,10 @@
                     }
                 }
             }
+        },
+        "lookback": {
+            "type": "string",
+            "description": "The period to lookback for data, accounts for ingestion delay in some log sources"
         }
     },
     "examples": [
