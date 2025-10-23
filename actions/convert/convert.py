@@ -347,7 +347,7 @@ def convert_rules(
 
                 # Write the output to a file
                 with open(output_file, "w", encoding=encoding) as f:
-                    options = json.OPT_NAIVE_UTC
+                    options = json.OPT_NAIVE_UTC | json.OPT_SORT_KEYS
                     if pretty_print:
                         options = options | json.OPT_INDENT_2
                     f.write(
