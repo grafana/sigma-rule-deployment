@@ -223,6 +223,34 @@ runs:
 
           `;
 
+          const oldCommentQuery = `query GetPRComments($owner: String!, $name: String!, $number: Int!) {
+              repository(owner: $owner, name: $name) {
+                id
+                pullRequest(number: $number) {
+                  title
+                  comments(last: 100) {
+                    nodes {
+                      id
+                      bodyText
+                      isMinimized
+                      author {
+                        login
+                      }
+                    }
+                  }
+                }
+              }
+          }`;
+          
+          const minimizeCommentMutation = `mutation MinimizeComment($subjectId: ID!) {
+            minimizeComment(input: {
+              subjectId: $subjectId,
+              classifier: OUTDATED
+            }) {
+              clientMutationId
+            }
+          }`;
+
           const query = `mutation AddComment($body: String!, $subjectId: ID!) {
             addComment(input: {
               body: $body,
@@ -236,6 +264,20 @@ runs:
               }
             }
           }`
+
+          const comments = await github.graphql(oldCommentQuery, {
+            owner: context.repo.owner,
+            name: context.repo.repo,
+            number: process.env.GITHUB_PR_NUMBER
+          });
+          
+          for (const comment of comments.data.repository.pullRequest.comments.nodes) {
+            if (!comment.isMinimized && comment.bodyText.startsWith("Sigma Rule Conversions")) {
+              await github.graphql(minimizeCommentMutation, {
+                subjectId: comment.id
+              });
+            }
+          }
 
           const variables = {
             body: comment,
