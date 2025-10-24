@@ -67,9 +67,11 @@ runs:
           let commit = "";
           let first_commit = "";
           let last_commit = "";
+          let base_commit = "";
           for (const remote_commit of iterator) {
             if (commit === "" && remote_commit.parents.length > 0) {
               commit = remote_commit.parents[0].sha;
+              base_commit = remote_commit.parents[0].sha;
               first_commit = remote_commit.sha;
             }
             if (remote_commit.commit.committer.name === process.env.ACTIONS_USERNAME) {
@@ -77,6 +79,8 @@ runs:
               last_commit = remote_commit.sha;
             }
           }
+          console.log("Base commit or base ref: ${base_commit}");
+          core.setOutput('base-commit', base_commit);
           console.log(`Last commit or base ref: ${commit}`);
           core.setOutput('previous-commit', commit);
           console.log(`PR First Commit: ${first_commit}`);
@@ -173,7 +177,7 @@ runs:
       id: generate-comment-data
       shell: bash
       env:
-        BASE_REF: ${{ steps.commits.outputs.first-commit || github.base_ref || github.event.pull_request.base.ref || format('origin/{0}', github.event.repository.default_branch) }}
+        BASE_REF: ${{ steps.commits.outputs.base-commit || steps.commits.outputs.first-commit || github.base_ref || github.event.pull_request.base.ref || format('origin/{0}', github.event.repository.default_branch) }}
         CONVERSION_PATH: ${{ steps.config-paths.outputs.conversion_path }}
       run: |
         git add "$CONVERSION_PATH"
