@@ -34,6 +34,8 @@ The action supports the following inputs:
 | `schemaURL`  | URL to the JSON schema for Sigma validation                                                           | No       | Latest schema from [sigma-specification](https://github.com/SigmaHQ/sigma-specification) repository      |
 | `schemaFile` | Path to a local JSON schema file in your repository                                                  | No       | Uses `schemaURL` if not provided                                                                           |
 
+> Note that the schemaURL default value [no longer exists](https://github.com/SigmaHQ/sigma-rules-validator/issues/4), and you must specify schemaURL to make sure you validate correctly until it's changed upstream. See the example below for an updated reference.
+
 ## Usage Examples
 
 
@@ -69,6 +71,7 @@ jobs:
       - name: Validate Sigma rules
         uses: SigmaHQ/sigma-rules-validator@66a5abe3fb6d13ac203ded42045580845c9c5534 #v1
         with:
+          schemaURL: https://raw.githubusercontent.com/SigmaHQ/sigma-specification/refs/heads/main/json-schema/sigma-detection-rule-schema.json
           paths: |-
             ./staging/rules-development
             ./prod/rules
