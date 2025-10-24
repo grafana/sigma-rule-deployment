@@ -1,4 +1,4 @@
-FROM golang:1.24-alpine AS builder
+FROM golang:1.24-alpine@sha256:8f8959f38530d159bf71d0b3eb0c547dc61e7959d8225d1599cf762477384923 AS builder
 
 WORKDIR /src
 
@@ -10,7 +10,7 @@ RUN go build -ldflags="-s -w" -o /build/deploy .
 WORKDIR /src/integrate
 RUN go build -ldflags="-s -w" -o /build/integrate .
 
-FROM python:3.10-alpine
+FROM python:3.10-alpine@sha256:63f6d26c66126481336273c8d34a2017729843ac3b2de2897c428f27e066f1be
 
 WORKDIR /app
 
