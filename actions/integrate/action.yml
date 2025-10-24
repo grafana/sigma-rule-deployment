@@ -300,7 +300,7 @@ runs:
             number: parseInt(process.env.PULL_REQUEST_NUMBER, 10)
           });
           
-          for (const comment of comments.data.repository.pullRequest.comments.nodes) {
+          for (const comment of comments?.repository?.pullRequest?.comments?.nodes ?? []) {
             if (!comment.isMinimized && comment.bodyText.startsWith("Sigma Rule Integrations")) {
               await github.graphql(minimizeCommentMutation, {
                 subjectId: comment.id
