@@ -11,6 +11,9 @@ The [SigmaHQ Sigma Rules Validator](https://github.com/SigmaHQ/sigma-rules-valid
 - Catches formatting errors early in your CI/CD pipeline
 - Ensures compatibility with Sigma conversion tools
 
+> [!IMPORTANT]
+> The [Sigma Rules Validator](https://github.com/SigmaHQ/sigma-rules-validator) action does not currently work with multiple documents in a single YAML and hence we recommend storing such rules in a separate directory from the Sigma rules.
+
 ## Quick Start
 
 Add this workflow step to validate all Sigma rules in your repository:
