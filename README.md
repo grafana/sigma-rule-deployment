@@ -7,6 +7,7 @@ Automate the conversion, testing, and deployment of [Sigma rules](https://sigmah
 ## Available Actions
 
 - [**Config Validator**](./actions/validate/README.md): Validates configuration files against the JSON schema to ensure proper structure and required fields before processing.
+- [**Sigma Rule Validation](./actions/sigma-validation/README.md): Before converting and deploying your Sigma rules, we strongly recommend validating them to ensure they conform to the [Sigma specification](https://sigmahq.io/docs/). Use the [SigmaHQ Sigma Rules Validator](https://github.com/SigmaHQ/sigma-rules-validator) GitHub Action to automatically validate your rules in your CI/CD pipeline.
 - [**Sigma Rule Converter**](./actions/convert/README.md): Converts Sigma rules to target query languages using `sigma-cli`. Supports dynamic plugin installation, custom configurations, and output management, producing JSON output files containing converted queries and rule metadata.
 - [**Grafana Query Integrator**](./actions/integrate/README.md): Processes the JSON output from the Sigma Rule Converter and generates Grafana-compatible alert rule configurations, bridging the gap between converted Sigma rules and Grafana alerting.
 - [**Sigma Rule Deployer**](./actions/deploy/README.md): Deploys alert rule files to Grafana, supporting both incremental deployments (only changed files) and fresh deployments (complete replacement).
