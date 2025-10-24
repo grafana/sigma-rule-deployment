@@ -7,6 +7,7 @@ Automate the conversion, testing, and deployment of [Sigma rules](https://sigmah
 ## Available Actions
 
 - [**Config Validator**](./actions/validate/README.md): Validates configuration files against the JSON schema to ensure proper structure and required fields before processing.
+- [**Sigma Rule Validation](./actions/sigma-validation/README.md): Before converting and deploying your Sigma rules, we strongly recommend validating them to ensure they conform to the [Sigma specification](https://sigmahq.io/docs/). Use the [SigmaHQ Sigma Rules Validator](https://github.com/SigmaHQ/sigma-rules-validator) GitHub Action to automatically validate your rules in your CI/CD pipeline.
 - [**Sigma Rule Converter**](./actions/convert/README.md): Converts Sigma rules to target query languages using `sigma-cli`. Supports dynamic plugin installation, custom configurations, and output management, producing JSON output files containing converted queries and rule metadata.
 - [**Grafana Query Integrator**](./actions/integrate/README.md): Processes the JSON output from the Sigma Rule Converter and generates Grafana-compatible alert rule configurations, bridging the gap between converted Sigma rules and Grafana alerting.
 - [**Sigma Rule Deployer**](./actions/deploy/README.md): Deploys alert rule files to Grafana, supporting both incremental deployments (only changed files) and fresh deployments (complete replacement).
@@ -112,7 +113,7 @@ Other than the `refId` and `datasource` (which are required by Grafana), the key
 The main restriction are they need to be valid Sigma rules, including the `id` and `title` [metadata fields](https://sigmahq.io/docs/basics/rules.html#available-sigma-metadata-fields). If you are using [Correlation rules](https://github.com/SigmaHQ/sigma-specification/blob/main/specification/sigma-correlation-rules-specification.md), the rule files must contain **all** the referenced rules within the rule file (using [YAML's multiple document feature](https://gettaurus.org/docs/YAMLTutorial/#YAML-Multi-Documents), i.e., combined with `---`).
 
 > [!IMPORTANT]
-> The [Sigma Rules Validator](https://github.com/SigmaHQ/sigma-rules-validator) action does not currently work with multiple documents in a single YAML and hence we recommend storing such rules in a separate directory from the Sigma rules.
+> The [Sigma Rules Validator](https://github.com/SigmaHQ/sigma-rules-validator) action does not currently work with multiple documents in a single YAML and hence we recommend storing such rules in a separate directory from the Sigma rules. More info can be found [here](./actions/sigma-validation/README.md)
 
 ### What value should be provided for the `data_source` field in the `conversion` settings?
 
