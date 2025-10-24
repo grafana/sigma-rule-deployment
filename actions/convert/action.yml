@@ -268,7 +268,7 @@ runs:
           const comments = await github.graphql(oldCommentQuery, {
             owner: context.repo.owner,
             name: context.repo.repo,
-            number: process.env.PULL_REQUEST_NUMBER
+            number: parseInt(process.env.PULL_REQUEST_NUMBER, 10)
           });
           
           for (const comment of comments.data.repository.pullRequest.comments.nodes) {
