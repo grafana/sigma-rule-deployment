@@ -24,3 +24,4 @@ conversions:
 integration:
   folder_id: XXXX
   org_id: 1
+  test_queries: true
