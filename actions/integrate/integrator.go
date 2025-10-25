@@ -558,8 +558,8 @@ func (i *Integrator) DoQueryTesting(timeoutDuration time.Duration) error {
 
 // SetOutputs writes the output of rules integrated (updated and removed) to the GitHub Action outputs
 func (i *Integrator) SetOutputs() error {
-	allFiles := append(i.addedFiles, i.removedFiles...)
-	rulesIntegrated := strings.Join(allFiles, " ")
+	i.addedFiles = append(i.addedFiles, i.removedFiles...)
+	rulesIntegrated := strings.Join(i.addedFiles, " ")
 
 	if err := SetOutput("rules_integrated", rulesIntegrated); err != nil {
 		return fmt.Errorf("failed to set rules integrated output: %w", err)
