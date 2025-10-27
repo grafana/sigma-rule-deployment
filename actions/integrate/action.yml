@@ -99,9 +99,11 @@ runs:
           let commit = "";
           let first_commit = "";
           let last_commit = "";
+          let base_commit = "";
           for (const remote_commit of iterator) {
             if (commit === "" && remote_commit.parents.length > 0) {
               commit = remote_commit.parents[0].sha;
+              base_commit = remote_commit.parents[0].sha;
               first_commit = remote_commit.sha;
             }
             if (remote_commit.commit.committer.name === process.env.ACTIONS_USERNAME) {
@@ -109,6 +111,8 @@ runs:
               last_commit = remote_commit.sha;
             }
           }
+          console.log(`Base commit or base ref: ${base_commit}`);
+          core.setOutput('base-commit', base_commit);
           console.log(`Last commit or base ref: ${commit}`);
           core.setOutput('previous-commit', commit);
           console.log(`PR First Commit: ${first_commit}`);
@@ -116,36 +120,25 @@ runs:
           console.log(`PR Last Commit by automation: ${last_commit}`);
           core.setOutput('last-commit', last_commit);
 
-          return {
-            commit,
-            first_commit,
-            last_commit
-          };
-    - name: Output Commits
-      id: commits-usable
-      shell: bash
-      env:
-        COMMITS: "${{ steps.commits.outputs.result }}"
-      run: |
-        COMMIT=$(echo "$COMMITS" | jq -r '.commit')
-        FIRST_COMMIT=$(echo "$COMMITS" | jq -r '.first_commit')
-        LAST_COMMIT=$(echo "$COMMITS" | jq -r '.last_commit')
-
-        echo "commit=${COMMIT}" >> $GITHUB_OUTPUT
-        echo "first_commit=${FIRST_COMMIT}" >> $GITHUB_OUTPUT
-        echo "last_commit=${LAST_COMMIT}" >> $GITHUB_OUTPUT
+          return {};
     - name: Calculate Change Files
       id: changed-files
       shell: bash
       env:
         CONVERSION_PATH: ${{ steps.config-paths.outputs.conversion_path }}
-        BASE_REF: ${{ steps.commits-usable.outputs.last_commit || steps.commits-usable.outputs.commit || github.base_ref || github.event.pull_request.base.ref || format('origin/{0}', github.event.repository.default_branch) }}
+        PREVIOUS_REF: ${{ steps.commits.outputs.last-commit || steps.commits.outputs.previous-commit || format('origin/{0}', github.base_ref || github.event.pull_request.base.ref || github.event.repository.default_branch) }}
+        BASE_REF: ${{ steps.commits.outputs.base-commit || format('origin/{0}', github.event.pull_request.base.ref || github.event.repository.default_branch) }}
       run: |
-        git fetch
-        CHANGED_FILES=$(git diff "$BASE_REF" --name-only --diff-filter=ACMR -- "$CONVERSION_PATH")
-        DELETED_FILES=$(git diff "$BASE_REF" --name-only --diff-filter=D -- "$CONVERSION_PATH")
+        git fetch origin
+        echo "Using PREVIOUS_REF: $PREVIOUS_REF"
+        echo "Using BASE_REF: $BASE_REF"
+        echo "Using CONVERSION_PATH: $CONVERSION_PATH"
+        CHANGED_FILES=$(git diff "$PREVIOUS_REF" --name-only --diff-filter=ACMR -- "$CONVERSION_PATH")
+        DELETED_FILES=$(git diff "$PREVIOUS_REF" --name-only --diff-filter=D -- "$CONVERSION_PATH")
+        TEST_FILES=$(git diff "$BASE_REF" --name-only --diff-filter=ACMR -- "$CONVERSION_PATH")
         echo all_changed_files=${CHANGED_FILES//\\n/} >> "$GITHUB_OUTPUT"
         echo deleted_files=${DELETED_FILES//\\n/} >> "$GITHUB_OUTPUT"
+        echo test_files=${TEST_FILES//\\n/} >> "$GITHUB_OUTPUT"
 
     - name: Run Sigma Rule Integrator
       id: integrate
@@ -156,6 +149,7 @@ runs:
         PRETTY_PRINT: ${{ inputs.pretty_print }}
         CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
         DELETED_FILES: ${{ steps.changed-files.outputs.deleted_files }}
+        TEST_FILES: ${{ steps.changed-files.outputs.test_files }}
         ALL_RULES: ${{ inputs.all_rules }}
         CONTINUE_ON_QUERY_TESTING_ERRORS: ${{ inputs.continue_on_query_testing_errors }}
         IMAGE_REF: ${{ steps.image-ref.outputs.image_ref }}
@@ -169,6 +163,7 @@ runs:
             -e PRETTY_PRINT="$PRETTY_PRINT" \
             -e CHANGED_FILES="$CHANGED_FILES" \
             -e DELETED_FILES="$DELETED_FILES" \
+            -e TEST_FILES="$TEST_FILES" \
             -e ALL_RULES="$ALL_RULES" \
             -e CONTINUE_ON_QUERY_TESTING_ERRORS="$CONTINUE_ON_QUERY_TESTING_ERRORS" \
             "ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:$IMAGE_REF" \
@@ -183,7 +178,7 @@ runs:
       id: generate-comment-data
       shell: bash
       env:
-        BASE_REF: ${{ steps.commits-usable.outputs.last_commit || steps.commits-usable.outputs.commit || github.base_ref || github.event.pull_request.base.ref || format('origin/{0}', github.event.repository.default_branch) }}
+        BASE_REF: ${{ steps.commits.outputs.base-commit || steps.commits.outputs.first-commit || github.base_ref || github.event.pull_request.base.ref || format('origin/{0}', github.event.repository.default_branch) }}
         DEPLOYMENT_PATH: ${{ steps.config-paths.outputs.deployment_path }}
       run: |
         git add "$DEPLOYMENT_PATH"
@@ -251,6 +246,34 @@ runs:
 
           ${resultTable}
           `;
+          
+          const oldCommentQuery = `query GetPRComments($owner: String!, $name: String!, $number: Int!) {
+              repository(owner: $owner, name: $name) {
+                id
+                pullRequest(number: $number) {
+                  title
+                  comments(last: 100) {
+                    nodes {
+                      id
+                      bodyText
+                      isMinimized
+                      author {
+                        login
+                      }
+                    }
+                  }
+                }
+              }
+          }`;
+          
+          const minimizeCommentMutation = `mutation MinimizeComment($subjectId: ID!) {
+            minimizeComment(input: {
+              subjectId: $subjectId,
+              classifier: OUTDATED
+            }) {
+              clientMutationId
+            }
+          }`;
 
           const query = `mutation AddComment($body: String!, $subjectId: ID!) {
             addComment(input: {
@@ -265,6 +288,20 @@ runs:
               }
             }
           }`
+          
+          const comments = await github.graphql(oldCommentQuery, {
+            owner: context.repo.owner,
+            name: context.repo.repo,
+            number: parseInt(process.env.PULL_REQUEST_NUMBER, 10)
+          });
+          
+          for (const comment of comments?.repository?.pullRequest?.comments?.nodes ?? []) {
+            if (!comment.isMinimized && comment.bodyText.startsWith("Sigma Rule Integrations")) {
+              await github.graphql(minimizeCommentMutation, {
+                subjectId: comment.id
+              });
+            }
+          }
 
           const variables = {
             body: comment,

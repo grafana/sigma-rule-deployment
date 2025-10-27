@@ -67,9 +67,11 @@ runs:
           let commit = "";
           let first_commit = "";
           let last_commit = "";
+          let base_commit = "";
           for (const remote_commit of iterator) {
             if (commit === "" && remote_commit.parents.length > 0) {
               commit = remote_commit.parents[0].sha;
+              base_commit = remote_commit.parents[0].sha;
               first_commit = remote_commit.sha;
             }
             if (remote_commit.commit.committer.name === process.env.ACTIONS_USERNAME) {
@@ -77,6 +79,8 @@ runs:
               last_commit = remote_commit.sha;
             }
           }
+          console.log("Base commit or base ref: ${base_commit}");
+          core.setOutput('base-commit', base_commit);
           console.log(`Last commit or base ref: ${commit}`);
           core.setOutput('previous-commit', commit);
           console.log(`PR First Commit: ${first_commit}`);
@@ -84,30 +88,13 @@ runs:
           console.log(`PR Last Commit by automation: ${last_commit}`);
           core.setOutput('last-commit', last_commit);
 
-          return {
-            commit,
-            first_commit,
-            last_commit
-          };
-    - name: Output Commits
-      id: commits-usable
-      shell: bash
-      env:
-        COMMITS: "${{ steps.commits.outputs.result }}"
-      run: |
-        COMMIT=$(echo "$COMMITS" | jq -r '.commit')
-        FIRST_COMMIT=$(echo "$COMMITS" | jq -r '.first_commit')
-        LAST_COMMIT=$(echo "$COMMITS" | jq -r '.last_commit')
-
-        echo "commit=${COMMIT}" >> $GITHUB_OUTPUT
-        echo "first_commit=${FIRST_COMMIT}" >> $GITHUB_OUTPUT
-        echo "last_commit=${LAST_COMMIT}" >> $GITHUB_OUTPUT
+          return {};
 
     - name: Get Changed Files
       id: changed-files
       shell: bash
       env:
-        BASE_REF: ${{ steps.commits-usable.outputs.last_commit || steps.commits-usable.outputs.commit || github.event.pull_request.base.ref || format('origin/{0}', github.event.repository.default_branch) }}
+        BASE_REF: ${{ steps.commits.outputs.last-commit || steps.commits.outputs.previous-commit || github.event.pull_request.base.ref || format('origin/{0}', github.event.repository.default_branch) }}
         CONVERSION_PATH: ${{ steps.config-paths.outputs.conversion_path }}
         CONFIG_PATH: ${{ inputs.config_path }}
       run: |
@@ -173,7 +160,7 @@ runs:
       id: generate-comment-data
       shell: bash
       env:
-        BASE_REF: ${{ steps.commits-usable.outputs.last_commit || steps.commits-usable.outputs.commit || github.base_ref || github.event.pull_request.base.ref || format('origin/{0}', github.event.repository.default_branch) }}
+        BASE_REF: ${{ steps.commits.outputs.base-commit || steps.commits.outputs.first-commit || github.base_ref || github.event.pull_request.base.ref || format('origin/{0}', github.event.repository.default_branch) }}
         CONVERSION_PATH: ${{ steps.config-paths.outputs.conversion_path }}
       run: |
         git add "$CONVERSION_PATH"
@@ -223,6 +210,34 @@ runs:
 
           `;
 
+          const oldCommentQuery = `query GetPRComments($owner: String!, $name: String!, $number: Int!) {
+              repository(owner: $owner, name: $name) {
+                id
+                pullRequest(number: $number) {
+                  title
+                  comments(last: 100) {
+                    nodes {
+                      id
+                      bodyText
+                      isMinimized
+                      author {
+                        login
+                      }
+                    }
+                  }
+                }
+              }
+          }`;
+          
+          const minimizeCommentMutation = `mutation MinimizeComment($subjectId: ID!) {
+            minimizeComment(input: {
+              subjectId: $subjectId,
+              classifier: OUTDATED
+            }) {
+              clientMutationId
+            }
+          }`;
+
           const query = `mutation AddComment($body: String!, $subjectId: ID!) {
             addComment(input: {
               body: $body,
@@ -236,6 +251,20 @@ runs:
               }
             }
           }`
+
+          const comments = await github.graphql(oldCommentQuery, {
+            owner: context.repo.owner,
+            name: context.repo.repo,
+            number: parseInt(process.env.PULL_REQUEST_NUMBER, 10)
+          });
+          
+          for (const comment of comments?.repository?.pullRequest?.comments?.nodes ?? []) {
+            if (!comment.isMinimized && comment.bodyText.startsWith("Sigma Rule Conversions")) {
+              await github.graphql(minimizeCommentMutation, {
+                subjectId: comment.id
+              });
+            }
+          }
 
           const variables = {
             body: comment,

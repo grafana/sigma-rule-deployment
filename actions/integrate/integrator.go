@@ -71,6 +71,7 @@ type Integrator struct {
 	allRules     bool
 	addedFiles   []string
 	removedFiles []string
+	testFiles    []string
 }
 
 type Stats struct {
@@ -180,9 +181,11 @@ func (i *Integrator) LoadConfig() error {
 
 	changedFiles := strings.Split(os.Getenv("CHANGED_FILES"), " ")
 	deletedFiles := strings.Split(os.Getenv("DELETED_FILES"), " ")
+	testFiles := strings.Split(os.Getenv("TEST_FILES"), " ")
 
 	newUpdatedFiles := make([]string, 0, len(changedFiles))
 	removedFiles := make([]string, 0, len(deletedFiles))
+	filesToBeTested := make([]string, 0, len(testFiles))
 
 	if i.allRules {
 		if err = filepath.Walk(i.config.Folders.ConversionPath, func(path string, info os.FileInfo, err error) error {
@@ -191,7 +194,12 @@ func (i *Integrator) LoadConfig() error {
 			}
 			if !info.IsDir() {
 				newUpdatedFiles = append(newUpdatedFiles, path)
+				// If all files is true, test all files
+				if i.config.IntegratorConfig.TestQueries {
+					filesToBeTested = append(filesToBeTested, path)
+				}
 			}
+
 			return nil
 		}); err != nil {
 			return fmt.Errorf("failed to walk directory: %w", err)
@@ -207,7 +215,19 @@ func (i *Integrator) LoadConfig() error {
 				newUpdatedFiles = append(newUpdatedFiles, path)
 			}
 		}
+		if i.config.IntegratorConfig.TestQueries {
+			for _, path := range testFiles {
+				relpath, err := filepath.Rel(i.config.Folders.ConversionPath, path)
+				if err != nil {
+					return fmt.Errorf("error checking file path %s: %v", path, err)
+				}
+				if relpath == filepath.Base(path) {
+					filesToBeTested = append(filesToBeTested, path)
+				}
+			}
+		}
 	}
+
 	for _, path := range deletedFiles {
 		relpath, err := filepath.Rel(i.config.Folders.ConversionPath, path)
 		if err != nil {
@@ -218,9 +238,10 @@ func (i *Integrator) LoadConfig() error {
 		}
 	}
 
-	fmt.Printf("Changed files: %d\nRemoved files: %d\n", len(newUpdatedFiles), len(removedFiles))
+	fmt.Printf("Changed files: %d\nRemoved files: %d\nTest files: %d\n", len(newUpdatedFiles), len(removedFiles), len(filesToBeTested))
 	i.addedFiles = newUpdatedFiles
 	i.removedFiles = removedFiles
+	i.testFiles = filesToBeTested
 
 	return nil
 }
@@ -317,11 +338,29 @@ func (i *Integrator) Run() error {
 		}
 	}
 
-	if i.config.IntegratorConfig.TestQueries {
-		fmt.Println("Testing queries against the datasource")
+	// Convert all files that have been updated from the last commit
+	if err := i.DoConversions(); err != nil {
+		return err
 	}
-	queryTestResults := make(map[string][]QueryTestResult, len(i.addedFiles))
 
+	// Clean up any deleted files
+	if err := i.DoCleanup(); err != nil {
+		return err
+	}
+
+	// If query testing is enabled, test all the conversions against the datasource
+	if i.config.IntegratorConfig.TestQueries {
+		if err := i.DoQueryTesting(timeoutDuration); err != nil && !i.config.IntegratorConfig.ContinueOnQueryTestingErrors {
+			return err
+		}
+	}
+
+	// Write the output of rules integrated (updated and removed) to the GitHub Action outputs
+	return i.SetOutputs()
+}
+
+// DoConversions handles the conversion of Sigma rules to Grafana alert rules
+func (i *Integrator) DoConversions() error {
 	for _, inputFile := range i.addedFiles {
 		fmt.Printf("Integrating file: %s\n", inputFile)
 		conversionContent, err := ReadLocalFile(inputFile)
@@ -379,69 +418,12 @@ func (i *Integrator) Run() error {
 		if err != nil {
 			return err
 		}
-
-		if i.config.IntegratorConfig.TestQueries {
-			fmt.Println("Testing queries against the datasource")
-			// Convert queries slice to map with refIDs
-			queryMap := make(map[string]string, len(queries))
-			for index, query := range queries {
-				refID := fmt.Sprintf("A%d", index)
-				queryMap[refID] = query
-			}
-			// Test all queries against the datasource
-			queryResults, err := i.TestQueries(
-				queryMap, config, i.config.ConversionDefaults, timeoutDuration,
-			)
-			if err != nil {
-				fmt.Printf("Error testing queries for file %s: %v\n", inputFile, err)
-				// Return error if continue on query testing errors is not enabled
-				if !i.config.IntegratorConfig.ContinueOnQueryTestingErrors {
-					return err
-				}
-			}
-
-			// Check if any query results have errors
-			for _, result := range queryResults {
-				if len(result.Stats.Errors) > 0 {
-					fmt.Printf("Query testing errors occurred for file %s\n", inputFile)
-					fmt.Printf("Datasource: %s\n", result.Datasource)
-					for _, error := range result.Stats.Errors {
-						fmt.Printf("Error: %s\n", error)
-					}
-				}
-			}
-
-			if len(queryResults) > 0 {
-				fmt.Printf("Query testing completed successfully for file %s\n", inputFile)
-				if len(queryResults) == 1 {
-					fmt.Printf("Query returned results: %d\n", queryResults[0].Stats.Count)
-				} else {
-					fmt.Printf("Queries returned results:\n")
-					for i, result := range queryResults {
-						fmt.Printf("Query %d: %d\n", i, result.Stats.Count)
-					}
-				}
-			} else if err == nil {
-				fmt.Printf("Query testing completed successfully for file %s\n", inputFile)
-			}
-
-			queryTestResults[inputFile] = queryResults
-		}
 	}
+	return nil
+}
 
-	if i.config.IntegratorConfig.TestQueries {
-		// Marshal all query results into a single JSON object
-		resultsJSON, err := json.Marshal(queryTestResults)
-		if err != nil {
-			return fmt.Errorf("error marshalling query results: %v", err)
-		}
-
-		// Set a single output with all results
-		if err := SetOutput("test_query_results", string(resultsJSON)); err != nil {
-			return fmt.Errorf("failed to set test query results output: %w", err)
-		}
-	}
-
+// DoCleanup handles the removal of deleted files and cleanup of orphaned files
+func (i *Integrator) DoCleanup() error {
 	for _, deletedFile := range i.removedFiles {
 		fmt.Printf("Deleting alert rule file: %s\n", deletedFile)
 		deploymentGlob := fmt.Sprintf("alert_rule_%s_*.json", strings.TrimSuffix(filepath.Base(deletedFile), ".json"))
@@ -467,15 +449,121 @@ func (i *Integrator) Run() error {
 		fmt.Printf("Warning: Error during orphaned deployment file cleanup: %v\n", err)
 	}
 
-	rulesIntegrated := strings.Join(i.addedFiles, " ")
-	if len(i.addedFiles) > 0 {
-		rulesIntegrated += " "
+	return nil
+}
+
+// DoQueryTesting handles testing queries against the Grafana datasources
+func (i *Integrator) DoQueryTesting(timeoutDuration time.Duration) error {
+	fmt.Println("Testing queries against the datasource")
+	queryTestResults := make(map[string][]QueryTestResult, len(i.testFiles))
+
+	for _, inputFile := range i.testFiles {
+		fmt.Printf("Testing queries for file: %s\n", inputFile)
+		conversionContent, err := ReadLocalFile(inputFile)
+		if err != nil {
+			fmt.Printf("Error reading file %s: %v\n", inputFile, err)
+			if !i.config.IntegratorConfig.ContinueOnQueryTestingErrors {
+				return err
+			}
+			continue
+		}
+
+		var conversionObject ConversionOutput
+		err = json.Unmarshal([]byte(conversionContent), &conversionObject)
+		if err != nil {
+			fmt.Printf("Error unmarshalling conversion output for file %s: %v\n", inputFile, err)
+			if !i.config.IntegratorConfig.ContinueOnQueryTestingErrors {
+				return fmt.Errorf("error unmarshalling conversion output: %v", err)
+			}
+			continue
+		}
+
+		// Find matching configuration using ConversionName
+		var config ConversionConfig
+		for _, conf := range i.config.Conversions {
+			if conf.Name == conversionObject.ConversionName {
+				config = conf
+				break
+			}
+		}
+		if config.Name == "" {
+			fmt.Printf("Warning: No configuration found for conversion name: %s, skipping file: %s\n", conversionObject.ConversionName, inputFile)
+			continue
+		}
+
+		queries := conversionObject.Queries
+		if len(queries) == 0 {
+			fmt.Printf("No queries found in conversion object for file %s\n", inputFile)
+			continue
+		}
+
+		// Convert queries slice to map with refIDs
+		queryMap := make(map[string]string, len(queries))
+		for index, query := range queries {
+			refID := fmt.Sprintf("A%d", index)
+			queryMap[refID] = query
+		}
+
+		// Test all queries against the datasource
+		queryResults, err := i.TestQueries(
+			queryMap, config, i.config.ConversionDefaults, timeoutDuration,
+		)
+		if err != nil {
+			fmt.Printf("Error testing queries for file %s: %v\n", inputFile, err)
+			// Return error if continue on query testing errors is not enabled
+			if !i.config.IntegratorConfig.ContinueOnQueryTestingErrors {
+				return err
+			}
+		}
+
+		for _, result := range queryResults {
+			if len(result.Stats.Errors) > 0 {
+				fmt.Printf("Query testing errors occurred for file %s\n", inputFile)
+				fmt.Printf("Datasource: %s\n", result.Datasource)
+				for _, error := range result.Stats.Errors {
+					fmt.Printf("Error: %s\n", error)
+				}
+			}
+		}
+
+		if len(queryResults) > 0 {
+			fmt.Printf("Query testing completed successfully for file %s\n", inputFile)
+			if len(queryResults) == 1 {
+				fmt.Printf("Query returned results: %d\n", queryResults[0].Stats.Count)
+			} else {
+				fmt.Printf("Queries returned results:\n")
+				for i, result := range queryResults {
+					fmt.Printf("Query %d: %d\n", i, result.Stats.Count)
+				}
+			}
+		} else if err == nil {
+			fmt.Printf("Query testing completed successfully for file %s\n", inputFile)
+		}
+
+		queryTestResults[inputFile] = queryResults
 	}
-	rulesIntegrated += strings.Join(i.removedFiles, " ")
+
+	resultsJSON, err := json.Marshal(queryTestResults)
+	if err != nil {
+		return fmt.Errorf("error marshalling query results: %v", err)
+	}
+
+	// Set a single output with all results
+	if err := SetOutput("test_query_results", string(resultsJSON)); err != nil {
+		return fmt.Errorf("failed to set test query results output: %w", err)
+	}
+
+	return nil
+}
+
+// SetOutputs writes the output of rules integrated (updated and removed) to the GitHub Action outputs
+func (i *Integrator) SetOutputs() error {
+	i.addedFiles = append(i.addedFiles, i.removedFiles...)
+	rulesIntegrated := strings.Join(i.addedFiles, " ")
+
 	if err := SetOutput("rules_integrated", rulesIntegrated); err != nil {
 		return fmt.Errorf("failed to set rules integrated output: %w", err)
 	}
-
 	return nil
 }
 
