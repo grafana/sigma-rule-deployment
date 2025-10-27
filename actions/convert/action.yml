@@ -79,7 +79,7 @@ runs:
               last_commit = remote_commit.sha;
             }
           }
-          console.log("Base commit or base ref: ${base_commit}");
+          console.log(`Base commit or base ref: ${base_commit}`);
           core.setOutput('base-commit', base_commit);
           console.log(`Last commit or base ref: ${commit}`);
           core.setOutput('previous-commit', commit);
