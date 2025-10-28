@@ -42,7 +42,7 @@ jobs:
 
       - name: Deploy alert rules to Grafana
         id: deploy
-        uses: grafana/sigma-rule-deployment/actions/deploy@f0103ba09a430c18354f05e5d8fbe953810cf708
+        uses: grafana/sigma-rule-deployment/actions/deploy@02c28f91dea9c84a700827997e30c44c53fc1184
         with:
           config_path: ${{ inputs.config_path }}
           fresh_deploy: ${{ inputs.fresh_deploy }}
