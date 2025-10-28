@@ -115,14 +115,14 @@ runs:
           console.log(`Last commit or base ref: ${commit}`);
           console.log(`PR First Commit: ${first_commit}`);
           console.log(`PR Last Commit by automation: ${last_commit}`);
-          console.log(`PR Previous Ref: ${last_commit ?? commit}`);
+          console.log(`PR Previous Ref: ${last_commit || commit}`);
           console.log(`PR Base Ref: ${base_commit}`);
 
           core.setOutput('base-commit', base_commit);
           core.setOutput('previous-commit', commit);
           core.setOutput('first-commit', first_commit);
           core.setOutput('last-commit', last_commit);
-          core.setOutput('previous-ref', last_commit ?? commit);
+          core.setOutput('previous-ref', last_commit || commit);
           core.setOutput('base-ref', base_commit);
 
           return {};
