@@ -106,7 +106,7 @@ runs:
               base_commit = remote_commit.parents[0].sha;
               first_commit = remote_commit.sha;
             }
-            if (remote_commit.commit.committer.name === process.env.ACTIONS_USERNAME) {
+            if (remote_commit.commit.author.name === process.env.ACTIONS_USERNAME) {
               commit = remote_commit.sha;
               last_commit = remote_commit.sha;
             }
@@ -246,7 +246,7 @@ runs:
 
           ${resultTable}
           `;
-          
+
           const oldCommentQuery = `query GetPRComments($owner: String!, $name: String!, $number: Int!) {
               repository(owner: $owner, name: $name) {
                 id
@@ -265,7 +265,7 @@ runs:
                 }
               }
           }`;
-          
+
           const minimizeCommentMutation = `mutation MinimizeComment($subjectId: ID!) {
             minimizeComment(input: {
               subjectId: $subjectId,
@@ -288,13 +288,13 @@ runs:
               }
             }
           }`
-          
+
           const comments = await github.graphql(oldCommentQuery, {
             owner: context.repo.owner,
             name: context.repo.repo,
             number: parseInt(process.env.PULL_REQUEST_NUMBER, 10)
           });
-          
+
           for (const comment of comments?.repository?.pullRequest?.comments?.nodes ?? []) {
             if (!comment.isMinimized && comment.bodyText.startsWith("Sigma Rule Integrations")) {
               await github.graphql(minimizeCommentMutation, {
