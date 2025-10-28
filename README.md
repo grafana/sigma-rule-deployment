@@ -151,4 +151,4 @@ This project helps you achieve Detection as Code using Sigma rules, GitHub, and 
 - Sigma CLI converts these rules into queries compatible with multiple database systems (Loki, Elasticsearch, etc.)
 - Grafana executes those queries on a schedule and triggers alerts via Grafana IRM when detections occur
 
-Sigma Rule Deployment automates this workflow: it provided GitHub Actions to convert Sigma rules to queries, validates their functionality, and provisions them to Grafana as alert rules; making security monitoring more reliable and maintainable.
+Sigma Rule Deployment automates this workflow: it provides GitHub Actions to convert Sigma rules to queries, validates their functionality, and provisions them to Grafana as alert rules; making security monitoring more reliable and maintainable.
