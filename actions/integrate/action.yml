@@ -112,12 +112,13 @@ runs:
             }
           }
           console.log(`Base commit or base ref: ${base_commit}`);
-          core.setOutput('base-commit', base_commit);
           console.log(`Last commit or base ref: ${commit}`);
-          core.setOutput('previous-commit', commit);
           console.log(`PR First Commit: ${first_commit}`);
-          core.setOutput('first-commit', first_commit);
           console.log(`PR Last Commit by automation: ${last_commit}`);
+
+          core.setOutput('base-commit', base_commit);
+          core.setOutput('previous-commit', commit);
+          core.setOutput('first-commit', first_commit);
           core.setOutput('last-commit', last_commit);
 
           return {};
@@ -180,7 +181,7 @@ runs:
       id: generate-comment-data
       shell: bash
       env:
-        BASE_REF: ${{ steps.changed-files.outputs.base_ref }}"
+        BASE_REF: ${{ steps.changed-files.outputs.base_ref }}
         DEPLOYMENT_PATH: ${{ steps.config-paths.outputs.deployment_path }}
       run: |
         git add "$DEPLOYMENT_PATH"
