@@ -828,7 +828,11 @@ func (i *Integrator) processFrame(frame Frame, result *QueryTestResult) error {
 					if labelValues, ok := frame.Data.Values[labelIndex][rowIndex].(map[string]any); ok {
 						for label, value := range labelValues {
 							if _, exists := result.Stats.Fields[label]; !exists {
-								result.Stats.Fields[label] = fmt.Sprintf("%v", value)
+								if i.config.IntegratorConfig.ShowSampleValues {
+									result.Stats.Fields[label] = fmt.Sprintf("%v", value)
+								} else {
+									result.Stats.Fields[label] = ""
+								}
 							}
 						}
 					}

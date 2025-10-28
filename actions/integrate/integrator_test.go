@@ -1777,19 +1777,39 @@ func (t *testDatasourceQuery) ExecuteQuery(query, dsName, _, _, _, _, _, _ strin
 
 func TestIntegratorWithQueryTesting(t *testing.T) {
 	tests := []struct {
-		name         string
-		showLogLines bool
-		wantLine     bool
+		name             string
+		showLogLines     bool
+		showSampleValues bool
+		wantLine         bool
+		wantValues       bool
 	}{
 		{
-			name:         "with log lines",
-			showLogLines: true,
-			wantLine:     true,
+			name:             "with log lines and sample values",
+			showLogLines:     true,
+			showSampleValues: true,
+			wantLine:         true,
+			wantValues:       true,
 		},
 		{
-			name:         "without log lines",
-			showLogLines: false,
-			wantLine:     false,
+			name:             "with log lines and without sample values",
+			showLogLines:     true,
+			showSampleValues: false,
+			wantLine:         true,
+			wantValues:       false,
+		},
+		{
+			name:             "without log lines but with sample values",
+			showLogLines:     false,
+			showSampleValues: true,
+			wantLine:         false,
+			wantValues:       true,
+		},
+		{
+			name:             "without log lines or sample values",
+			showLogLines:     false,
+			showSampleValues: false,
+			wantLine:         false,
+			wantValues:       false,
 		},
 	}
 
@@ -1846,12 +1866,13 @@ func TestIntegratorWithQueryTesting(t *testing.T) {
 					},
 				},
 				IntegratorConfig: IntegrationConfig{
-					FolderID:     "test-folder",
-					OrgID:        1,
-					TestQueries:  true,
-					From:         "now-1h",
-					To:           "now",
-					ShowLogLines: tt.showLogLines,
+					FolderID:         "test-folder",
+					OrgID:            1,
+					TestQueries:      true,
+					From:             "now-1h",
+					To:               "now",
+					ShowLogLines:     tt.showLogLines,
+					ShowSampleValues: tt.showSampleValues,
 				},
 				DeployerConfig: DeploymentConfig{
 					GrafanaInstance: "https://test.grafana.com",
@@ -2011,10 +2032,17 @@ func TestIntegratorWithQueryTesting(t *testing.T) {
 						} else {
 							assert.NotContains(t, stats.Fields, "Line")
 						}
-						assert.Contains(t, stats.Fields, "job")
-						assert.Equal(t, "loki", stats.Fields["job"])
-						assert.Contains(t, stats.Fields, "level")
-						assert.Equal(t, "error", stats.Fields["level"])
+						if !tt.wantValues {
+							assert.Contains(t, stats.Fields, "job")
+							assert.Equal(t, "", stats.Fields["job"])
+							assert.Contains(t, stats.Fields, "level")
+							assert.Equal(t, "", stats.Fields["level"])
+						} else {
+							assert.Contains(t, stats.Fields, "job")
+							assert.Equal(t, "loki", stats.Fields["job"])
+							assert.Contains(t, stats.Fields, "level")
+							assert.Equal(t, "error", stats.Fields["level"])
+						}
 					} else if i == 1 {
 						if tt.wantLine {
 							assert.Contains(t, stats.Fields, "Line")
@@ -2022,10 +2050,17 @@ func TestIntegratorWithQueryTesting(t *testing.T) {
 						} else {
 							assert.NotContains(t, stats.Fields, "Line")
 						}
-						assert.Contains(t, stats.Fields, "job")
-						assert.Equal(t, "loki", stats.Fields["job"])
-						assert.Contains(t, stats.Fields, "level")
-						assert.Equal(t, "warning", stats.Fields["level"])
+						if !tt.wantValues {
+							assert.Contains(t, stats.Fields, "job")
+							assert.Equal(t, "", stats.Fields["job"])
+							assert.Contains(t, stats.Fields, "level")
+							assert.Equal(t, "", stats.Fields["level"])
+						} else {
+							assert.Contains(t, stats.Fields, "job")
+							assert.Equal(t, "loki", stats.Fields["job"])
+							assert.Contains(t, stats.Fields, "level")
+							assert.Equal(t, "warning", stats.Fields["level"])
+						}
 					}
 				}
 			}
