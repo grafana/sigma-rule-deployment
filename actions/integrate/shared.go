@@ -44,6 +44,7 @@ type IntegrationConfig struct {
 	From                         string            `yaml:"from"`
 	To                           string            `yaml:"to"`
 	ShowLogLines                 bool              `yaml:"show_log_lines"`
+	ShowSampleValues             bool              `yaml:"show_sample_values"`
 	ContinueOnQueryTestingErrors bool              `yaml:"continue_on_query_testing_errors"`
 	TemplateLabels               map[string]string `yaml:"template_labels"`
 	TemplateAnnotations          map[string]string `yaml:"template_annotations"`
