@@ -1,7 +1,5 @@
 # Sigma Rule Deployment GitHub Actions Suite
 
-<!-- SOCless that s*cks less! -->
-
 Automate the conversion, testing, and deployment of [Sigma rules](https://sigmahq.io/) to [Grafana Alerting](https://grafana.com/docs/grafana/latest/alerting/) rules with GitHub Actions using a [Detection as Code](./README.md#what-is-detection-as-code) approach using a declarative configuration file.
 
 ## Available Actions
