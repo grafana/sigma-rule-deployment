@@ -1,13 +1,11 @@
 # Sigma Rule Deployment GitHub Actions Suite
 
-<!-- SOCless that s*cks less! -->
-
-Automate the conversion, testing, and deployment of [Sigma rules](https://sigmahq.io/) to [Grafana Alerting](https://grafana.com/docs/grafana/latest/alerting/) rules with GitHub Actions using a Detection as Code [SOCless](./README.md#what-is-socless) approach using a declarative configuration file.
+Automate the conversion, testing, and deployment of [Sigma rules](https://sigmahq.io/) to [Grafana Alerting](https://grafana.com/docs/grafana/latest/alerting/) rules with GitHub Actions using a [Detection as Code](./README.md#what-is-detection-as-code) approach using a declarative configuration file.
 
 ## Available Actions
 
 - [**Config Validator**](./actions/validate/README.md): Validates configuration files against the JSON schema to ensure proper structure and required fields before processing.
-- [**Sigma Rule Validation](./actions/sigma-validation/README.md): Before converting and deploying your Sigma rules, we strongly recommend validating them to ensure they conform to the [Sigma specification](https://sigmahq.io/docs/). Use the [SigmaHQ Sigma Rules Validator](https://github.com/SigmaHQ/sigma-rules-validator) GitHub Action to automatically validate your rules in your CI/CD pipeline.
+- [**Sigma Rule Validation**](./actions/sigma-validation/README.md): Before converting and deploying your Sigma rules, we strongly recommend validating them to ensure they conform to the [Sigma specification](https://sigmahq.io/docs/). Use the [SigmaHQ Sigma Rules Validator](https://github.com/SigmaHQ/sigma-rules-validator) GitHub Action to automatically validate your rules in your CI/CD pipeline.
 - [**Sigma Rule Converter**](./actions/convert/README.md): Converts Sigma rules to target query languages using `sigma-cli`. Supports dynamic plugin installation, custom configurations, and output management, producing JSON output files containing converted queries and rule metadata.
 - [**Grafana Query Integrator**](./actions/integrate/README.md): Processes the JSON output from the Sigma Rule Converter and generates Grafana-compatible alert rule configurations, bridging the gap between converted Sigma rules and Grafana alerting.
 - [**Sigma Rule Deployer**](./actions/deploy/README.md): Deploys alert rule files to Grafana, supporting both incremental deployments (only changed files) and fresh deployments (complete replacement).
@@ -135,18 +133,22 @@ The imapct of these two flags are different:
 
 ![Sequence Diagram](./assets/sequence-diagram.png)
 
-### What is SOCless?
+### What is Detection as Code?
 
-SOCless refers to a security operations model where detection engineering and incident response workflows are fully automated through code and CI/CD pipelines. Instead of relying on manual analyst actions for converting, validating, and deploying detection rules, a SOCless system executes these tasks automatically and consistently.
+Detection as Code (DaC) is a practice where security detection rules are:
 
-This repository implements the SOCless model using GitHub Actions to manage the complete lifecycle of Sigma rules, from definition to live deployment in Grafana Managed Alerting.
+- Stored as structured, human-readable files
+- Managed in a version-controlled environment (like Git) to track all changes
+- Deployed through automated pipelines to ensure consistency and traceability
 
-The suite enables teams to:
+The goal is to manage the entire lifecycle, from developing accurate detection rules to deploying the database queries and configuring alert systems, all within a single, versioned environment.
 
-- **Automate rule management**: Run validation, conversion, integration, and deployment automatically through GitHub Actions workflows
-- **Reduce human error**: Enforce schema validation and automated testing before any rule reaches production
-- **Accelerate updates**: Deploy new or modified Sigma rules within minutes of merging a pull request
-- **Maintain configuration consistency**: Use version-controlled workflows and standardized pipelines to ensure reproducible deployments across environments
+#### How does Sigma Rule Deployment implement DaC?
 
-By shifting detection engineering into a CI/CD-driven model, the SOCless approach transforms traditional SOC operations into an automated, auditable, and scalable system, which allows security teams to focus on analysis and improvement rather than manual rule maintenance.
+This project helps you achieve Detection as Code using Sigma rules, GitHub, and Grafana:
 
+- Sigma rules provide a standardized format for storing detection logic with thousands of community examples
+- Sigma CLI converts these rules into queries compatible with multiple database systems (Loki, Elasticsearch, etc.)
+- Grafana executes those queries on a schedule and triggers alerts via Grafana IRM when detections occur
+
+Sigma Rule Deployment automates this workflow: it provides GitHub Actions to convert Sigma rules to queries, validates their functionality, and provisions them to Grafana as alert rules; making security monitoring more reliable and maintainable.
