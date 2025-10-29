@@ -116,7 +116,7 @@ jobs:
           fetch-depth: 0
 
       - name: Convert Sigma rules
-        uses: ./actions/convert
+        uses: grafana/sigma-rule-deployment/actions/convert@v0.0.2
         with:
           config_path: ${{ inputs.config_path }}
           plugin_packages: ${{ inputs.plugin_packages }}
@@ -127,7 +127,7 @@ jobs:
           changed_files_from_base: ${{ inputs.changed_files_from_base }}
 
       - name: Integrate queries into alert rules
-        uses: ./actions/integrate
+        uses: grafana/sigma-rule-deployment/actions/integrate@v0.0.2
         with:
           config_path: ${{ inputs.config_path }}
           grafana_sa_token: ${{ secrets.grafana_sa_token || env.GRAFANA_SA_TOKEN }}
