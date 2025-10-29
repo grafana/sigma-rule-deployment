@@ -10,7 +10,7 @@ RUN go build -ldflags="-s -w" -o /build/deploy .
 WORKDIR /src/integrate
 RUN go build -ldflags="-s -w" -o /build/integrate .
 
-FROM python:3.10-alpine@sha256:63f6d26c66126481336273c8d34a2017729843ac3b2de2897c428f27e066f1be
+FROM python:3.14-alpine@sha256:8373231e1e906ddfb457748bfc032c4c06ada8c759b7b62d9c73ec2a3c56e710
 
 WORKDIR /app
 
