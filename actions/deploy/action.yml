@@ -110,7 +110,7 @@ runs:
         echo "grafana_instance=${GRAFANA_INSTANCE}" >> $GITHUB_OUTPUT
     - name: Comment Status
       if: success() && github.event_name == 'push'
-      uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+      uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
       env:
         ALERTS_CREATED: ${{ steps.output.outputs.alerts_created }}
         ALERTS_UPDATED: ${{ steps.output.outputs.alerts_updated }}
@@ -187,7 +187,7 @@ runs:
             }
     - name: Comment Status
       if: failure() && github.event_name == 'push'
-      uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+      uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
       with:
           script: |
             const associatedPrs = await github.rest.repos.listPullRequestsAssociatedWithCommit({
