@@ -142,5 +142,6 @@ jobs:
         with:
           commit_message: "Sigma Rules Deployment"
           branch: ${{ github.event_name == 'issue_comment' && steps.get-pr-branch.outputs.result || github.head_ref }}
+          commit_options: '--allow-empty'
           skip_checkout: true
           skip_fetch: true
