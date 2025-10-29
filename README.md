@@ -152,3 +152,13 @@ This project helps you achieve Detection as Code using Sigma rules, GitHub, and 
 - Grafana executes those queries on a schedule and triggers alerts via Grafana IRM when detections occur
 
 Sigma Rule Deployment automates this workflow: it provides GitHub Actions to convert Sigma rules to queries, validates their functionality, and provisions them to Grafana as alert rules; making security monitoring more reliable and maintainable.
+
+## Releasing
+
+To release new versions of sigma-rule-deployment, we use Git tags to denote an officially released version, and automation to push the appropriately tagged Docker image. When the main branch is in state that is ready to release, the process is as follows:
+
+1. Determine the correct version number using the [Semantic Versioning](https://semver.org/) methodology. All version numbers should be in the format `\d+\.\d+\.\d+(-[0-9A-Za-z-]+)?`
+2. Checkout main and create a signed tag for the release, named the version number prefixed with a v, e.g., `git tag --sign --message="Release vX.X.X" vX.X.X`
+3. Push the tag to GitHub, e.g., `git push --tags`
+4. Create a release in GitHub against the appropriate tag. If the version number starts with `v0`, or ends with `-alpha/beta/rcX` etc., remember to mark it as a pre-release
+5. Validate that the "Build Consolidated Image" action, which pushes the tagged image to the GitHub Container Repository (GHCR), has completed successfully for the Release action
