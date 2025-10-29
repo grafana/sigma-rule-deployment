@@ -1,0 +1,14 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["github>grafana/grafana-renovate-config//presets/base"],
+  "packageRules": [
+    {
+      "description": "Prevent pinning SRD action dependencies",
+      "matchPackageNames": "grafana/sigma-rule-deployment",
+	  "matchDepTypes": [
+        "action"
+      ],
+      "pinDigests": false
+    }
+  ]
+}
