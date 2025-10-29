@@ -162,7 +162,3 @@ To release new versions of sigma-rule-deployment, we use Git tags to denote an o
 3. Push the tag to GitHub, e.g., `git push --tags`
 4. Create a release in GitHub against the appropriate tag. If the version number starts with `v0`, or ends with `-alpha/beta/rcX` etc., remember to mark it as a pre-release
 5. Validate that the "Build Consolidated Image" action, which pushes the tagged image to the GitHub Container Repository (GHCR), has completed successfully for the Release action
-6. Create a PR to update **all** the version tags used in the reusable workflows [convert-integrate.yml](.github/workflows/convert-integrate.yml) and [deploy.yml](.github/workflows/deploy.yml) to the new version, and merge it into `main` once it is approved, e.g.:
-```
-        uses: grafana/sigma-rule-deployment/actions/convert@<RELEASE HASH> # vX.X.X
-```
