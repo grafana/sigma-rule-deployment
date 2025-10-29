@@ -6,7 +6,7 @@ Welcome! 👋 This guide will walk you through setting up automated Sigma rule d
 
 Before you begin, make sure you have:
 - A GitHub account with repository creation permissions
-- Access to a Grafana instance (Grafana Cloud or self-hosted)
+- Access to a Grafana instance ([Grafana Cloud](https://grafana.com/products/cloud/) or [self-hosted](https://grafana.com/grafana/download)). If you don't, we'll cover how to set up your Grafana Cloud Account.
 - Basic familiarity with GitHub Actions and YAML configuration files
 - Your Sigma rules ready to deploy (or you can start with examples)
 
@@ -30,6 +30,7 @@ Whether you're using Grafana Cloud or a self-hosted instance, make sure you have
 ## Step 3: Generate a Service Account Token
 
 To enable automated deployments, you'll need to create a service account token with the appropriate permissions. This token will allow GitHub Actions to authenticate with your Grafana instance and manage alert rules on your behalf.
+Note this needs administrator [privileges](https://grafana.com/docs/grafana/latest/administration/service-accounts/#before-you-begin)
 
 ### Creating the Service Account
 
