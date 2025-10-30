@@ -2025,7 +2025,8 @@ func TestIntegratorWithQueryTesting(t *testing.T) {
 					assert.Empty(t, stats.Errors)
 
 					// Verify specific fields from our mock responses
-					if i == 0 {
+					switch i {
+					case 0:
 						if tt.wantLine {
 							assert.Contains(t, stats.Fields, "Line")
 							assert.Equal(t, "error log line", stats.Fields["Line"])
@@ -2043,7 +2044,7 @@ func TestIntegratorWithQueryTesting(t *testing.T) {
 							assert.Contains(t, stats.Fields, "level")
 							assert.Equal(t, "error", stats.Fields["level"])
 						}
-					} else if i == 1 {
+					case 1:
 						if tt.wantLine {
 							assert.Contains(t, stats.Fields, "Line")
 							assert.Equal(t, "warning log line", stats.Fields["Line"])
