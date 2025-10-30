@@ -53,7 +53,6 @@ runs:
       env:
         CONFIG_PATH: ${{ inputs.config_path }}
       run: |
-        sudo apt-get install -y yq
         CONVERSION_PATH=$(yq --raw-output '.folders.conversion_path' "${CONFIG_PATH}")
         echo "conversion_path=${CONVERSION_PATH}" >> $GITHUB_OUTPUT
         DEPLOYMENT_PATH=$(yq --raw-output '.folders.deployment_path' "${CONFIG_PATH}")
