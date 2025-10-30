@@ -64,29 +64,32 @@ runs:
             pull_number: context.payload.pull_request.number,
             per_page: 1
           }));
-          let commit = "";
+          let previous_commit = "";
           let first_commit = "";
           let last_commit = "";
           let base_commit = "";
           for (const remote_commit of iterator) {
-            if (commit === "" && remote_commit.parents.length > 0) {
-              commit = remote_commit.parents[0].sha;
+            if (previous_commit === "" && remote_commit.parents.length > 0) {
+              previous_commit = remote_commit.parents[0].sha;
               base_commit = remote_commit.parents[0].sha;
               first_commit = remote_commit.sha;
             }
             if (remote_commit.commit.author.name === process.env.ACTIONS_USERNAME) {
-              commit = remote_commit.sha;
+              previous_commit = remote_commit.sha;
               last_commit = remote_commit.sha;
             }
           }
           console.log(`Base commit or base ref: ${base_commit}`);
-          core.setOutput('base-commit', base_commit);
-          console.log(`Last commit or base ref: ${commit}`);
-          core.setOutput('previous-commit', commit);
+          console.log(`Last commit or base ref: ${previous_commit}`);
           console.log(`PR First Commit: ${first_commit}`);
-          core.setOutput('first-commit', first_commit);
           console.log(`PR Last Commit by automation: ${last_commit}`);
+          console.log(`PR Previous Ref: ${last_commit || previous_commit}`);
+
+          core.setOutput('base-commit', base_commit);
+          core.setOutput('previous-commit', previous_commit);
+          core.setOutput('first-commit', first_commit);
           core.setOutput('last-commit', last_commit);
+          core.setOutput('previous-ref', last_commit || previous_commit);
 
           return {};
 
@@ -94,15 +97,15 @@ runs:
       id: changed-files
       shell: bash
       env:
-        BASE_REF: ${{ steps.commits.outputs.last-commit || steps.commits.outputs.previous-commit || github.event.pull_request.base.ref || format('origin/{0}', github.event.repository.default_branch) }}
+        PREVIOUS_REF: ${{ steps.commits.outputs.previous-ref }}
         CONVERSION_PATH: ${{ steps.config-paths.outputs.conversion_path }}
         CONFIG_PATH: ${{ inputs.config_path }}
       run: |
         # Diff Commands are constructed in conversion to discover the change for the **inputs** into the conversion process. This means that changes to the configuration or rules will
         # be registered as changed files, **but** changes to the output file will not register a change and will cause the conversion to pass but not run.
 
-        ACMR_DIFF_COMMAND="git diff ${BASE_REF} --name-only --diff-filter=ACMR -- '${CONFIG_PATH}' $(yq -r "[.conversions.[].input] | flatten | unique | [\"':(glob)\" + .[] + \"'\"] | join(\" \")" ${CONFIG_PATH}) $(yq -r "[.conversions.[].pipelines] | flatten | unique | [\"':(glob)\" + .[] + \"'\"] | join(\" \")" ${CONFIG_PATH})"
-        D_DIFF_COMMAND="git diff ${BASE_REF} --name-only --diff-filter=D -- '${CONFIG_PATH}' $(yq -r "[.conversions.[].input] | flatten | unique | [\"':(glob)\" + .[] + \"'\"] | join(\" \")" ${CONFIG_PATH}) $(yq -r "[.conversions.[].pipelines] | flatten | unique | [\"':(glob)\" + .[] + \"'\"] | join(\" \")" ${CONFIG_PATH})"
+        ACMR_DIFF_COMMAND="git diff ${PREVIOUS_REF} --name-only --diff-filter=ACMR -- '${CONFIG_PATH}' $(yq -r "[.conversions.[].input] | flatten | unique | [\"':(glob)\" + .[] + \"'\"] | join(\" \")" ${CONFIG_PATH}) $(yq -r "[.conversions.[].pipelines] | flatten | unique | [\"':(glob)\" + .[] + \"'\"] | join(\" \")" ${CONFIG_PATH})"
+        D_DIFF_COMMAND="git diff ${PREVIOUS_REF} --name-only --diff-filter=D -- '${CONFIG_PATH}' $(yq -r "[.conversions.[].input] | flatten | unique | [\"':(glob)\" + .[] + \"'\"] | join(\" \")" ${CONFIG_PATH}) $(yq -r "[.conversions.[].pipelines] | flatten | unique | [\"':(glob)\" + .[] + \"'\"] | join(\" \")" ${CONFIG_PATH})"
 
         # We want to only include the input files in the lists of changed and deleted files
         CHANGED_FILES=$(eval $ACMR_DIFF_COMMAND)
@@ -160,7 +163,7 @@ runs:
       id: generate-comment-data
       shell: bash
       env:
-        BASE_REF: ${{ steps.commits.outputs.base-commit || steps.commits.outputs.first-commit || github.base_ref || github.event.pull_request.base.ref || format('origin/{0}', github.event.repository.default_branch) }}
+        BASE_REF: ${{ steps.commits.outputs.base-commit }}
         CONVERSION_PATH: ${{ steps.config-paths.outputs.conversion_path }}
       run: |
         git add "$CONVERSION_PATH"
