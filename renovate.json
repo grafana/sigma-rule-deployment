@@ -5,10 +5,18 @@
     {
       "description": "Prevent pinning SRD action dependencies",
       "matchPackageNames": "grafana/sigma-rule-deployment",
-	  "matchDepTypes": [
+      "matchDepTypes": [
         "action"
       ],
       "pinDigests": false
+    },
+    {
+      "description": "Group together all GitHub Action updates in a single weekly commit (Tuesday, midnight GMT)",
+      "matchDepTypes": [
+        "action"
+      ],
+      "groupName": "GH Actions",
+      "schedule": ["* 0-5 * * 2"]
     }
   ]
 }
