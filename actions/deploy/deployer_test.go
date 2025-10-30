@@ -223,7 +223,8 @@ func mockServerUpdate(t *testing.T, existingAlerts []string) *httptest.Server {
 			return
 		}
 
-		if r.Method == http.MethodPut {
+		switch r.Method {
+		case http.MethodPut:
 			// Alert update
 			// Check if alert exists
 			uid := strings.TrimPrefix(r.URL.Path, alertingAPIPrefix+"/")
@@ -236,7 +237,7 @@ func mockServerUpdate(t *testing.T, existingAlerts []string) *httptest.Server {
 				t.Errorf("failed to write response body: %v", err)
 				return
 			}
-		} else if r.Method == http.MethodPost {
+		case http.MethodPost:
 			// Alert creation
 			uid := strings.TrimPrefix(r.URL.Path, alertingAPIPrefix+"/")
 			if _, exists := alertsMap[uid]; !exists {
@@ -333,9 +334,9 @@ func mockServerCreation(t *testing.T, existingAlerts []string) *httptest.Server 
 		// 1. Normal creation of an alert
 		// 2. Conflict when creating an alert (same UID but different folder)
 
-		switch {
+		switch r.Method {
 		// Creation of an alert
-		case r.Method == http.MethodPost:
+		case http.MethodPost:
 			// Parse alert content from request body
 			alertContent := string(body)
 			alert, err := parseAlert(alertContent)
@@ -368,7 +369,7 @@ func mockServerCreation(t *testing.T, existingAlerts []string) *httptest.Server 
 			}
 			return
 		// Retrieve alert info during a conflict
-		case r.Method == http.MethodGet:
+		case http.MethodGet:
 			uid := strings.TrimPrefix(r.URL.Path, alertingAPIPrefix+"/")
 			// Check if it's an existing alert
 			if alert, exists := alertsMap[uid]; exists {
@@ -383,7 +384,7 @@ func mockServerCreation(t *testing.T, existingAlerts []string) *httptest.Server 
 			w.WriteHeader(http.StatusNotFound)
 			return
 		// Update an existing alert
-		case r.Method == http.MethodPut:
+		case http.MethodPut:
 			// Simulate an update
 			uid := strings.TrimPrefix(r.URL.Path, alertingAPIPrefix+"/")
 			// Check if it's an existing alert

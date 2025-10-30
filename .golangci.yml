@@ -1,33 +1,48 @@
-run:
-  timeout: 5m
+version: "2"
 linters:
-  disable-all: true
+  default: none
   enable:
-    # Default linters
-    - errcheck
-    - gosimple
-    - govet
-    - ineffassign
-    - staticcheck
-    - unused
-    # Custom linters
     - asciicheck
     - bodyclose
     - dogsled
-    - gofmt
+    - errcheck
     - exhaustive
     - forcetypeassert
     - goconst
     - gocritic
-    - gofumpt
-    - goimports
     - goprintffuncname
     - gosec
+    - govet
+    - ineffassign
     - misspell
     - nakedret
     - nilerr
+    - prealloc
     - reassign
     - revive
+    - staticcheck
     - unconvert
+    - unused
     - whitespace
-    - prealloc
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gofmt
+    - gofumpt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
