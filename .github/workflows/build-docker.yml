@@ -176,4 +176,4 @@ jobs:
 
           git push origin main --force
 
-          gh pr comment ${TEST_PR_URL} --body "sigma convert all"
+          gh pr comment "${TEST_PR_URL}" --body "sigma convert all"
