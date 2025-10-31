@@ -92,7 +92,7 @@ runs:
           const iterator = await github.paginate(github.rest.pulls.listCommits.endpoint.merge({
             owner: context.repo.owner,
             repo: context.repo.repo,
-            pull_number: context.payload.pull_request?.number || context.payload.issue_comment?.issue?.number,
+            pull_number: context.payload.pull_request?.number || context.payload.issue?.number,
             per_page: 1
           }));
           let previous_commit = "";
