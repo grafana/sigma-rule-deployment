@@ -124,8 +124,8 @@ runs:
           echo "image_ref=$ACTION_REF" >> $GITHUB_OUTPUT
           echo "Using tag: $ACTION_REF"
         elif [[ "$ACTION_REF" == "latest" ]]; then
-          echo "image_ref=latest" >> $GITHUB_OUTPUT
-          echo "Using latest tag"
+          echo "image_ref=main" >> $GITHUB_OUTPUT
+          echo "Using main tag"
         else
           echo "image_ref=sha-$ACTION_REF" >> $GITHUB_OUTPUT
           echo "Using SHA: sha-$ACTION_REF"
