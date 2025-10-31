@@ -152,8 +152,7 @@ jobs:
           RESULT=$(gh pr list --json id,title -H "integration-test-pr-${GITHUB_PR_NUMBER}" | jq -r '. | length')
 
           if [ "$RESULT" -eq 0 ]; then
-            TEST_PR_URL=$(gh pr create --title "Integration Test PR ${GITHUB_PR_NUMBER}" --body "This PR to test Sigma Rule Deployment App from Sigma Rule Deployment Integration Test App for grafana/sigma-rule-deployment#${GITHUB_PR_NUMBER}" --head "integration-test-pr-${GITHUB_PR_NUMBER}" --base main)
-            echo "TEST_PR_URL=${TEST_PR_URL}" >> "$GITHUB_OUTPUT"
+            gh pr create --title "Integration Test PR ${GITHUB_PR_NUMBER}" --body "This PR to test Sigma Rule Deployment App from Sigma Rule Deployment Integration Test App for grafana/sigma-rule-deployment#${GITHUB_PR_NUMBER}" --head "integration-test-pr-${GITHUB_PR_NUMBER}" --base main
           fi
       - name: Update integration main branch to latest and send test comment
         working-directory: ./sigma-rule-deployment-integration-test
@@ -161,7 +160,6 @@ jobs:
           GITHUB_PR_NUMBER: ${{ github.event.pull_request.number }}
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
           ACTION_SHA: ${{ github.event.pull_request.head.sha }}
-          TEST_PR_URL: ${{ steps.integration-pr.outputs.TEST_PR_URL }}
         run: |
           git fetch
 
@@ -176,4 +174,4 @@ jobs:
 
           git push origin main --force
 
-          gh pr comment "${TEST_PR_URL}" --body "sigma convert all"
+          gh pr comment "integration-test-pr-${GITHUB_PR_NUMBER}" --body "sigma convert all"
