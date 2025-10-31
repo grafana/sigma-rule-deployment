@@ -11,6 +11,12 @@ on:
     types:
       - published
 
+# Prevent concurrent execution of these workflows to avoid multiple executions commiting to main simultaneously
+# We **need** to commit to main to test the commenting feature
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
 permissions: {}
 
 jobs:
@@ -48,6 +54,7 @@ jobs:
           file: actions/Dockerfile
           tags: |
             ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${{ github.sha }}
+            ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:main
           push: true
       - name: "Build and Push (Release)"
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
@@ -57,7 +64,6 @@ jobs:
           file: actions/Dockerfile
           tags: |
             ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:${{ github.event.release.tag_name }}
-            ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:latest
           push: true
 
   test-pr:
@@ -102,6 +108,7 @@ jobs:
           repository: grafana/sigma-rule-deployment-integration-test
           path: ./sigma-rule-deployment-integration-test
       - name: Create new branch
+        id: integration-pr
         working-directory: ./sigma-rule-deployment-integration-test
         env:
           GITHUB_PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -145,5 +152,30 @@ jobs:
           RESULT=$(gh pr list --json id,title -H "integration-test-pr-${GITHUB_PR_NUMBER}" | jq -r '. | length')
 
           if [ "$RESULT" -eq 0 ]; then
-            gh pr create --title "Integration Test PR ${GITHUB_PR_NUMBER}" --body "This PR is created by the Sigma Rule Deployment App to test the integration of the Sigma Rule Deployment App with the Sigma Rule Deployment Integration Test App. for grafana/sigma-rule-deployment#${GITHUB_PR_NUMBER}" --head "integration-test-pr-${GITHUB_PR_NUMBER}" --base main
+            gh pr create --title "Integration Test PR ${GITHUB_PR_NUMBER}" --body "This PR to test Sigma Rule Deployment App from Sigma Rule Deployment Integration Test App for grafana/sigma-rule-deployment#${GITHUB_PR_NUMBER}" --head "integration-test-pr-${GITHUB_PR_NUMBER}" --base main
           fi
+      - name: Update integration main branch to latest and send test comment
+        working-directory: ./sigma-rule-deployment-integration-test
+        env:
+          GITHUB_PR_NUMBER: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+          ACTION_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git fetch
+
+          git checkout main
+          git pull
+
+          sed -i "s/uses: grafana\/sigma-rule-deployment\/actions\/convert@.*/uses: grafana\/sigma-rule-deployment\/actions\/convert@$ACTION_SHA/g" ./.github/workflows/convert-integrate-comment-test.yml
+          sed -i "s/uses: grafana\/sigma-rule-deployment\/actions\/integrate@.*/uses: grafana\/sigma-rule-deployment\/actions\/integrate@$ACTION_SHA/g" ./.github/workflows/convert-integrate-comment-test.yml
+
+          # add the action sha so that the integration test can add the check to this PR
+          echo "$ACTION_SHA" > action_sha.txt
+          echo "$GITHUB_PR_NUMBER" > github_pr.txt
+
+          git add -A
+          git commit -m "update main branch to relevant hash" --allow-empty
+
+          git push origin main --force
+
+          gh pr comment "integration-test-pr-${GITHUB_PR_NUMBER}" --body "sigma convert all"

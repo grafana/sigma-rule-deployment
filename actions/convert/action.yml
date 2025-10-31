@@ -50,7 +50,7 @@ runs:
         username: ${{ github.actor }}
         password: ${{ github.token }}
     - name: Identify relevant commits
-      if: ${{ github.event_name == 'pull_request' && inputs.changed_files_from_base == 'false' }}
+      if: ${{ inputs.changed_files_from_base == 'false' }}
       id: commits
       uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
       env:
@@ -60,7 +60,7 @@ runs:
           const iterator = await github.paginate(github.rest.pulls.listCommits.endpoint.merge({
             owner: context.repo.owner,
             repo: context.repo.repo,
-            pull_number: context.payload.pull_request.number,
+            pull_number: context.issue.number,
             per_page: 1
           }));
           let previous_commit = "";
@@ -124,8 +124,8 @@ runs:
           echo "image_ref=$ACTION_REF" >> $GITHUB_OUTPUT
           echo "Using tag: $ACTION_REF"
         elif [[ "$ACTION_REF" == "latest" ]]; then
-          echo "image_ref=latest" >> $GITHUB_OUTPUT
-          echo "Using latest tag"
+          echo "image_ref=main" >> $GITHUB_OUTPUT
+          echo "Using main tag"
         else
           echo "image_ref=sha-$ACTION_REF" >> $GITHUB_OUTPUT
           echo "Using SHA: sha-$ACTION_REF"

@@ -82,7 +82,7 @@ runs:
           echo "Using SHA: sha-$ACTION_REF"
         fi
     - name: Identify relevant commits
-      if: ${{ github.event_name == 'pull_request' && inputs.changed_files_from_base == 'false' }}
+      if: ${{ inputs.changed_files_from_base == 'false' }}
       id: commits
       uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
       env:
@@ -92,7 +92,7 @@ runs:
           const iterator = await github.paginate(github.rest.pulls.listCommits.endpoint.merge({
             owner: context.repo.owner,
             repo: context.repo.repo,
-            pull_number: context.payload.pull_request.number,
+            pull_number: context.issue.number,
             per_page: 1
           }));
           let previous_commit = "";
