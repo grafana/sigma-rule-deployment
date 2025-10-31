@@ -169,6 +169,10 @@ jobs:
           sed -i "s/uses: grafana\/sigma-rule-deployment\/actions\/convert@.*/uses: grafana\/sigma-rule-deployment\/actions\/convert@$ACTION_SHA/g" ./.github/workflows/convert-integrate-comment-test.yml
           sed -i "s/uses: grafana\/sigma-rule-deployment\/actions\/integrate@.*/uses: grafana\/sigma-rule-deployment\/actions\/integrate@$ACTION_SHA/g" ./.github/workflows/convert-integrate-comment-test.yml
 
+          # add the action sha so that the integration test can add the check to this PR
+          echo "$ACTION_SHA" > action_sha.txt
+          echo "$GITHUB_PR_NUMBER" > github_pr.txt
+
           git add -A
           git commit -m "update main branch to relevant hash" --allow-empty
 
