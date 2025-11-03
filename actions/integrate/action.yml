@@ -198,6 +198,9 @@ runs:
         TEST_RESULTS: ${{ steps.set-output.outputs.test_query_results }}
       with:
         script: |
+          const fs = require('fs');
+          const path = require('path');
+          
           const changedFiles = process.env.CHANGED_FILES.split(' ').filter(file => file.trim() !== '');
           const deletedFiles = process.env.DELETED_FILES.split(' ').filter(file => file.trim() !== '');
           let testResults = {};
@@ -207,11 +210,29 @@ runs:
             console.log("No test results found");
           }
 
+          // Function to extract title from YAML file
+          function extractTitle(filePath) {
+            try {
+              const content = fs.readFileSync(filePath, 'utf8');
+              const titleMatch = content.match(/^title:\s*(.+)$/m);
+              if (titleMatch && titleMatch[1]) {
+                return titleMatch[1].trim();
+              }
+              // Fallback to filename if no title found
+              return path.basename(filePath);
+            } catch (error) {
+              console.log(`Error reading file ${filePath}: ${error.message}`);
+              // Fallback to filename if file can't be read
+              return path.basename(filePath);
+            }
+          }
+
           let resultTable = `| File name | Link | Result count | Errors |\n| --- | --- | --- | --- |\n`;
 
           for (const [key, value] of Object.entries(testResults)) {
+            const title = extractTitle(key);
             for (const result of value) {
-              resultTable += `| ${key} | [See in Explore](${result.link}) | ${result.stats.count} | ${result.stats.errors.length} |\n`;
+              resultTable += `| ${title} | [See in Explore](${result.link}) | ${result.stats.count} | ${result.stats.errors.length} |\n`;
             }
           }
 
@@ -227,6 +248,12 @@ runs:
 
           const nodeId = prData.data.node_id;
 
+          // Build file list with titles
+          const changedFilesList = changedFiles.map(file => {
+            const title = extractTitle(file);
+            return `- [${title}](https://github.com/${context.repo.owner}/${context.repo.repo}/blob/${prData.data.head.ref}/${file})`;
+          }).join("\n");
+
           const comment = `
           ### Sigma Rule Integrations
 
@@ -236,7 +263,7 @@ runs:
 
           ### Changed Files
 
-          ${changedFiles.length ? changedFiles.map(file => `- [${file}](https://github.com/${context.repo.owner}/${context.repo.repo}/blob/${prData.data.head.ref}/${file})`).join("\n") : "No files changed"}
+          ${changedFiles.length ? changedFilesList : "No files changed"}
 
           ### Deleted Files
 
