@@ -1,5 +1,5 @@
 name: Comment Sigma Results
-description: Posts a comment to a PR with Sigma rule conversion/integration results, displaying rule titles from YAML files
+description: Posts a comment to a PR with Sigma rule conversion/integration results, displaying rule titles from JSON files
 
 inputs:
   pull_request_number:
@@ -49,11 +49,11 @@ runs:
           const commentIdentifier = process.env.COMMENT_IDENTIFIER;
           const additionalContent = process.env.ADDITIONAL_CONTENT;
 
-          // Function to extract title from YAML file
+          // Function to extract title from JSON file
           function extractTitle(filePath) {
             try {
               const content = fs.readFileSync(filePath, 'utf8');
-              const titleMatch = content.match(/^title:\s*(.+)$/m);
+              const titleMatch = content.match(/"title":\s*"([^"]+)"/);
               if (titleMatch && titleMatch[1]) {
                 return titleMatch[1].trim();
               }

@@ -1,10 +1,10 @@
 # Comment Sigma Results Action
 
-A reusable composite GitHub Action that posts formatted comments to pull requests showing Sigma rule conversion/integration results. This action extracts rule titles from YAML files and creates user-friendly PR comments with clickable links.
+A reusable composite GitHub Action that posts formatted comments to pull requests showing Sigma rule conversion/integration results. This action extracts rule titles from JSON files and creates user-friendly PR comments with clickable links.
 
 ## Features
 
-- **Automatic Title Extraction**: Reads `title:` field from YAML files and displays human-readable rule names
+- **Automatic Title Extraction**: Reads `"title"` field from JSON files and displays human-readable rule names
 - **Clickable Links**: Creates links to changed files in the PR for easy navigation
 - **Automatic Cleanup**: Minimizes outdated comments from previous runs
 - **Customizable**: Supports custom comment titles and additional content sections
@@ -90,26 +90,26 @@ The generated comment looks like this:
 
 ### Deleted Files
 
-- old_rule.yml
+- old_rule.json
 
 ### Test Results
 (Additional content if provided)
 ```
 
-## YAML Title Extraction
+## JSON Title Extraction
 
-The action looks for lines matching this pattern in YAML files:
+The action looks for the title field in JSON files:
 
-```yaml
-title: Your Rule Title Here
+```json
+"title": "Your Rule Title Here"
 ```
 
-The regex used is: `^title:\s*(.+)$/m`
+The regex used is: `/"title":\s*"([^"]+)"/`
 
 This matches:
-- Lines starting with `title:`
+- The string `"title":`
 - Any amount of whitespace after the colon
-- Captures the rest of the line as the title
+- Captures the title value between double quotes
 
 ## Error Handling
 

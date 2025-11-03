@@ -206,11 +206,11 @@ runs:
             console.log("No test results found");
           }
 
-          // Function to extract title from YAML file
+          // Function to extract title from JSON file
           function extractTitle(filePath) {
             try {
               const content = fs.readFileSync(filePath, 'utf8');
-              const titleMatch = content.match(/^title:\s*(.+)$/m);
+              const titleMatch = content.match(/"title":\s*"([^"]+)"/);
               if (titleMatch && titleMatch[1]) {
                 return titleMatch[1].trim();
               }
