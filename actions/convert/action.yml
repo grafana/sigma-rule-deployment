@@ -173,7 +173,7 @@ runs:
 
     - name: Comment Conversions
       id: comment-conversions
-      uses: grafana/sigma-rule-deployment/actions/comment-sigma-results@213fdd547e2a5a6af562718e9020b0612e6808fc
+      uses: grafana/sigma-rule-deployment/actions/comment-sigma-results@d860adc9728728734c12ba77e4a24ff2fe3a0337
       with:
         pull_request_number: ${{ github.event.number || github.event.issue.number }}
         changed_files: ${{ steps.generate-comment-data.outputs.changed_files }}
