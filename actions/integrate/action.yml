@@ -215,27 +215,40 @@ runs:
               }
 
               const content = fs.readFileSync(filePath, 'utf8');
-              const jsonData = JSON.parse(content);
+              
+              // Try JSON parsing first
+              try {
+                const jsonData = JSON.parse(content);
 
-              // Check for title at top level (for alert rule files)
-              if (jsonData.title && typeof jsonData.title === 'string') {
-                return jsonData.title.trim();
-              }
-
-              // Check for title in rules array (for conversion output files)
-              if (jsonData.rules && Array.isArray(jsonData.rules) && jsonData.rules.length > 0) {
-                const firstRule = jsonData.rules[0];
-                if (firstRule && firstRule.title && typeof firstRule.title === 'string') {
-                  return firstRule.title.trim();
+                // Check for title at top level (for alert rule files)
+                if (jsonData.title && typeof jsonData.title === 'string') {
+                  return jsonData.title.trim();
                 }
+
+                // Check for title in rules array (for conversion output files)
+                if (jsonData.rules && Array.isArray(jsonData.rules) && jsonData.rules.length > 0) {
+                  const firstRule = jsonData.rules[0];
+                  if (firstRule && firstRule.title && typeof firstRule.title === 'string') {
+                    return firstRule.title.trim();
+                  }
+                }
+              } catch (jsonError) {
+                // JSON parsing failed, will try regex fallback
+                console.log(`JSON parsing failed for ${filePath}: ${jsonError.message}, trying regex fallback`);
               }
 
-              console.log(`No title found in ${filePath}. Available keys: ${Object.keys(jsonData).join(', ')}`);
-              // Fallback to filename if no title found
+              // Fallback to regex if JSON parsing didn't find title
+              const titleMatch = content.match(/"title":\s*"([^"]+)"/);
+              if (titleMatch && titleMatch[1]) {
+                return titleMatch[1].trim();
+              }
+
+              // Final fallback to filename if no title found
+              console.log(`No title found in ${filePath} using JSON or regex`);
               return path.basename(filePath);
             } catch (error) {
               console.log(`Error reading file ${filePath}: ${error.message}`);
-              // Fallback to filename if file can't be read or parsed
+              // Fallback to filename if file can't be read
               return path.basename(filePath);
             }
           }
