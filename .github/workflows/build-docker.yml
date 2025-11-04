@@ -162,6 +162,8 @@ jobs:
           ACTION_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           git fetch
+          git checkout main
+          git pull
 
           STATUS=0
           git rev-parse --verify "integration-test-main-update-${GITHUB_PR_NUMBER}" 2>/dev/null || STATUS=$?
@@ -185,6 +187,7 @@ jobs:
 
           git push origin "integration-test-main-update-${GITHUB_PR_NUMBER}" --force
           gh pr create --title "Integration Test Main Update ${GITHUB_PR_NUMBER}" --body "This PR updates the main branch to the relevant hash for grafana/sigma-rule-deployment#${GITHUB_PR_NUMBER}" --head "integration-test-main-update-${GITHUB_PR_NUMBER}" --base main
+          sleep 10 # wait for the PR checks to start...
 
           # wait for the required PR checks to complete
           if gh pr checks "integration-test-main-update-${GITHUB_PR_NUMBER}" --watch; then
