@@ -52,6 +52,11 @@ runs:
           // Function to extract title from JSON file
           function extractTitle(filePath) {
             try {
+              if (!fs.existsSync(filePath)) {
+                console.log(`File does not exist: ${filePath}`);
+                return path.basename(filePath);
+              }
+
               const content = fs.readFileSync(filePath, 'utf8');
               const jsonData = JSON.parse(content);
               
@@ -63,11 +68,12 @@ runs:
               // Check for title in rules array (for conversion output files)
               if (jsonData.rules && Array.isArray(jsonData.rules) && jsonData.rules.length > 0) {
                 const firstRule = jsonData.rules[0];
-                if (firstRule.title && typeof firstRule.title === 'string') {
+                if (firstRule && firstRule.title && typeof firstRule.title === 'string') {
                   return firstRule.title.trim();
                 }
               }
-              
+
+              console.log(`No title found in ${filePath}. Available keys: ${Object.keys(jsonData).join(', ')}`);
               // Fallback to filename if no title found
               return path.basename(filePath);
             } catch (error) {
