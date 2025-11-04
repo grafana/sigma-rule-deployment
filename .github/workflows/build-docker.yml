@@ -162,9 +162,18 @@ jobs:
           ACTION_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           git fetch
-
           git checkout main
           git pull
+
+          STATUS=0
+          git rev-parse --verify "integration-test-main-update-${GITHUB_PR_NUMBER}" 2>/dev/null || STATUS=$?
+
+          if [ $STATUS -eq 0 ]; then
+            git checkout "integration-test-main-update-${GITHUB_PR_NUMBER}"
+            git pull
+          else
+            git checkout -b "integration-test-main-update-${GITHUB_PR_NUMBER}"
+          fi
 
           sed -i "s/uses: grafana\/sigma-rule-deployment\/actions\/convert@.*/uses: grafana\/sigma-rule-deployment\/actions\/convert@$ACTION_SHA/g" ./.github/workflows/convert-integrate-comment-test.yml
           sed -i "s/uses: grafana\/sigma-rule-deployment\/actions\/integrate@.*/uses: grafana\/sigma-rule-deployment\/actions\/integrate@$ACTION_SHA/g" ./.github/workflows/convert-integrate-comment-test.yml
@@ -176,6 +185,16 @@ jobs:
           git add -A
           git commit -m "update main branch to relevant hash" --allow-empty
 
-          git push origin main --force
+          git push origin "integration-test-main-update-${GITHUB_PR_NUMBER}" --force
+          gh pr create --title "Integration Test Main Update ${GITHUB_PR_NUMBER}" --body "This PR updates the main branch to the relevant hash for grafana/sigma-rule-deployment#${GITHUB_PR_NUMBER}" --head "integration-test-main-update-${GITHUB_PR_NUMBER}" --base main
+          sleep 10 # wait for the PR checks to start...
 
-          gh pr comment "integration-test-pr-${GITHUB_PR_NUMBER}" --body "sigma convert all"
+          # wait for the required PR checks to complete
+          if gh pr checks "integration-test-main-update-${GITHUB_PR_NUMBER}" --watch; then
+            gh pr merge "integration-test-main-update-${GITHUB_PR_NUMBER}" --auto --squash
+            sleep 5 # wait for the merge to complete
+            gh pr comment "integration-test-pr-${GITHUB_PR_NUMBER}" --body "sigma convert all"
+          else
+            echo "Integration Test Main Update PR failed"
+            exit 1
+          fi
