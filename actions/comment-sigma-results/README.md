@@ -61,7 +61,7 @@ A reusable composite GitHub Action that posts formatted comments to pull request
 
 ## How It Works
 
-1. **Title Extraction**: For each changed file, the action reads the YAML content and extracts the `title:` field
+1. **Title Extraction**: For each changed file, the action parses the JSON content and extracts the `title` field (supports both top-level and nested in `rules` array)
 2. **Fallback Handling**: If a title can't be found or the file can't be read, it falls back to using the filename
 3. **Comment Generation**: Creates a markdown comment with:
    - Summary table showing count of changed and deleted files
@@ -98,25 +98,41 @@ The generated comment looks like this:
 
 ## JSON Title Extraction
 
-The action looks for the title field in JSON files:
+The action uses a JSON parser to extract the title field from JSON files. It supports two common structures:
 
+1. **Top-level title** (for alert rule files):
 ```json
-"title": "Your Rule Title Here"
+{
+  "title": "Your Rule Title Here",
+  ...
+}
 ```
 
-The regex used is: `/"title":\s*"([^"]+)"/`
+2. **Nested title in rules array** (for conversion output files):
+```json
+{
+  "rules": [
+    {
+      "title": "Your Rule Title Here",
+      ...
+    }
+  ],
+  ...
+}
+```
 
-This matches:
-- The string `"title":`
-- Any amount of whitespace after the colon
-- Captures the title value between double quotes
+The parser:
+- First checks for `title` at the top level
+- If not found, checks for `title` in the first rule of the `rules` array
+- Falls back to the filename if no title is found
 
 ## Error Handling
 
 The action gracefully handles errors:
 
 - **File not found**: Falls back to filename
-- **No title field**: Falls back to filename
+- **Invalid JSON**: Logs error and falls back to filename
+- **No title field**: Falls back to filename (checks both top-level and `rules` array)
 - **File read errors**: Logs error and falls back to filename
 - **No PR found**: Logs warning and exits gracefully
 - **Empty file lists**: Displays "No files changed" / "No files deleted"
@@ -145,10 +161,10 @@ See how this action formats comments in practice:
 When updating this action, remember to:
 
 1. Test with both convert and integrate actions
-2. Verify title extraction works with various YAML formats
+2. Verify title extraction works with both JSON structures (top-level `title` and nested in `rules` array)
 3. Check that old comments are properly minimized
 4. Ensure additional content formatting works correctly
-5. Test error handling with missing files
+5. Test error handling with missing files and invalid JSON
 
 ## License
 

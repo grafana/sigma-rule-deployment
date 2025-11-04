@@ -53,15 +53,26 @@ runs:
           function extractTitle(filePath) {
             try {
               const content = fs.readFileSync(filePath, 'utf8');
-              const titleMatch = content.match(/"title":\s*"([^"]+)"/);
-              if (titleMatch && titleMatch[1]) {
-                return titleMatch[1].trim();
+              const jsonData = JSON.parse(content);
+              
+              // Check for title at top level (for alert rule files)
+              if (jsonData.title && typeof jsonData.title === 'string') {
+                return jsonData.title.trim();
               }
+              
+              // Check for title in rules array (for conversion output files)
+              if (jsonData.rules && Array.isArray(jsonData.rules) && jsonData.rules.length > 0) {
+                const firstRule = jsonData.rules[0];
+                if (firstRule.title && typeof firstRule.title === 'string') {
+                  return firstRule.title.trim();
+                }
+              }
+              
               // Fallback to filename if no title found
               return path.basename(filePath);
             } catch (error) {
               console.log(`Error reading file ${filePath}: ${error.message}`);
-              // Fallback to filename if file can't be read
+              // Fallback to filename if file can't be read or parsed
               return path.basename(filePath);
             }
           }
