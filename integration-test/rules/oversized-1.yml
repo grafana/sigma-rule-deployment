@@ -1,7 +1,7 @@
-title: GitHub Test Rule
-id: 700f552f-0fa9-4bfe-bbaf-bbbde94c1c8c
+title: Query Splitting Test Rule
+id: 26654045-413c-4db1-be5f-36f34733a865
 status: test
-description: Detects a repository being deleted.
+description: Tests that query splitting is working correctly in Loki.
 author: jamesc-grafana
 date: 2025-09-25
 logsource:
@@ -513,5 +513,5 @@ detection:
       - "admin500"
   condition: selection
 falsepositives:
-  - Validate the deletion activity is permitted. The "actor" field need to be validated.
+  - This is a test rule, there are no false positives.
 level: informational
