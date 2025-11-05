@@ -207,6 +207,8 @@ runs:
           }
 
           // Function to extract title from JSON file
+          // Note: some of this code is copied from the comment-sigma-results action.yml
+          // If you change this code, please update the comment-sigma-results action.yml as well.
           function extractTitle(filePath) {
             try {
               if (!fs.existsSync(filePath)) {
