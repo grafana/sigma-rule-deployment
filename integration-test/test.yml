@@ -40,3 +40,6 @@ integrations:
           - refId: A2
             model:
               expr: ""
+          - refId: B
+            model:
+              expr: ""
