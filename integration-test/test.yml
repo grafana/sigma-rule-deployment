@@ -14,6 +14,8 @@ conversions:
       - name: oversized_query_oversized-1.json
         queries:
           - ""
+          - ""
+          - ""
 
 integrations:
   - name: Test Integration 1
@@ -30,5 +32,11 @@ integrations:
       - name: oversized_query_oversized-1
         alerting_rules:
           - refId: A0
+            model:
+              expr: ""
+          - refId: A1
+            model:
+              expr: ""
+          - refId: A2
             model:
               expr: ""
