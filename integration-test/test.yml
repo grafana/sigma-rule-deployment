@@ -8,6 +8,12 @@ conversions:
       - name: github_audit_test-1.json
         queries:
           - "{service_namespace=`cicd-o11y`} | logfmt | action=`repo.destroy`"
+  - name: Test Query Splitting
+    description: Tests that oversized queries are split into multiple queries
+    outputs:
+      - name: oversized_query_oversized-1.json
+        queries:
+          - ""
 
 integrations:
   - name: Test Integration 1
@@ -18,3 +24,11 @@ integrations:
           - refId: A0
             model:
               expr: sum(count_over_time({service_namespace=`cicd-o11y`} | logfmt | action=`repo.destroy`[$__auto]))
+  - name: Test Query Splitting
+    description: Tests that oversized queries are split into multiple queries
+    outputs:
+      - name: oversized_query_oversized-1
+        alerting_rules:
+          - refId: A0
+            model:
+              expr: ""
