@@ -17,19 +17,20 @@ import (
 
 func TestConvertToAlert(t *testing.T) {
 	tests := []struct {
-		name             string
-		queries          []string
-		rule             *definitions.ProvisionedAlertRule
-		titles           string
-		convConfig       ConversionConfig
-		integratorConfig IntegrationConfig
-		convObject       ConversionOutput
-		wantQueryText    string
-		wantDuration     definitions.Duration
-		wantUnchanged    bool
-		wantError        bool
-		wantLabels       map[string]string
-		wantAnnotations  map[string]string
+		name                   string
+		queries                []string
+		rule                   *definitions.ProvisionedAlertRule
+		titles                 string
+		convConfig             ConversionConfig
+		integratorConfig       IntegrationConfig
+		convObject             ConversionOutput
+		wantQueryText          string
+		wantDuration           definitions.Duration
+		wantUnchanged          bool
+		wantError              bool
+		wantLabels             map[string]string
+		wantAnnotations        map[string]string
+		wantCombinerExpression string
 	}{
 		{
 			name:    "valid new loki query",
@@ -93,6 +94,23 @@ func TestConvertToAlert(t *testing.T) {
 			},
 			wantDuration: 0, // invalid time window, expect no value
 			wantError:    true,
+		},
+		{
+			name:    "multiple queries use math combiner",
+			queries: []string{"{job=`.+`} | json | test=`true`", "{job=`.+`} | json | test=`false`"},
+			titles:  "Multiple Query Test",
+			rule: &definitions.ProvisionedAlertRule{
+				UID: "multi-test",
+			},
+			convConfig: ConversionConfig{
+				Target:     "loki",
+				DataSource: "test_ds",
+				RuleGroup:  "Test Group",
+				TimeWindow: "5m",
+			},
+			wantQueryText:          "sum(count_over_time({job=`.+`} | json | test=`true`[$__auto]))",
+			wantDuration:           definitions.Duration(5 * time.Minute),
+			wantCombinerExpression: `"expression":"${A0}+${A1}"`,
 		},
 		{
 			name:    "skip unchanged queries",
@@ -272,6 +290,11 @@ func TestConvertToAlert(t *testing.T) {
 					assert.Equal(t, tt.convConfig.RuleGroup, tt.rule.RuleGroup)
 					assert.Equal(t, tt.convConfig.DataSource, tt.rule.Data[0].DatasourceUID)
 					assert.Equal(t, tt.titles, tt.rule.Title)
+
+					if tt.wantCombinerExpression != "" {
+						combinerModel := string(tt.rule.Data[2].Model)
+						assert.Contains(t, combinerModel, tt.wantCombinerExpression)
+					}
 
 					if tt.convConfig.Lookback != "" {
 						lookbackDuration, err := time.ParseDuration(tt.convConfig.Lookback)
