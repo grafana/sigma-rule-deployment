@@ -63,3 +63,14 @@ func EscapeQueryJSON(query string) (string, error) {
 	}
 	return string(escapedQuotedQuery[1 : len(escapedQuotedQuery)-1]), nil // strip the leading and trailing quotation marks
 }
+
+// GetConfigValue returns the first non-empty value from config, defaultConf, or def (in that order)
+func GetConfigValue(config, defaultConf, def string) string {
+	if config != "" {
+		return config
+	}
+	if defaultConf != "" {
+		return defaultConf
+	}
+	return def
+}

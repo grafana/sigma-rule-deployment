@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/grafana/sigma-rule-deployment/internal/deploy"
 	"github.com/grafana/sigma-rule-deployment/internal/integrate"
+	"github.com/grafana/sigma-rule-deployment/internal/querytest"
 )
 
 func main() {
@@ -27,9 +29,38 @@ func main() {
 			fmt.Printf("Error loading configuration: %v\n", err)
 			os.Exit(1)
 		}
+
+		// Run integrator (conversions and cleanup)
 		if err := integrator.Run(); err != nil {
 			fmt.Printf("Error running integrator: %v\n", err)
 			os.Exit(1)
+		}
+
+		// Run query testing if enabled
+		config := integrator.Config()
+		if config.IntegratorConfig.TestQueries {
+			// Parse timeout from configuration
+			timeoutDuration := 10 * time.Second // Default timeout
+			if config.DeployerConfig.Timeout != "" {
+				parsedTimeout, err := time.ParseDuration(config.DeployerConfig.Timeout)
+				if err != nil {
+					fmt.Printf("Warning: Invalid timeout format in config, using default: %v\n", err)
+				} else {
+					timeoutDuration = parsedTimeout
+				}
+			}
+
+			queryTester := querytest.NewQueryTester(
+				config,
+				integrator.TestFiles(),
+				timeoutDuration,
+			)
+			if err := queryTester.Run(); err != nil {
+				if !config.IntegratorConfig.ContinueOnQueryTestingErrors {
+					fmt.Printf("Error running query tests: %v\n", err)
+					os.Exit(1)
+				}
+			}
 		}
 	case "deploy":
 		ctx := context.Background()
