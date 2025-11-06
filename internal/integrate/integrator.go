@@ -1,5 +1,5 @@
 //nolint:goconst
-package main
+package integrate
 
 import (
 	"bytes"
@@ -15,115 +15,22 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/grafana/sigma-rule-deployment/actions/integrate/definitions"
+	"github.com/grafana/sigma-rule-deployment/internal/model"
+	"github.com/grafana/sigma-rule-deployment/shared"
 	"github.com/spaolacci/murmur3"
 	"gopkg.in/yaml.v3"
 )
 
 const TRUE = "true"
 
-type SigmaLogsource struct {
-	Category   string `json:"category"`
-	Product    string `json:"product"`
-	Service    string `json:"service"`
-	Definition string `json:"definition"`
-}
-
-type SigmaRule struct {
-	Title   string `json:"title"`
-	ID      string `json:"id"`
-	Related []struct {
-		ID   string `json:"id"`
-		Type string `json:"type"`
-	} `json:"related"`
-	Name           string         `json:"name"`
-	Taxonomy       string         `json:"taxonomy"`
-	Status         string         `json:"status"`
-	Description    string         `json:"description"`
-	License        string         `json:"license"`
-	Author         string         `json:"author"`
-	References     []string       `json:"references"`
-	Date           string         `json:"date"`
-	Modified       string         `json:"modified"`
-	Logsource      SigmaLogsource `json:"logsource"`
-	Detection      any            `json:"detection"`
-	Correlation    any            `json:"correlation"`
-	Fields         []string       `json:"fields"`
-	FalsePositives []string       `json:"falsepositives"`
-	Level          string         `json:"level"`
-	Tags           []string       `json:"tags"`
-	Scope          string         `json:"scope"`
-	Generate       bool           `json:"generate"`
-}
-
-type ConversionOutput struct {
-	Queries        []string    `json:"queries"`
-	ConversionName string      `json:"conversion_name"`
-	InputFile      string      `json:"input_file"`
-	Rules          []SigmaRule `json:"rules"`
-	OutputFile     string      `json:"output_file"`
-}
-
 type Integrator struct {
-	config      Configuration
+	config      model.Configuration
 	prettyPrint bool
 
 	allRules     bool
 	addedFiles   []string
 	removedFiles []string
 	testFiles    []string
-}
-
-type Stats struct {
-	Count  int               `json:"count"`
-	Fields map[string]string `json:"fields"`
-	Errors []string          `json:"errors"`
-}
-
-type QueryTestResult struct {
-	Datasource string `json:"datasource"`
-	Link       string `json:"link"`
-	Stats      Stats  `json:"stats"`
-}
-
-// Frame represents a single frame from a Grafana datasource query response
-type Frame struct {
-	Schema struct {
-		Fields []struct {
-			Name string `json:"name"`
-			Type string `json:"type"`
-		} `json:"fields"`
-	} `json:"schema"`
-	Data struct {
-		Values [][]any `json:"values"`
-	} `json:"data"`
-}
-
-// ResultFrame represents a single result frame in the query response
-type ResultFrame struct {
-	Frames []Frame `json:"frames"`
-}
-
-// QueryResponse represents the structure of a Grafana datasource query response
-type QueryResponse struct {
-	Results map[string]ResultFrame `json:"results"`
-	Errors  []struct {
-		Type    string `json:"type"`
-		Message string `json:"message"`
-	} `json:"errors"`
-}
-
-func main() {
-	integrator := NewIntegrator()
-	if err := integrator.LoadConfig(); err != nil {
-		fmt.Printf("Error loading configuration: %v\n", err)
-		os.Exit(1)
-	}
-	err := integrator.Run()
-	if err != nil {
-		fmt.Printf("Error running integrator: %v\n", err)
-		os.Exit(1)
-	}
 }
 
 func NewIntegrator() *Integrator {
@@ -139,11 +46,11 @@ func (i *Integrator) LoadConfig() error {
 	fmt.Printf("Loading config from %s\n", configFile)
 
 	// Read the YAML config file
-	cfg, err := ReadLocalFile(configFile)
+	cfg, err := shared.ReadLocalFile(configFile)
 	if err != nil {
 		return fmt.Errorf("error reading config file: %v", err)
 	}
-	config := Configuration{}
+	config := model.Configuration{}
 	err = yaml.Unmarshal([]byte(cfg), &config)
 	if err != nil {
 		return fmt.Errorf("error unmarshalling config file: %v", err)
@@ -284,12 +191,12 @@ func (i *Integrator) cleanupOrphanedFilesInPath(searchPath string, isOrphaned fu
 
 // isConversionFileOrphaned checks if a conversion file has no matching configuration
 func (i *Integrator) isConversionFileOrphaned(file string) (bool, error) {
-	content, err := ReadLocalFile(file)
+	content, err := shared.ReadLocalFile(file)
 	if err != nil {
 		return false, err
 	}
 
-	var conversionObject ConversionOutput
+	var conversionObject model.ConversionOutput
 	if err := json.Unmarshal([]byte(content), &conversionObject); err != nil {
 		return false, err
 	}
@@ -306,12 +213,12 @@ func (i *Integrator) isConversionFileOrphaned(file string) (bool, error) {
 
 // isDeploymentFileOrphaned checks if a deployment file references a missing conversion file
 func (i *Integrator) isDeploymentFileOrphaned(file string) (bool, error) {
-	content, err := ReadLocalFile(file)
+	content, err := shared.ReadLocalFile(file)
 	if err != nil {
 		return false, err
 	}
 
-	var deploymentRule definitions.ProvisionedAlertRule
+	var deploymentRule model.ProvisionedAlertRule
 	if err := json.Unmarshal([]byte(content), &deploymentRule); err != nil {
 		return false, err
 	}
@@ -363,19 +270,19 @@ func (i *Integrator) Run() error {
 func (i *Integrator) DoConversions() error {
 	for _, inputFile := range i.addedFiles {
 		fmt.Printf("Integrating file: %s\n", inputFile)
-		conversionContent, err := ReadLocalFile(inputFile)
+		conversionContent, err := shared.ReadLocalFile(inputFile)
 		if err != nil {
 			return err
 		}
 
-		var conversionObject ConversionOutput
+		var conversionObject model.ConversionOutput
 		err = json.Unmarshal([]byte(conversionContent), &conversionObject)
 		if err != nil {
 			return fmt.Errorf("error unmarshalling conversion output: %v", err)
 		}
 
 		// Find matching configuration using ConversionName
-		var config ConversionConfig
+		var config model.ConversionConfig
 		for _, conf := range i.config.Conversions {
 			if conf.Name == conversionObject.ConversionName {
 				config = conf
@@ -404,7 +311,7 @@ func (i *Integrator) DoConversions() error {
 		ruleUID := getRuleUID(conversionObject.ConversionName, conversionID)
 		file := fmt.Sprintf("%s%salert_rule_%s_%s_%s.json", i.config.Folders.DeploymentPath, string(filepath.Separator), config.Name, ruleFilename, ruleUID)
 		fmt.Printf("Working on alert rule file: %s\n", file)
-		rule := &definitions.ProvisionedAlertRule{UID: ruleUID}
+		rule := &model.ProvisionedAlertRule{UID: ruleUID}
 
 		err = readRuleFromFile(rule, file)
 		if err != nil {
@@ -455,11 +362,11 @@ func (i *Integrator) DoCleanup() error {
 // DoQueryTesting handles testing queries against the Grafana datasources
 func (i *Integrator) DoQueryTesting(timeoutDuration time.Duration) error {
 	fmt.Println("Testing queries against the datasource")
-	queryTestResults := make(map[string][]QueryTestResult, len(i.testFiles))
+	queryTestResults := make(map[string][]model.QueryTestResult, len(i.testFiles))
 
 	for _, inputFile := range i.testFiles {
 		fmt.Printf("Testing queries for file: %s\n", inputFile)
-		conversionContent, err := ReadLocalFile(inputFile)
+		conversionContent, err := shared.ReadLocalFile(inputFile)
 		if err != nil {
 			fmt.Printf("Error reading file %s: %v\n", inputFile, err)
 			if !i.config.IntegratorConfig.ContinueOnQueryTestingErrors {
@@ -468,7 +375,7 @@ func (i *Integrator) DoQueryTesting(timeoutDuration time.Duration) error {
 			continue
 		}
 
-		var conversionObject ConversionOutput
+		var conversionObject model.ConversionOutput
 		err = json.Unmarshal([]byte(conversionContent), &conversionObject)
 		if err != nil {
 			fmt.Printf("Error unmarshalling conversion output for file %s: %v\n", inputFile, err)
@@ -479,7 +386,7 @@ func (i *Integrator) DoQueryTesting(timeoutDuration time.Duration) error {
 		}
 
 		// Find matching configuration using ConversionName
-		var config ConversionConfig
+		var config model.ConversionConfig
 		for _, conf := range i.config.Conversions {
 			if conf.Name == conversionObject.ConversionName {
 				config = conf
@@ -549,7 +456,7 @@ func (i *Integrator) DoQueryTesting(timeoutDuration time.Duration) error {
 	}
 
 	// Set a single output with all results
-	if err := SetOutput("test_query_results", string(resultsJSON)); err != nil {
+	if err := shared.SetOutput("test_query_results", string(resultsJSON)); err != nil {
 		return fmt.Errorf("failed to set test query results output: %w", err)
 	}
 
@@ -561,13 +468,13 @@ func (i *Integrator) SetOutputs() error {
 	i.addedFiles = append(i.addedFiles, i.removedFiles...)
 	rulesIntegrated := strings.Join(i.addedFiles, " ")
 
-	if err := SetOutput("rules_integrated", rulesIntegrated); err != nil {
+	if err := shared.SetOutput("rules_integrated", rulesIntegrated); err != nil {
 		return fmt.Errorf("failed to set rules integrated output: %w", err)
 	}
 	return nil
 }
 
-func (i *Integrator) ConvertToAlert(rule *definitions.ProvisionedAlertRule, queries []string, titles string, config ConversionConfig, conversionFile string, conversionObject ConversionOutput) error {
+func (i *Integrator) ConvertToAlert(rule *model.ProvisionedAlertRule, queries []string, titles string, config model.ConversionConfig, conversionFile string, conversionObject model.ConversionOutput) error {
 	datasource := getC(config.DataSource, i.config.ConversionDefaults.DataSource, "nil")
 	timewindow := getC(config.TimeWindow, i.config.ConversionDefaults.TimeWindow, "1m")
 	duration, err := time.ParseDuration(timewindow)
@@ -584,9 +491,9 @@ func (i *Integrator) ConvertToAlert(rule *definitions.ProvisionedAlertRule, quer
 	// Apply lookback to time range: now-5m to now with 1m lookback becomes now-6m to now-1m
 	fromDuration := duration + lookbackDuration
 	toDuration := lookbackDuration
-	timerange := definitions.RelativeTimeRange{From: definitions.Duration(fromDuration), To: definitions.Duration(toDuration)}
+	timerange := model.RelativeTimeRange{From: model.Duration(fromDuration), To: model.Duration(toDuration)}
 
-	queryData := make([]definitions.AlertQuery, 0, len(queries)+2)
+	queryData := make([]model.AlertQuery, 0, len(queries)+2)
 	refIDs := make([]string, len(queries))
 	for index, query := range queries {
 		refIDs[index] = fmt.Sprintf("A%d", index)
@@ -602,14 +509,14 @@ func (i *Integrator) ConvertToAlert(rule *definitions.ProvisionedAlertRule, quer
 	threshold := json.RawMessage(`{"refId":"C","hide":false,"type":"threshold","datasource":{"uid":"__expr__","type":"__expr__"},"conditions":[{"type":"query","evaluator":{"params":[1],"type":"gt"},"operator":{"type":"and"},"query":{"params":["C"]},"reducer":{"params":[],"type":"last"}}],"expression":"B"}`)
 
 	queryData = append(queryData,
-		definitions.AlertQuery{
+		model.AlertQuery{
 			RefID:             "B",
 			DatasourceUID:     "__expr__",
 			RelativeTimeRange: timerange,
 			QueryType:         "",
 			Model:             reducer,
 		},
-		definitions.AlertQuery{
+		model.AlertQuery{
 			RefID:             "C",
 			DatasourceUID:     "__expr__",
 			RelativeTimeRange: timerange,
@@ -636,8 +543,8 @@ func (i *Integrator) ConvertToAlert(rule *definitions.ProvisionedAlertRule, quer
 	rule.OrgID = i.config.IntegratorConfig.OrgID
 	rule.FolderUID = i.config.IntegratorConfig.FolderID
 	rule.RuleGroup = getC(config.RuleGroup, i.config.ConversionDefaults.RuleGroup, "Default")
-	rule.NoDataState = definitions.OK
-	rule.ExecErrState = definitions.OkErrState
+	rule.NoDataState = model.OK
+	rule.ExecErrState = model.OkErrState
 	rule.Title = titles
 	rule.Condition = "C"
 
@@ -654,7 +561,7 @@ func (i *Integrator) ConvertToAlert(rule *definitions.ProvisionedAlertRule, quer
 	rule.Annotations["LogSourceUid"] = datasource
 
 	// LogSourceType annotation (target)
-	logSourceType := getC(config.Target, i.config.ConversionDefaults.Target, Loki)
+	logSourceType := getC(config.Target, i.config.ConversionDefaults.Target, shared.Loki)
 	rule.Annotations["LogSourceType"] = logSourceType
 
 	// Path to associated conversion file
@@ -705,9 +612,9 @@ func (i *Integrator) ConvertToAlert(rule *definitions.ProvisionedAlertRule, quer
 	return nil
 }
 
-func readRuleFromFile(rule *definitions.ProvisionedAlertRule, inputPath string) error {
+func readRuleFromFile(rule *model.ProvisionedAlertRule, inputPath string) error {
 	if _, err := os.Stat(inputPath); err == nil {
-		ruleJSON, err := ReadLocalFile(inputPath)
+		ruleJSON, err := shared.ReadLocalFile(inputPath)
 		if err != nil {
 			return fmt.Errorf("error reading rule file %s: %v", inputPath, err)
 		}
@@ -719,7 +626,7 @@ func readRuleFromFile(rule *definitions.ProvisionedAlertRule, inputPath string) 
 	return nil
 }
 
-func writeRuleToFile(rule *definitions.ProvisionedAlertRule, outputFile string, prettyPrint bool) error {
+func writeRuleToFile(rule *model.ProvisionedAlertRule, outputFile string, prettyPrint bool) error {
 	var ruleBytes []byte
 	var err error
 	if prettyPrint {
@@ -745,14 +652,6 @@ func writeRuleToFile(rule *definitions.ProvisionedAlertRule, outputFile string, 
 	return nil
 }
 
-func escapeQueryJSON(query string) (string, error) {
-	escapedQuotedQuery, err := json.Marshal(query)
-	if err != nil {
-		return "", fmt.Errorf("could not escape provided query: %s", query)
-	}
-	return string(escapedQuotedQuery[1 : len(escapedQuotedQuery)-1]), nil // strip the leading and trailing quotation marks
-}
-
 func getC(config, defaultConf, def string) string {
 	if config != "" {
 		return config
@@ -763,7 +662,7 @@ func getC(config, defaultConf, def string) string {
 	return def
 }
 
-func summariseSigmaRules(rules []SigmaRule) (id uuid.UUID, title string, err error) {
+func summariseSigmaRules(rules []model.SigmaRule) (id uuid.UUID, title string, err error) {
 	if len(rules) == 0 {
 		return uuid.Nil, "", fmt.Errorf("no rules provided")
 	}
@@ -799,7 +698,7 @@ func summariseSigmaRules(rules []SigmaRule) (id uuid.UUID, title string, err err
 }
 
 // processFrame processes a single frame from the query response and updates the result stats
-func (i *Integrator) processFrame(frame Frame, result *QueryTestResult) error {
+func (i *Integrator) processFrame(frame model.Frame, result *model.QueryTestResult) error {
 	// Map field names to their indices
 	fieldIndices := make(map[string]int)
 	for i, field := range frame.Schema.Fields {
@@ -861,9 +760,9 @@ func (i *Integrator) processFrame(frame Frame, result *QueryTestResult) error {
 }
 
 // generateExploreLink creates a Grafana explore link based on the datasource type
-func (i *Integrator) generateExploreLink(query, datasource, datasourceType string, config ConversionConfig, defaultConf ConversionConfig) (string, error) {
+func (i *Integrator) generateExploreLink(query, datasource, datasourceType string, config model.ConversionConfig, defaultConf model.ConversionConfig) (string, error) {
 	customModel := getC(config.QueryModel, defaultConf.QueryModel, "")
-	escapedQuery, err := escapeQueryJSON(query)
+	escapedQuery, err := shared.EscapeQueryJSON(query)
 	if err != nil {
 		return "", fmt.Errorf("could not escape provided query: %s", query)
 	}
@@ -872,9 +771,9 @@ func (i *Integrator) generateExploreLink(query, datasource, datasourceType strin
 	switch {
 	case customModel != "":
 		pane = fmt.Sprintf(`{"yyz":{"datasource":"%[1]s","queries":[%[2]s],"range":{"from":"%[3]s","to":"%[4]s"}}}`, datasource, fmt.Sprintf(customModel, "A", datasource, escapedQuery), i.config.IntegratorConfig.From, i.config.IntegratorConfig.To)
-	case datasourceType == Loki:
+	case datasourceType == shared.Loki:
 		pane = fmt.Sprintf(`{"yyz":{"datasource":"%[1]s","queries":[{"refId":"A","expr":"%[2]s","queryType":"range","datasource":{"type":"loki","uid":"%[1]s"},"editorMode":"code","direction":"backward"}],"range":{"from":"%[3]s","to":"%[4]s"}}}`, datasource, escapedQuery, i.config.IntegratorConfig.From, i.config.IntegratorConfig.To)
-	case datasourceType == Elasticsearch:
+	case datasourceType == shared.Elasticsearch:
 		// For Elasticsearch, we need to include the full query structure with metrics and bucketAggs
 		pane = fmt.Sprintf(`{"yyz":{"datasource":"%[1]s","queries":[{"refId":"A","datasource":{"type":"elasticsearch","uid":"%[1]s"},"query":"%[2]s","alias":"","metrics":[{"type":"count","id":"1"}],"bucketAggs":[{"type":"date_histogram","id":"2","settings":{"interval":"auto"},"field":"@timestamp"}],"timeField":"@timestamp"}],"range":{"from":"%[3]s","to":"%[4]s"},"compact":false}}`, datasource, escapedQuery, i.config.IntegratorConfig.From, i.config.IntegratorConfig.To)
 	default:
@@ -885,11 +784,11 @@ func (i *Integrator) generateExploreLink(query, datasource, datasourceType strin
 	return fmt.Sprintf("%s/explore?schemaVersion=1&panes=%s&orgId=%d", i.config.DeployerConfig.GrafanaInstance, url.QueryEscape(pane), i.config.IntegratorConfig.OrgID), nil
 }
 
-func (i *Integrator) TestQueries(queries map[string]string, config, defaultConf ConversionConfig, timeoutDuration time.Duration) ([]QueryTestResult, error) {
-	queryResults := make([]QueryTestResult, 0, len(queries))
+func (i *Integrator) TestQueries(queries map[string]string, config, defaultConf model.ConversionConfig, timeoutDuration time.Duration) ([]model.QueryTestResult, error) {
+	queryResults := make([]model.QueryTestResult, 0, len(queries))
 	datasource := getC(config.DataSource, defaultConf.DataSource, "")
 	// Determine datasource type using the same logic as createAlertQuery
-	datasourceType := getC(config.DataSourceType, defaultConf.DataSourceType, getC(config.Target, defaultConf.Target, Loki))
+	datasourceType := getC(config.DataSourceType, defaultConf.DataSourceType, getC(config.Target, defaultConf.Target, shared.Loki))
 	customModel := getC(config.QueryModel, defaultConf.QueryModel, "")
 
 	// Sort refIDs to ensure consistent ordering
@@ -913,11 +812,11 @@ func (i *Integrator) TestQueries(queries map[string]string, config, defaultConf 
 			timeoutDuration,
 		)
 		if err != nil {
-			return []QueryTestResult{
+			return []model.QueryTestResult{
 				{
 					Datasource: datasource,
 					Link:       "",
-					Stats: Stats{
+					Stats: model.Stats{
 						Fields: make(map[string]string),
 						Errors: []string{err.Error()},
 					},
@@ -931,17 +830,17 @@ func (i *Integrator) TestQueries(queries map[string]string, config, defaultConf 
 			return nil, fmt.Errorf("error generating explore link: %v", err)
 		}
 		// Parse the response to extract statistics
-		result := QueryTestResult{
+		result := model.QueryTestResult{
 			Datasource: datasource,
 			Link:       exploreLink,
-			Stats: Stats{
+			Stats: model.Stats{
 				Fields: make(map[string]string),
 				Errors: make([]string, 0),
 			},
 		}
 
 		// Parse the response to extract statistics
-		var responseData QueryResponse
+		var responseData model.QueryResponse
 		if err := json.Unmarshal(resp, &responseData); err != nil {
 			return nil, fmt.Errorf("error unmarshalling query response: %v", err)
 		}
@@ -974,12 +873,12 @@ func getRuleUID(conversionName string, conversionID uuid.UUID) string {
 }
 
 // createAlertQuery creates an AlertQuery based on the target data source and configuration
-func createAlertQuery(query string, refID string, datasource string, timerange definitions.RelativeTimeRange, config ConversionConfig, defaultConf ConversionConfig) (definitions.AlertQuery, error) {
-	datasourceType := getC(config.DataSourceType, defaultConf.DataSourceType, getC(config.Target, defaultConf.Target, Loki))
+func createAlertQuery(query string, refID string, datasource string, timerange model.RelativeTimeRange, config model.ConversionConfig, defaultConf model.ConversionConfig) (model.AlertQuery, error) {
+	datasourceType := getC(config.DataSourceType, defaultConf.DataSourceType, getC(config.Target, defaultConf.Target, shared.Loki))
 	customModel := getC(config.QueryModel, defaultConf.QueryModel, "")
 
 	// Modify query based on target data source
-	if datasourceType == Loki {
+	if datasourceType == shared.Loki {
 		// if the query is not a metric query, we need to add a sum aggregation to it
 		if !strings.HasPrefix(query, "sum") {
 			query = fmt.Sprintf("sum(count_over_time(%s[$__auto]))", query)
@@ -987,13 +886,13 @@ func createAlertQuery(query string, refID string, datasource string, timerange d
 	}
 
 	// Must manually escape the query as JSON to include it in a json.RawMessage
-	escapedQuery, err := escapeQueryJSON(query)
+	escapedQuery, err := shared.EscapeQueryJSON(query)
 	if err != nil {
-		return definitions.AlertQuery{}, fmt.Errorf("could not escape provided query: %s", query)
+		return model.AlertQuery{}, fmt.Errorf("could not escape provided query: %s", query)
 	}
 
 	// Create generic alert query
-	alertQuery := definitions.AlertQuery{
+	alertQuery := model.AlertQuery{
 		RefID:             refID,
 		DatasourceUID:     datasource,
 		RelativeTimeRange: timerange,
@@ -1004,10 +903,10 @@ func createAlertQuery(query string, refID string, datasource string, timerange d
 	switch {
 	case customModel != "":
 		alertQuery.Model = json.RawMessage(fmt.Sprintf(customModel, refID, datasource, escapedQuery))
-	case datasourceType == Loki:
+	case datasourceType == shared.Loki:
 		alertQuery.QueryType = "instant"
 		alertQuery.Model = json.RawMessage(fmt.Sprintf(`{"refId":"%s","datasource":{"type":"loki","uid":"%s"},"hide":false,"expr":"%s","queryType":"instant","editorMode":"code"}`, refID, datasource, escapedQuery))
-	case datasourceType == Elasticsearch:
+	case datasourceType == shared.Elasticsearch:
 		// Based on the Elasticsearch data source plugin
 		// https://github.com/grafana/grafana/blob/main/public/app/plugins/datasource/elasticsearch/dataquery.gen.ts
 		alertQuery.Model = json.RawMessage(fmt.Sprintf(`{"refId":"%s","datasource":{"type":"elasticsearch","uid":"%s"},"query":"%s","alias":"","metrics":[{"type":"count","id":"1"}],"bucketAggs":[{"type":"date_histogram","id":"2","settings":{"interval":"auto"}}],"intervalMs":2000,"maxDataPoints":1354,"timeField":"@timestamp"}`, refID, datasource, escapedQuery))

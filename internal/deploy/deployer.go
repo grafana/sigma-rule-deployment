@@ -1,4 +1,4 @@
-package main
+package deploy
 
 import (
 	"bytes"
@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/grafana/sigma-rule-deployment/internal/model"
+	"github.com/grafana/sigma-rule-deployment/shared"
 	"gopkg.in/yaml.v3"
 )
 
@@ -39,32 +41,6 @@ type deploymentConfig struct {
 }
 
 // Structures to unmarshal the YAML config file
-type FoldersConfig struct {
-	DeploymentPath string `yaml:"deployment_path"`
-}
-type DeploymentConfig struct {
-	GrafanaInstance string `yaml:"grafana_instance"`
-	Timeout         string `yaml:"timeout"`
-}
-type ConversionConfig struct {
-	RuleGroup  string `yaml:"rule_group"`
-	TimeWindow string `yaml:"time_window"`
-}
-type Configuration struct {
-	Folders          FoldersConfig      `yaml:"folders"`
-	DefaultConfig    ConversionConfig   `yaml:"conversion_defaults"`
-	ConversionConfig []ConversionConfig `yaml:"conversions"`
-	DeployerConfig   DeploymentConfig   `yaml:"deployment"`
-	IntegratorConfig IntegrationConfig  `yaml:"integration"`
-}
-type IntegrationConfig struct {
-	FolderID     string `yaml:"folder_id"`
-	OrgID        int64  `yaml:"org_id"`
-	TestQueries  bool   `yaml:"test_queries"`
-	From         string `yaml:"from"`
-	To           string `yaml:"to"`
-	ShowLogLines bool   `yaml:"show_log_lines"`
-}
 
 type Deployer struct {
 	config         deploymentConfig
@@ -72,72 +48,20 @@ type Deployer struct {
 	groupsToUpdate map[string]bool
 }
 
-// Non exhaustive list of alert fields
-type Alert struct {
-	UID       string `json:"uid"`
-	Title     string `json:"title"`
-	FolderUID string `json:"folderUID"`
-	RuleGroup string `json:"ruleGroup"`
-	OrgID     int64  `json:"orgID"`
-}
-
-type AlertRuleGroup struct {
-	FolderUID string `json:"folderUID"`
-	Interval  int64  `json:"interval"`
-	Rules     any    `json:"rules"`
-	Title     string `json:"title"`
-}
-
-func main() {
-	ctx := context.Background()
-
-	// Load the deployment config
-	deployer := NewDeployer()
-
-	if err := deployer.LoadConfig(ctx); err != nil {
-		fmt.Printf("Error loading config: %v\n", err)
-		os.Exit(1)
-	}
-
-	deployer.client = &http.Client{
-		Timeout: deployer.config.timeout,
-	}
-
-	var err error
-	if deployer.config.freshDeploy {
-		err = deployer.configFreshDeployment(ctx)
-	} else {
-		err = deployer.configNormalMode()
-	}
-	if err != nil {
-		fmt.Printf("Error configuring deployment: %v\n", err)
-		os.Exit(1)
-	}
-
-	log.Printf("Groups to update: %v", deployer.groupsToUpdate)
-	log.Printf("Groups intervals: %v", deployer.config.groupsIntervals)
-
-	// Deploy alerts
-	alertsCreated, alertsUpdated, alertsDeleted, errDeploy := deployer.Deploy(ctx)
-
-	// Write action outputs
-	if err := deployer.writeOutput(alertsCreated, alertsUpdated, alertsDeleted); err != nil {
-		fmt.Printf("Error writing output: %v\n", err)
-		os.Exit(1)
-	}
-
-	// We only check the deployment error AFTER writing the output so that
-	// we still report the alerts that were created, updated and deleted before the error
-	if errDeploy != nil {
-		fmt.Printf("Error deploying: %v\n", errDeploy)
-		os.Exit(1)
-	}
-}
-
 func NewDeployer() *Deployer {
 	return &Deployer{
 		groupsToUpdate: map[string]bool{},
 	}
+}
+
+func (d *Deployer) SetClient() {
+	d.client = &http.Client{
+		Timeout: d.config.timeout,
+	}
+}
+
+func (d *Deployer) IsFreshDeploy() bool {
+	return d.config.freshDeploy
 }
 
 func (d *Deployer) Deploy(ctx context.Context) ([]string, []string, []string, error) {
@@ -171,7 +95,7 @@ func (d *Deployer) Deploy(ctx context.Context) ([]string, []string, []string, er
 	}
 	// Process alert CREATIONS
 	for _, alertFile := range d.config.alertsToAdd {
-		content, err := readFile(alertFile)
+		content, err := shared.ReadLocalFile(alertFile)
 		if err != nil {
 			log.Printf("Can't read file %s: %v", alertFile, err)
 			return alertsCreated, alertsUpdated, alertsDeleted, err
@@ -190,7 +114,7 @@ func (d *Deployer) Deploy(ctx context.Context) ([]string, []string, []string, er
 	}
 	// Process alert UPDATES
 	for _, alertFile := range d.config.alertsToUpdate {
-		content, err := readFile(alertFile)
+		content, err := shared.ReadLocalFile(alertFile)
 		if err != nil {
 			log.Printf("Can't read file %s: %v", alertFile, err)
 			return alertsCreated, alertsUpdated, alertsDeleted, err
@@ -223,27 +147,20 @@ func (d *Deployer) Deploy(ctx context.Context) ([]string, []string, []string, er
 	return alertsCreated, alertsUpdated, alertsDeleted, nil
 }
 
-func (d *Deployer) writeOutput(alertsCreated []string, alertsUpdated []string, alertsDeleted []string) error {
+func (d *Deployer) WriteOutput(alertsCreated []string, alertsUpdated []string, alertsDeleted []string) error {
 	alertsCreatedStr := strings.Join(alertsCreated, " ")
 	alertsUpdatedStr := strings.Join(alertsUpdated, " ")
 	alertsDeletedStr := strings.Join(alertsDeleted, " ")
 
-	githubOutput := os.Getenv("GITHUB_OUTPUT")
-	if githubOutput == "" {
-		return fmt.Errorf("GITHUB_OUTPUT is not set or empty")
-	}
-	f, err := os.OpenFile(githubOutput, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-	if err != nil {
+	if err := shared.SetOutput("alerts_created", alertsCreatedStr); err != nil {
 		return err
 	}
-	defer tryToClose("GITHUB_OUTPUT", f)
-
-	output := fmt.Sprintf("alerts_created=%s\nalerts_updated=%s\nalerts_deleted=%s\n",
-		alertsCreatedStr, alertsUpdatedStr, alertsDeletedStr)
-	if _, err := f.WriteString(output); err != nil {
+	if err := shared.SetOutput("alerts_updated", alertsUpdatedStr); err != nil {
 		return err
 	}
-
+	if err := shared.SetOutput("alerts_deleted", alertsDeletedStr); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -256,11 +173,11 @@ func (d *Deployer) LoadConfig(_ context.Context) error {
 	configFile = filepath.Clean(configFile)
 
 	// Read the YAML config file
-	configFileContent, err := readFile(configFile)
+	configFileContent, err := shared.ReadLocalFile(configFile)
 	if err != nil {
 		return fmt.Errorf("error reading config file: %v", err)
 	}
-	configYAML := Configuration{}
+	configYAML := model.Configuration{}
 	err = yaml.Unmarshal([]byte(configFileContent), &configYAML)
 	if err != nil {
 		return fmt.Errorf("error unmarshalling config file: %v", err)
@@ -297,10 +214,10 @@ func (d *Deployer) LoadConfig(_ context.Context) error {
 
 	// Extract the groups intervals from the conversion config
 	defaultInterval := "5m"
-	if configYAML.DefaultConfig.TimeWindow != "" {
-		defaultInterval = configYAML.DefaultConfig.TimeWindow
+	if configYAML.ConversionDefaults.TimeWindow != "" {
+		defaultInterval = configYAML.ConversionDefaults.TimeWindow
 	}
-	for _, config := range configYAML.ConversionConfig {
+	for _, config := range configYAML.Conversions {
 		interval := defaultInterval
 		if config.TimeWindow != "" {
 			interval = config.TimeWindow
@@ -325,7 +242,7 @@ func (d *Deployer) LoadConfig(_ context.Context) error {
 	return nil
 }
 
-func (d *Deployer) configNormalMode() error {
+func (d *Deployer) ConfigNormalMode() error {
 	// For a normal deployment, we look at the changes in the alert folder
 	alertsToAdd := []string{}
 	alertsToDelete := []string{}
@@ -366,7 +283,7 @@ func (d *Deployer) configNormalMode() error {
 	return nil
 }
 
-func (d *Deployer) configFreshDeployment(ctx context.Context) error {
+func (d *Deployer) ConfigFreshDeployment(ctx context.Context) error {
 	log.Println("Running in fresh deployment mode.")
 	// For a fresh deployment, we'll deploy every alert in the deploment folder, regardless of the changes
 	alertsToAdd, err := d.listAlertsInDeploymentFolder()
@@ -471,7 +388,7 @@ func (d *Deployer) createAlert(ctx context.Context, content string, updateIfExis
 	}
 }
 
-func (d *Deployer) tryToUpdateConflictingAlert(ctx context.Context, alert Alert, content string) (string, error) {
+func (d *Deployer) tryToUpdateConflictingAlert(ctx context.Context, alert model.Alert, content string) (string, error) {
 	// Retrieve the existing alert it's conflicting with
 	existingAlert, err := d.getAlert(ctx, alert.UID)
 	if err != nil {
@@ -569,7 +486,7 @@ func (d *Deployer) updateAlertGroupInterval(ctx context.Context, folderUID strin
 		log.Printf("Can't find alert group. Status: %d", res.StatusCode)
 		return fmt.Errorf("error finding alert group %s/%s: returned status %s", folderUID, group, res.Status)
 	}
-	resp := AlertRuleGroup{}
+	resp := model.AlertRuleGroup{}
 	if err := json.NewDecoder(res.Body).Decode(&resp); err != nil {
 		return err
 	}
@@ -638,7 +555,7 @@ func (d *Deployer) deleteAlert(ctx context.Context, uid string) (string, error) 
 	return uid, nil
 }
 
-func (d *Deployer) checkAlertsMatch(a, b Alert) bool {
+func (d *Deployer) checkAlertsMatch(a, b model.Alert) bool {
 	if a.UID != b.UID {
 		return false
 	}
@@ -652,32 +569,32 @@ func (d *Deployer) checkAlertsMatch(a, b Alert) bool {
 	return true
 }
 
-func (d *Deployer) getAlert(ctx context.Context, uid string) (Alert, error) {
+func (d *Deployer) getAlert(ctx context.Context, uid string) (model.Alert, error) {
 	// Prepare the request
 	url := fmt.Sprintf("%sapi/v1/provisioning/alert-rules/%s", d.config.endpoint, uid)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, bytes.NewBuffer([]byte{}))
 	if err != nil {
-		return Alert{}, err
+		return model.Alert{}, err
 	}
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", d.config.saToken))
 
 	res, err := d.client.Do(req)
 	if err != nil {
-		return Alert{}, err
+		return model.Alert{}, err
 	}
 	defer res.Body.Close()
 
 	// Check the response code
 	if res.StatusCode != http.StatusOK {
 		log.Printf("Can't get alert. Status: %d", res.StatusCode)
-		return Alert{}, fmt.Errorf("error getting alert: returned status %s", res.Status)
+		return model.Alert{}, fmt.Errorf("error getting alert: returned status %s", res.Status)
 	}
 
-	alert := Alert{}
+	alert := model.Alert{}
 	if err := json.NewDecoder(res.Body).Decode(&alert); err != nil {
-		return Alert{}, err
+		return model.Alert{}, err
 	}
 
 	return alert, nil
@@ -712,7 +629,7 @@ func (d *Deployer) listAlerts(ctx context.Context) ([]string, error) {
 	}
 
 	// Check the response body
-	alertsReturned := []Alert{}
+	alertsReturned := []model.Alert{}
 	if err := json.NewDecoder(res.Body).Decode(&alertsReturned); err != nil {
 		return []string{}, err
 	}
@@ -729,32 +646,17 @@ func (d *Deployer) listAlerts(ctx context.Context) ([]string, error) {
 	return alertList, nil
 }
 
-func parseAlert(content string) (Alert, error) {
-	alert := Alert{}
+func parseAlert(content string) (model.Alert, error) {
+	alert := model.Alert{}
 	if err := json.Unmarshal([]byte(content), &alert); err != nil {
-		return Alert{}, err
+		return model.Alert{}, err
 	}
 	// Sanity check to ensure we've read an alert file
 	if alert.UID == "" || alert.Title == "" || alert.FolderUID == "" {
-		return Alert{}, fmt.Errorf("invalid alert file")
+		return model.Alert{}, fmt.Errorf("invalid alert file")
 	}
 
 	return alert, nil
-}
-
-func readFile(filePath string) (string, error) {
-	// Check if the file path is local
-	// This is to check we're only reading files from the workspace
-	if !filepath.IsLocal(filePath) {
-		return "", fmt.Errorf("invalid file path: %s", filePath)
-	}
-
-	// TODO: When Go 1.24 releases, use Os.Root
-	// https://tip.golang.org/doc/go1.24#directory-limited-filesystem-access
-	// https://pkg.go.dev/os@master#Root
-	fileContent, err := os.ReadFile(filePath)
-
-	return string(fileContent), err
 }
 
 func (d *Deployer) listAlertsInDeploymentFolder() ([]string, error) {

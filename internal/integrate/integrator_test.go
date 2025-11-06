@@ -1,4 +1,4 @@
-package main
+package integrate
 
 import (
 	"encoding/json"
@@ -11,7 +11,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/grafana/sigma-rule-deployment/actions/integrate/definitions"
+	"github.com/grafana/sigma-rule-deployment/internal/model"
+	"github.com/grafana/sigma-rule-deployment/shared"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -19,13 +20,13 @@ func TestConvertToAlert(t *testing.T) {
 	tests := []struct {
 		name             string
 		queries          []string
-		rule             *definitions.ProvisionedAlertRule
+		rule             *model.ProvisionedAlertRule
 		titles           string
-		convConfig       ConversionConfig
-		integratorConfig IntegrationConfig
-		convObject       ConversionOutput
+		convConfig       model.ConversionConfig
+		integratorConfig model.IntegrationConfig
+		convObject       model.ConversionOutput
 		wantQueryText    string
-		wantDuration     definitions.Duration
+		wantDuration     model.Duration
 		wantUnchanged    bool
 		wantError        bool
 		wantLabels       map[string]string
@@ -35,10 +36,10 @@ func TestConvertToAlert(t *testing.T) {
 			name:    "valid new loki query",
 			queries: []string{"{job=`.+`} | json | test=`true`"},
 			titles:  "Alert Rule 1",
-			rule: &definitions.ProvisionedAlertRule{
+			rule: &model.ProvisionedAlertRule{
 				UID: "5c1c217a",
 			},
-			convConfig: ConversionConfig{
+			convConfig: model.ConversionConfig{
 				Name:       "conv",
 				Target:     "loki",
 				DataSource: "my_data_source",
@@ -46,17 +47,17 @@ func TestConvertToAlert(t *testing.T) {
 				TimeWindow: "5m",
 			},
 			wantQueryText: "sum(count_over_time({job=`.+`} | json | test=`true`[$__auto]))",
-			wantDuration:  definitions.Duration(300 * time.Second),
+			wantDuration:  model.Duration(300 * time.Second),
 			wantError:     false,
 		},
 		{
 			name:    "valid ES query",
 			queries: []string{`from * | where eventSource=="kms.amazonaws.com" and eventName=="CreateGrant"`},
 			titles:  "Alert Rule 2",
-			rule: &definitions.ProvisionedAlertRule{
+			rule: &model.ProvisionedAlertRule{
 				UID: "3bb06d82",
 			},
-			convConfig: ConversionConfig{
+			convConfig: model.ConversionConfig{
 				Name:           "conv",
 				Target:         "esql",
 				DataSource:     "my_es_data_source",
@@ -65,17 +66,17 @@ func TestConvertToAlert(t *testing.T) {
 				DataSourceType: "elasticsearch",
 			},
 			wantQueryText: `from * | where eventSource==\"kms.amazonaws.com\" and eventName==\"CreateGrant\"`,
-			wantDuration:  definitions.Duration(300 * time.Second),
+			wantDuration:  model.Duration(300 * time.Second),
 			wantError:     false,
 		},
 		{
 			name:    "invalid time window",
 			queries: []string{"{job=`.+`} | json | test=`true`"},
 			titles:  "Alert Rule 3",
-			rule: &definitions.ProvisionedAlertRule{
+			rule: &model.ProvisionedAlertRule{
 				UID: "5c1c217a",
 			},
-			convConfig: ConversionConfig{
+			convConfig: model.ConversionConfig{
 				TimeWindow: "1y",
 			},
 			wantDuration: 0, // invalid time window, expect no value
@@ -85,10 +86,10 @@ func TestConvertToAlert(t *testing.T) {
 			name:    "invalid time window",
 			queries: []string{"{job=`.+`} | json | test=`true`", "sum(count_over_time({job=`.+`} | json | test=`false`[$__auto]))"},
 			titles:  "Alert Rule 4 & Alert Rule 5",
-			rule: &definitions.ProvisionedAlertRule{
+			rule: &model.ProvisionedAlertRule{
 				UID: "f4c34eae-c7c3-4891-8965-08a01e8286b8",
 			},
-			convConfig: ConversionConfig{
+			convConfig: model.ConversionConfig{
 				TimeWindow: "1y",
 			},
 			wantDuration: 0, // invalid time window, expect no value
@@ -98,10 +99,10 @@ func TestConvertToAlert(t *testing.T) {
 			name:    "skip unchanged queries",
 			queries: []string{`{job=".+"} | json | test="true"`},
 			titles:  "New Alert Rule Title", // This should be ignored
-			rule: &definitions.ProvisionedAlertRule{
+			rule: &model.ProvisionedAlertRule{
 				UID:   "5c1c217a",
 				Title: "Unchanged Alert Rule",
-				Data: []definitions.AlertQuery{
+				Data: []model.AlertQuery{
 					{
 						Model: json.RawMessage(`{"refId":"A0","datasource":{"type":"loki","uid":"nil"},"hide":false,"expr":"sum(count_over_time({job=\".+\"} | json | test=\"true\"[$__auto]))","queryType":"instant","editorMode":"code"}`),
 					},
@@ -119,17 +120,17 @@ func TestConvertToAlert(t *testing.T) {
 			name:    "process changed queries",
 			queries: []string{`{job=".+"} | json | test="true"`},
 			titles:  "New Alert Rule Title", // This should *not* be ignored
-			convConfig: ConversionConfig{
+			convConfig: model.ConversionConfig{
 				Name:       "conv",
 				Target:     "loki",
 				DataSource: "my_data_source",
 				RuleGroup:  "Every Minute",
 				TimeWindow: "1m",
 			},
-			rule: &definitions.ProvisionedAlertRule{
+			rule: &model.ProvisionedAlertRule{
 				UID:   "5c1c217a",
 				Title: "Unchanged Alert Rule",
-				Data: []definitions.AlertQuery{
+				Data: []model.AlertQuery{
 					{
 						// old query, which doesn't match the new query
 						Model: json.RawMessage(`{"refId":"A0","datasource":{"type":"loki","uid":"nil"},"hide":false,"expr":"sum(count_over_time({old_job=\".+\"} | logfmt | test=\"old_query\"[$__auto]))","queryType":"instant","editorMode":"code"}`),
@@ -142,17 +143,17 @@ func TestConvertToAlert(t *testing.T) {
 					},
 				},
 			},
-			wantDuration:  definitions.Duration(1 * time.Minute),
+			wantDuration:  model.Duration(1 * time.Minute),
 			wantUnchanged: false,
 		},
 		{
 			name:    "valid query with a custom query model",
 			queries: []string{"DO MY QUERY"},
 			titles:  "Alert Rule 7",
-			rule: &definitions.ProvisionedAlertRule{
+			rule: &model.ProvisionedAlertRule{
 				UID: "5c1c217a",
 			},
-			convConfig: ConversionConfig{
+			convConfig: model.ConversionConfig{
 				Name:       "conv",
 				Target:     "custom",
 				DataSource: "my_custom_data_source",
@@ -161,17 +162,17 @@ func TestConvertToAlert(t *testing.T) {
 				QueryModel: `{"refId":"%s","datasource":{"type":"custom","uid":"%s"},"queryString":"(%s)"}`,
 			},
 			wantQueryText: "(DO MY QUERY)",
-			wantDuration:  definitions.Duration(1 * time.Hour),
+			wantDuration:  model.Duration(1 * time.Hour),
 			wantError:     false,
 		},
 		{
 			name:    "valid query with a generic query model",
 			queries: []string{"DO MY QUERY"},
 			titles:  "Alert Rule 8",
-			rule: &definitions.ProvisionedAlertRule{
+			rule: &model.ProvisionedAlertRule{
 				UID: "5c1c217a",
 			},
-			convConfig: ConversionConfig{
+			convConfig: model.ConversionConfig{
 				Name:       "conv",
 				Target:     "generic",
 				DataSource: "generic_uid",
@@ -179,17 +180,17 @@ func TestConvertToAlert(t *testing.T) {
 				TimeWindow: "30m",
 			},
 			wantQueryText: `"DO MY QUERY"`,
-			wantDuration:  definitions.Duration(30 * time.Minute),
+			wantDuration:  model.Duration(30 * time.Minute),
 			wantError:     false,
 		},
 		{
 			name:    "valid query with lookback",
 			queries: []string{"{job=`.+`} | json | test=`true`"},
 			titles:  "Alert Rule with Lookback",
-			rule: &definitions.ProvisionedAlertRule{
+			rule: &model.ProvisionedAlertRule{
 				UID: "5c1c217a",
 			},
-			convConfig: ConversionConfig{
+			convConfig: model.ConversionConfig{
 				Name:       "conv",
 				Target:     "loki",
 				DataSource: "my_data_source",
@@ -198,33 +199,33 @@ func TestConvertToAlert(t *testing.T) {
 				Lookback:   "2m",
 			},
 			wantQueryText: "sum(count_over_time({job=`.+`} | json | test=`true`[$__auto]))",
-			wantDuration:  definitions.Duration(7 * time.Minute), // 5m + 2m lookback = 7m
+			wantDuration:  model.Duration(7 * time.Minute), // 5m + 2m lookback = 7m
 			wantError:     false,
 		},
 		{
 			name:    "template annotations and labels",
 			queries: []string{"{job=`.+`} | json | test=`true`"},
 			titles:  "Template Rule",
-			rule: &definitions.ProvisionedAlertRule{
+			rule: &model.ProvisionedAlertRule{
 				UID: "",
 			},
-			convObject: ConversionOutput{
-				Rules: []SigmaRule{
+			convObject: model.ConversionOutput{
+				Rules: []model.SigmaRule{
 					{
 						Level:     "high",
-						Logsource: SigmaLogsource{Product: "okta", Service: "okta"},
+						Logsource: model.SigmaLogsource{Product: "okta", Service: "okta"},
 						Author:    "John Doe",
 					},
 				},
 			},
-			convConfig: ConversionConfig{
+			convConfig: model.ConversionConfig{
 				Name:       "conv",
 				Target:     "loki",
 				DataSource: "my_data_source",
 				RuleGroup:  "Every 5 Minutes",
 				TimeWindow: "5m",
 			},
-			integratorConfig: IntegrationConfig{
+			integratorConfig: model.IntegrationConfig{
 				TemplateLabels: map[string]string{
 					"Level":   "{{.Level}}",
 					"Product": "{{.Logsource.Product}}",
@@ -235,7 +236,7 @@ func TestConvertToAlert(t *testing.T) {
 				},
 			},
 			wantQueryText: "sum(count_over_time({job=`.+`} | json | test=`true`[$__auto]))",
-			wantDuration:  definitions.Duration(300 * time.Second),
+			wantDuration:  model.Duration(300 * time.Second),
 			wantError:     false,
 			wantLabels: map[string]string{
 				"Level":   "high",
@@ -276,11 +277,11 @@ func TestConvertToAlert(t *testing.T) {
 					if tt.convConfig.Lookback != "" {
 						lookbackDuration, err := time.ParseDuration(tt.convConfig.Lookback)
 						assert.NoError(t, err)
-						expectedTo := definitions.Duration(lookbackDuration)
+						expectedTo := model.Duration(lookbackDuration)
 						assert.Equal(t, tt.wantDuration, tt.rule.Data[0].RelativeTimeRange.From, "From should match expected duration (time window + lookback)")
 						assert.Equal(t, expectedTo, tt.rule.Data[0].RelativeTimeRange.To, "To should be lookback duration")
 					} else {
-						assert.Equal(t, definitions.Duration(0), tt.rule.Data[0].RelativeTimeRange.To, "To should be 0 when no lookback")
+						assert.Equal(t, model.Duration(0), tt.rule.Data[0].RelativeTimeRange.To, "To should be 0 when no lookback")
 					}
 					if tt.wantLabels != nil {
 						assert.Equal(t, tt.wantLabels, tt.rule.Labels)
@@ -303,7 +304,7 @@ func TestLoadConfig(t *testing.T) {
 		deleted    string
 		testFiles  string
 		allRules   bool
-		expConfig  Configuration
+		expConfig  model.Configuration
 		expAdd     []string
 		expDel     []string
 		expTest    []string
@@ -317,26 +318,26 @@ func TestLoadConfig(t *testing.T) {
 			deleted:    "",
 			testFiles:  "testdata/conv.json testdata/conv2.json",
 			allRules:   false,
-			expConfig: Configuration{
-				Folders: FoldersConfig{
+			expConfig: model.Configuration{
+				Folders: model.FoldersConfig{
 					ConversionPath: "./testdata",
 					DeploymentPath: "./testdata",
 				},
-				ConversionDefaults: ConversionConfig{
+				ConversionDefaults: model.ConversionConfig{
 					Target:          "loki",
 					Format:          "default",
 					SkipUnsupported: "true",
 					FilePattern:     "*.yml",
 					DataSource:      "grafanacloud-logs",
 				},
-				Conversions: []ConversionConfig{
+				Conversions: []model.ConversionConfig{
 					{
 						Name:       "conv",
 						RuleGroup:  "Every 5 Minutes",
 						TimeWindow: "5m",
 					},
 				},
-				IntegratorConfig: IntegrationConfig{
+				IntegratorConfig: model.IntegrationConfig{
 					FolderID:    "XXXX",
 					OrgID:       1,
 					From:        "now-1h",
@@ -357,26 +358,26 @@ func TestLoadConfig(t *testing.T) {
 			deleted:    "",
 			testFiles:  "testdata/conv.json testdata/conv2.json",
 			allRules:   false,
-			expConfig: Configuration{
-				Folders: FoldersConfig{
+			expConfig: model.Configuration{
+				Folders: model.FoldersConfig{
 					ConversionPath: "./testdata",
 					DeploymentPath: "./testdata",
 				},
-				ConversionDefaults: ConversionConfig{
+				ConversionDefaults: model.ConversionConfig{
 					Target:          "loki",
 					Format:          "default",
 					SkipUnsupported: "true",
 					FilePattern:     "*.yml",
 					DataSource:      "grafanacloud-logs",
 				},
-				Conversions: []ConversionConfig{
+				Conversions: []model.ConversionConfig{
 					{
 						Name:       "conv",
 						RuleGroup:  "Every 5 Minutes",
 						TimeWindow: "5m",
 					},
 				},
-				IntegratorConfig: IntegrationConfig{
+				IntegratorConfig: model.IntegrationConfig{
 					FolderID:    "XXXX",
 					OrgID:       1,
 					From:        "now-1h",
@@ -397,12 +398,12 @@ func TestLoadConfig(t *testing.T) {
 			deleted:    "testdata/conv2.json testdata/conv4.json",
 			testFiles:  "testdata/conv1.json testdata/conv3.json",
 			allRules:   false,
-			expConfig: Configuration{
-				Folders: FoldersConfig{
+			expConfig: model.Configuration{
+				Folders: model.FoldersConfig{
 					ConversionPath: "./testdata",
 					DeploymentPath: "./testdata",
 				},
-				ConversionDefaults: ConversionConfig{
+				ConversionDefaults: model.ConversionConfig{
 					Target:          "esql",
 					Format:          "default",
 					SkipUnsupported: "true",
@@ -410,7 +411,7 @@ func TestLoadConfig(t *testing.T) {
 					DataSource:      "grafanacloud-es-logs",
 					DataSourceType:  "elasticsearch",
 				},
-				Conversions: []ConversionConfig{
+				Conversions: []model.ConversionConfig{
 					{
 						Name:       "conv1",
 						RuleGroup:  "Every 5 Minutes",
@@ -432,7 +433,7 @@ func TestLoadConfig(t *testing.T) {
 						TimeWindow: "20m",
 					},
 				},
-				IntegratorConfig: IntegrationConfig{
+				IntegratorConfig: model.IntegrationConfig{
 					FolderID:    "XXXX",
 					OrgID:       1,
 					From:        "now-1h",
@@ -453,12 +454,12 @@ func TestLoadConfig(t *testing.T) {
 			deleted:    "testdata/conv2.json testdata/conv4.json",
 			testFiles:  "testdata/conv1.json",
 			allRules:   false,
-			expConfig: Configuration{
-				Folders: FoldersConfig{
+			expConfig: model.Configuration{
+				Folders: model.FoldersConfig{
 					ConversionPath: "./testdata",
 					DeploymentPath: "./testdata",
 				},
-				ConversionDefaults: ConversionConfig{
+				ConversionDefaults: model.ConversionConfig{
 					Target:          "esql",
 					Format:          "default",
 					SkipUnsupported: "true",
@@ -466,7 +467,7 @@ func TestLoadConfig(t *testing.T) {
 					DataSource:      "grafanacloud-es-logs",
 					DataSourceType:  "elasticsearch",
 				},
-				Conversions: []ConversionConfig{
+				Conversions: []model.ConversionConfig{
 					{
 						Name:       "conv1",
 						RuleGroup:  "Every 5 Minutes",
@@ -488,7 +489,7 @@ func TestLoadConfig(t *testing.T) {
 						TimeWindow: "20m",
 					},
 				},
-				IntegratorConfig: IntegrationConfig{
+				IntegratorConfig: model.IntegrationConfig{
 					FolderID:    "XXXX",
 					OrgID:       1,
 					From:        "now-1h",
@@ -509,26 +510,26 @@ func TestLoadConfig(t *testing.T) {
 			deleted:    "",
 			testFiles:  "",
 			allRules:   true,
-			expConfig: Configuration{
-				Folders: FoldersConfig{
+			expConfig: model.Configuration{
+				Folders: model.FoldersConfig{
 					ConversionPath: "./testdata",
 					DeploymentPath: "./testdata",
 				},
-				ConversionDefaults: ConversionConfig{
+				ConversionDefaults: model.ConversionConfig{
 					Target:          "loki",
 					Format:          "default",
 					SkipUnsupported: "true",
 					FilePattern:     "*.yml",
 					DataSource:      "grafanacloud-logs",
 				},
-				Conversions: []ConversionConfig{
+				Conversions: []model.ConversionConfig{
 					{
 						Name:       "conv",
 						RuleGroup:  "Every 5 Minutes",
 						TimeWindow: "5m",
 					},
 				},
-				IntegratorConfig: IntegrationConfig{
+				IntegratorConfig: model.IntegrationConfig{
 					FolderID:    "XXXX",
 					OrgID:       1,
 					From:        "now-1h",
@@ -549,26 +550,26 @@ func TestLoadConfig(t *testing.T) {
 			deleted:    "",
 			testFiles:  "",
 			allRules:   true,
-			expConfig: Configuration{
-				Folders: FoldersConfig{
+			expConfig: model.Configuration{
+				Folders: model.FoldersConfig{
 					ConversionPath: "./testdata",
 					DeploymentPath: "./testdata",
 				},
-				ConversionDefaults: ConversionConfig{
+				ConversionDefaults: model.ConversionConfig{
 					Target:          "loki",
 					Format:          "default",
 					SkipUnsupported: "true",
 					FilePattern:     "*.yml",
 					DataSource:      "grafanacloud-logs",
 				},
-				Conversions: []ConversionConfig{
+				Conversions: []model.ConversionConfig{
 					{
 						Name:       "conv",
 						RuleGroup:  "Every 5 Minutes",
 						TimeWindow: "5m",
 					},
 				},
-				IntegratorConfig: IntegrationConfig{
+				IntegratorConfig: model.IntegrationConfig{
 					FolderID:    "XXXX",
 					OrgID:       1,
 					From:        "now-1h",
@@ -656,17 +657,17 @@ func TestDoConversions(t *testing.T) {
 	tests := []struct {
 		name           string
 		addedFiles     []string
-		convOutput     ConversionOutput
+		convOutput     model.ConversionOutput
 		wantError      bool
 		wantFileExists bool
 	}{
 		{
 			name:       "single conversion success",
 			addedFiles: []string{"test_conv.json"},
-			convOutput: ConversionOutput{
+			convOutput: model.ConversionOutput{
 				ConversionName: "test_conv",
 				Queries:        []string{"{job=`test`} | json"},
-				Rules: []SigmaRule{
+				Rules: []model.SigmaRule{
 					{
 						ID:    "996f8884-9144-40e7-ac63-29090ccde9a0",
 						Title: "Test Rule",
@@ -679,10 +680,10 @@ func TestDoConversions(t *testing.T) {
 		{
 			name:       "no queries conversion",
 			addedFiles: []string{"test_conv_no_queries.json"},
-			convOutput: ConversionOutput{
+			convOutput: model.ConversionOutput{
 				ConversionName: "test_conv",
 				Queries:        []string{},
-				Rules: []SigmaRule{
+				Rules: []model.SigmaRule{
 					{
 						ID:    "996f8884-9144-40e7-ac63-29090ccde9a0",
 						Title: "Test Rule",
@@ -695,10 +696,10 @@ func TestDoConversions(t *testing.T) {
 		{
 			name:       "no matching config",
 			addedFiles: []string{"test_unknown.json"},
-			convOutput: ConversionOutput{
+			convOutput: model.ConversionOutput{
 				ConversionName: "unknown_conversion",
 				Queries:        []string{"{job=`test`} | json"},
-				Rules: []SigmaRule{
+				Rules: []model.SigmaRule{
 					{
 						ID:    "996f8884-9144-40e7-ac63-29090ccde9a0",
 						Title: "Test Rule",
@@ -727,23 +728,23 @@ func TestDoConversions(t *testing.T) {
 			assert.NoError(t, err)
 
 			// Create test configuration
-			config := Configuration{
-				Folders: FoldersConfig{
+			config := model.Configuration{
+				Folders: model.FoldersConfig{
 					ConversionPath: convPath,
 					DeploymentPath: deployPath,
 				},
-				ConversionDefaults: ConversionConfig{
+				ConversionDefaults: model.ConversionConfig{
 					Target:     "loki",
 					DataSource: "test-datasource",
 				},
-				Conversions: []ConversionConfig{
+				Conversions: []model.ConversionConfig{
 					{
 						Name:       "test_conv",
 						RuleGroup:  "Test Rules",
 						TimeWindow: "5m",
 					},
 				},
-				IntegratorConfig: IntegrationConfig{
+				IntegratorConfig: model.IntegrationConfig{
 					FolderID: "test-folder",
 					OrgID:    1,
 				},
@@ -811,7 +812,7 @@ func TestDoQueryTesting(t *testing.T) {
 	tests := []struct {
 		name              string
 		testFiles         []string
-		convOutput        ConversionOutput
+		convOutput        model.ConversionOutput
 		continueOnErrors  bool
 		wantError         bool
 		expectTestResults bool
@@ -820,10 +821,10 @@ func TestDoQueryTesting(t *testing.T) {
 		{
 			name:      "successful query testing",
 			testFiles: []string{"test_conv.json"},
-			convOutput: ConversionOutput{
+			convOutput: model.ConversionOutput{
 				ConversionName: "test_conv",
 				Queries:        []string{"{job=`test`} | json"},
-				Rules: []SigmaRule{
+				Rules: []model.SigmaRule{
 					{
 						ID:    "996f8884-9144-40e7-ac63-29090ccde9a0",
 						Title: "Test Rule",
@@ -838,10 +839,10 @@ func TestDoQueryTesting(t *testing.T) {
 		{
 			name:      "query error with continue enabled",
 			testFiles: []string{"test_conv.json"},
-			convOutput: ConversionOutput{
+			convOutput: model.ConversionOutput{
 				ConversionName: "test_conv",
 				Queries:        []string{"{job=`test`} | json"},
-				Rules: []SigmaRule{
+				Rules: []model.SigmaRule{
 					{
 						ID:    "996f8884-9144-40e7-ac63-29090ccde9a0",
 						Title: "Test Rule",
@@ -855,10 +856,10 @@ func TestDoQueryTesting(t *testing.T) {
 		{
 			name:      "query error with continue disabled",
 			testFiles: []string{"test_conv.json"},
-			convOutput: ConversionOutput{
+			convOutput: model.ConversionOutput{
 				ConversionName: "test_conv",
 				Queries:        []string{"{job=`test`} | json"},
-				Rules: []SigmaRule{
+				Rules: []model.SigmaRule{
 					{
 						ID:    "996f8884-9144-40e7-ac63-29090ccde9a0",
 						Title: "Test Rule",
@@ -872,10 +873,10 @@ func TestDoQueryTesting(t *testing.T) {
 		{
 			name:      "no queries to test",
 			testFiles: []string{"test_conv_no_queries.json"},
-			convOutput: ConversionOutput{
+			convOutput: model.ConversionOutput{
 				ConversionName: "test_conv",
 				Queries:        []string{},
-				Rules: []SigmaRule{
+				Rules: []model.SigmaRule{
 					{
 						ID:    "996f8884-9144-40e7-ac63-29090ccde9a0",
 						Title: "Test Rule",
@@ -901,22 +902,22 @@ func TestDoQueryTesting(t *testing.T) {
 			assert.NoError(t, err)
 
 			// Create test configuration
-			config := Configuration{
-				Folders: FoldersConfig{
+			config := model.Configuration{
+				Folders: model.FoldersConfig{
 					ConversionPath: convPath,
 				},
-				ConversionDefaults: ConversionConfig{
+				ConversionDefaults: model.ConversionConfig{
 					Target:     "loki",
 					DataSource: "test-datasource",
 				},
-				Conversions: []ConversionConfig{
+				Conversions: []model.ConversionConfig{
 					{
 						Name:       "test_conv",
 						RuleGroup:  "Test Rules",
 						TimeWindow: "5m",
 					},
 				},
-				IntegratorConfig: IntegrationConfig{
+				IntegratorConfig: model.IntegrationConfig{
 					FolderID:                     "test-folder",
 					OrgID:                        1,
 					TestQueries:                  true,
@@ -924,7 +925,7 @@ func TestDoQueryTesting(t *testing.T) {
 					To:                           "now",
 					ContinueOnQueryTestingErrors: tt.continueOnErrors,
 				},
-				DeployerConfig: DeploymentConfig{
+				DeployerConfig: model.DeploymentConfig{
 					GrafanaInstance: "https://test.grafana.com",
 					Timeout:         "5s",
 				},
@@ -1047,12 +1048,12 @@ func TestDoCleanup(t *testing.T) {
 			assert.NoError(t, err)
 
 			// Create test configuration
-			config := Configuration{
-				Folders: FoldersConfig{
+			config := model.Configuration{
+				Folders: model.FoldersConfig{
 					ConversionPath: convPath,
 					DeploymentPath: deployPath,
 				},
-				Conversions: []ConversionConfig{
+				Conversions: []model.ConversionConfig{
 					{
 						Name:       "test_conv",
 						RuleGroup:  "Test Rules",
@@ -1066,7 +1067,7 @@ func TestDoCleanup(t *testing.T) {
 			for _, fileName := range tt.removedFiles {
 				// Create dummy deployment file that should be removed
 				deployFile := filepath.Join(deployPath, fmt.Sprintf("alert_rule_%s_test_123abc.json", strings.TrimSuffix(fileName, ".json")))
-				dummyRule := &definitions.ProvisionedAlertRule{
+				dummyRule := &model.ProvisionedAlertRule{
 					UID:       "123abc",
 					Title:     "Test Rule",
 					RuleGroup: "Test Rules",
@@ -1078,10 +1079,10 @@ func TestDoCleanup(t *testing.T) {
 
 			// Create orphaned conversion file
 			if tt.createOrphanedConversion {
-				orphanedConv := ConversionOutput{
+				orphanedConv := model.ConversionOutput{
 					ConversionName: "orphaned_conversion",
 					Queries:        []string{"{job=`test`} | json"},
-					Rules: []SigmaRule{
+					Rules: []model.SigmaRule{
 						{
 							ID:    "996f8884-9144-40e7-ac63-29090ccde9a0",
 							Title: "Orphaned Rule",
@@ -1098,7 +1099,7 @@ func TestDoCleanup(t *testing.T) {
 			// Create orphaned deployment file
 			if tt.createOrphanedDeployment {
 				orphanedDeployFile := filepath.Join(deployPath, "alert_rule_orphaned_deploy_456def.json")
-				dummyRule := &definitions.ProvisionedAlertRule{
+				dummyRule := &model.ProvisionedAlertRule{
 					UID:       "456def",
 					Title:     "Orphaned Deploy Rule",
 					RuleGroup: "Test Rules",
@@ -1157,7 +1158,7 @@ func TestRun(t *testing.T) {
 		name                      string
 		addedFiles                []string
 		testFiles                 []string
-		convOutput                ConversionOutput
+		convOutput                model.ConversionOutput
 		expectConversionFiles     int
 		expectQueryTestingResults bool
 	}{
@@ -1165,10 +1166,10 @@ func TestRun(t *testing.T) {
 			name:       "conversion and testing same files",
 			addedFiles: []string{"test_conv.json"},
 			testFiles:  []string{"test_conv.json"},
-			convOutput: ConversionOutput{
+			convOutput: model.ConversionOutput{
 				ConversionName: "test_conv",
 				Queries:        []string{"{job=`test`} | json"},
-				Rules: []SigmaRule{
+				Rules: []model.SigmaRule{
 					{
 						ID:    "996f8884-9144-40e7-ac63-29090ccde9a0",
 						Title: "Test Rule",
@@ -1182,10 +1183,10 @@ func TestRun(t *testing.T) {
 			name:       "conversion and testing different files",
 			addedFiles: []string{"test_conv1.json"},
 			testFiles:  []string{"test_conv1.json", "test_conv2.json"},
-			convOutput: ConversionOutput{
+			convOutput: model.ConversionOutput{
 				ConversionName: "test_conv",
 				Queries:        []string{"{job=`test`} | json"},
-				Rules: []SigmaRule{
+				Rules: []model.SigmaRule{
 					{
 						ID:    "996f8884-9144-40e7-ac63-29090ccde9a0",
 						Title: "Test Rule",
@@ -1199,10 +1200,10 @@ func TestRun(t *testing.T) {
 			name:       "only conversion no testing",
 			addedFiles: []string{"test_conv.json"},
 			testFiles:  []string{},
-			convOutput: ConversionOutput{
+			convOutput: model.ConversionOutput{
 				ConversionName: "test_conv",
 				Queries:        []string{"{job=`test`} | json"},
-				Rules: []SigmaRule{
+				Rules: []model.SigmaRule{
 					{
 						ID:    "996f8884-9144-40e7-ac63-29090ccde9a0",
 						Title: "Test Rule",
@@ -1231,30 +1232,30 @@ func TestRun(t *testing.T) {
 			assert.NoError(t, err)
 
 			// Create test configuration
-			config := Configuration{
-				Folders: FoldersConfig{
+			config := model.Configuration{
+				Folders: model.FoldersConfig{
 					ConversionPath: convPath,
 					DeploymentPath: deployPath,
 				},
-				ConversionDefaults: ConversionConfig{
+				ConversionDefaults: model.ConversionConfig{
 					Target:     "loki",
 					DataSource: "test-datasource",
 				},
-				Conversions: []ConversionConfig{
+				Conversions: []model.ConversionConfig{
 					{
 						Name:       "test_conv",
 						RuleGroup:  "Test Rules",
 						TimeWindow: "5m",
 					},
 				},
-				IntegratorConfig: IntegrationConfig{
+				IntegratorConfig: model.IntegrationConfig{
 					FolderID:    "test-folder",
 					OrgID:       1,
 					TestQueries: true,
 					From:        "now-1h",
 					To:          "now",
 				},
-				DeployerConfig: DeploymentConfig{
+				DeployerConfig: model.DeploymentConfig{
 					GrafanaInstance: "https://test.grafana.com",
 					Timeout:         "5s",
 				},
@@ -1350,7 +1351,7 @@ func TestRun(t *testing.T) {
 
 func TestReadWriteAlertRule(t *testing.T) {
 	// A simple test of reading and writing alert rule files
-	rule := &definitions.ProvisionedAlertRule{}
+	rule := &model.ProvisionedAlertRule{}
 	err := readRuleFromFile(rule, "testdata/sample_rule.json")
 	assert.NoError(t, err)
 	err = writeRuleToFile(rule, "testdata/sample_rule.json", false)
@@ -1360,14 +1361,14 @@ func TestReadWriteAlertRule(t *testing.T) {
 func TestSummariseSigmaRules(t *testing.T) {
 	tests := []struct {
 		name      string
-		rules     []SigmaRule
+		rules     []model.SigmaRule
 		wantID    uuid.UUID
 		wantTitle string
 		wantError bool
 	}{
 		{
 			name: "valid rule",
-			rules: []SigmaRule{
+			rules: []model.SigmaRule{
 				{ID: "996f8884-9144-40e7-ac63-29090ccde9a0", Title: "Rule 1"},
 			},
 			wantID:    uuid.MustParse("996f8884-9144-40e7-ac63-29090ccde9a0"),
@@ -1376,12 +1377,12 @@ func TestSummariseSigmaRules(t *testing.T) {
 		},
 		{
 			name:      "no rules",
-			rules:     []SigmaRule{},
+			rules:     []model.SigmaRule{},
 			wantError: true,
 		},
 		{
 			name: "multiple rules",
-			rules: []SigmaRule{
+			rules: []model.SigmaRule{
 				{ID: "a6b097fd-44d2-413f-b5cd-0916e22e6d5c", Title: "Rule 1"},
 				{ID: "37f6f301-ddba-496f-9a84-853886ffff6b", Title: "Rule 2"},
 			},
@@ -1410,7 +1411,7 @@ func TestIntegratorRun(t *testing.T) {
 	tests := []struct {
 		name                string
 		conversionName      string
-		convOutput          ConversionOutput
+		convOutput          model.ConversionOutput
 		wantQueries         []string
 		wantTitles          string
 		removedFiles        []string
@@ -1421,10 +1422,10 @@ func TestIntegratorRun(t *testing.T) {
 		{
 			name:           "single rule single query",
 			conversionName: "test_conv1",
-			convOutput: ConversionOutput{
+			convOutput: model.ConversionOutput{
 				ConversionName: "test_conv1",
 				Queries:        []string{"{job=`test`} | json"},
-				Rules: []SigmaRule{
+				Rules: []model.SigmaRule{
 					{
 						ID:    "996f8884-9144-40e7-ac63-29090ccde9a0",
 						Title: "Test Rule",
@@ -1439,13 +1440,13 @@ func TestIntegratorRun(t *testing.T) {
 		{
 			name:           "multiple rules multiple queries",
 			conversionName: "test_conv2",
-			convOutput: ConversionOutput{
+			convOutput: model.ConversionOutput{
 				ConversionName: "test_conv2",
 				Queries: []string{
 					"{job=`test1`} | json",
 					"{job=`test2`} | json",
 				},
-				Rules: []SigmaRule{
+				Rules: []model.SigmaRule{
 					{
 						ID:    "a6b097fd-44d2-413f-b5cd-0916e22e6d5c",
 						Title: "Test Rule 1",
@@ -1467,10 +1468,10 @@ func TestIntegratorRun(t *testing.T) {
 		{
 			name:           "no queries",
 			conversionName: "test_conv4",
-			convOutput: ConversionOutput{
+			convOutput: model.ConversionOutput{
 				ConversionName: "test_conv4",
 				Queries:        []string{},
-				Rules: []SigmaRule{
+				Rules: []model.SigmaRule{
 					{
 						ID:    "996f8884-9144-40e7-ac63-29090ccde9a0",
 						Title: "Test Rule",
@@ -1484,10 +1485,10 @@ func TestIntegratorRun(t *testing.T) {
 		{
 			name:           "remove existing alert rule",
 			conversionName: "test_conv5",
-			convOutput: ConversionOutput{
+			convOutput: model.ConversionOutput{
 				ConversionName: "test_conv5",
 				Queries:        []string{"{job=`test`} | json"},
-				Rules: []SigmaRule{
+				Rules: []model.SigmaRule{
 					{
 						ID:    "996f8884-9144-40e7-ac63-29090ccde9a0",
 						Title: "Test Rule",
@@ -1502,10 +1503,10 @@ func TestIntegratorRun(t *testing.T) {
 		{
 			name:           "verify annotations are added",
 			conversionName: "test_annotations",
-			convOutput: ConversionOutput{
+			convOutput: model.ConversionOutput{
 				ConversionName: "test_annotations",
 				Queries:        []string{"{job=`test`} | json", "{service=`api`} | json"},
-				Rules: []SigmaRule{
+				Rules: []model.SigmaRule{
 					{
 						ID:    "996f8884-9144-40e7-ac63-29090ccde9a0",
 						Title: "Test Annotations Rule",
@@ -1528,10 +1529,10 @@ func TestIntegratorRun(t *testing.T) {
 		{
 			name:           "cleanup orphaned files",
 			conversionName: "orphaned_test",
-			convOutput: ConversionOutput{
+			convOutput: model.ConversionOutput{
 				ConversionName: "orphaned_test",
 				Queries:        []string{"{job=`orphaned`} | json"},
-				Rules: []SigmaRule{
+				Rules: []model.SigmaRule{
 					{
 						ID:    "996f8884-9144-40e7-ac63-29090ccde9a0",
 						Title: "Orphaned Test Rule",
@@ -1567,11 +1568,11 @@ func TestIntegratorRun(t *testing.T) {
 			assert.NoError(t, err)
 
 			// Create test configuration
-			conversions := []ConversionConfig{}
+			conversions := []model.ConversionConfig{}
 
 			// For orphaned cleanup test cases, don't include the conversion in config
 			if !tt.wantOrphanedCleanup {
-				conversions = []ConversionConfig{
+				conversions = []model.ConversionConfig{
 					{
 						Name:       tt.conversionName,
 						RuleGroup:  "Test Rules",
@@ -1581,17 +1582,17 @@ func TestIntegratorRun(t *testing.T) {
 				}
 			}
 
-			config := Configuration{
-				Folders: FoldersConfig{
+			config := model.Configuration{
+				Folders: model.FoldersConfig{
 					ConversionPath: convPath,
 					DeploymentPath: deployPath,
 				},
-				ConversionDefaults: ConversionConfig{
+				ConversionDefaults: model.ConversionConfig{
 					Target:     "loki",
 					DataSource: "test-datasource",
 				},
 				Conversions: conversions,
-				IntegratorConfig: IntegrationConfig{
+				IntegratorConfig: model.IntegrationConfig{
 					FolderID: "test-folder",
 					OrgID:    1,
 				},
@@ -1612,7 +1613,7 @@ func TestIntegratorRun(t *testing.T) {
 				deployFile := filepath.Join(deployPath, fmt.Sprintf("alert_rule_%s_%s.json", tt.conversionName, ruleUID))
 
 				// Create a deployment file that references a non-existent conversion file
-				dummyRule := &definitions.ProvisionedAlertRule{
+				dummyRule := &model.ProvisionedAlertRule{
 					UID:       ruleUID,
 					Title:     tt.wantTitles,
 					RuleGroup: "Test Rules",
@@ -1632,7 +1633,7 @@ func TestIntegratorRun(t *testing.T) {
 				deployFile := filepath.Join(deployPath, fmt.Sprintf("alert_rule_%s_%s_%s.json", tt.conversionName, tt.conversionName, ruleUID))
 
 				// Create a dummy alert rule file
-				dummyRule := &definitions.ProvisionedAlertRule{
+				dummyRule := &model.ProvisionedAlertRule{
 					UID:       ruleUID,
 					Title:     tt.wantTitles,
 					RuleGroup: "Test Rules",
@@ -1701,7 +1702,7 @@ func TestIntegratorRun(t *testing.T) {
 			assert.NoError(t, err)
 
 			// Verify file contents
-			rule := &definitions.ProvisionedAlertRule{}
+			rule := &model.ProvisionedAlertRule{}
 			err = readRuleFromFile(rule, expectedFile)
 			assert.NoError(t, err)
 
@@ -1836,10 +1837,10 @@ func TestIntegratorWithQueryTesting(t *testing.T) {
 			assert.NoError(t, err)
 
 			// Create test conversion output
-			convOutput := ConversionOutput{
+			convOutput := model.ConversionOutput{
 				Queries:        testQueries,
 				ConversionName: "test_loki",
-				Rules: []SigmaRule{
+				Rules: []model.SigmaRule{
 					{
 						ID:    "996f8884-9144-40e7-ac63-29090ccde9a0",
 						Title: "Test Loki Rule",
@@ -1848,16 +1849,16 @@ func TestIntegratorWithQueryTesting(t *testing.T) {
 			}
 
 			// Create test configuration with query testing enabled
-			config := Configuration{
-				Folders: FoldersConfig{
+			config := model.Configuration{
+				Folders: model.FoldersConfig{
 					ConversionPath: convPath,
 					DeploymentPath: deployPath,
 				},
-				ConversionDefaults: ConversionConfig{
+				ConversionDefaults: model.ConversionConfig{
 					Target:     "loki",
 					DataSource: "test-loki-datasource",
 				},
-				Conversions: []ConversionConfig{
+				Conversions: []model.ConversionConfig{
 					{
 						Name:       "test_loki",
 						RuleGroup:  "Loki Test Rules",
@@ -1865,7 +1866,7 @@ func TestIntegratorWithQueryTesting(t *testing.T) {
 						DataSource: "test-loki-datasource",
 					},
 				},
-				IntegratorConfig: IntegrationConfig{
+				IntegratorConfig: model.IntegrationConfig{
 					FolderID:         "test-folder",
 					OrgID:            1,
 					TestQueries:      true,
@@ -1874,7 +1875,7 @@ func TestIntegratorWithQueryTesting(t *testing.T) {
 					ShowLogLines:     tt.showLogLines,
 					ShowSampleValues: tt.showSampleValues,
 				},
-				DeployerConfig: DeploymentConfig{
+				DeployerConfig: model.DeploymentConfig{
 					GrafanaInstance: "https://test.grafana.com",
 					Timeout:         "5s",
 				},
@@ -1997,7 +1998,7 @@ func TestIntegratorWithQueryTesting(t *testing.T) {
 			assert.NotEmpty(t, testQueryResults)
 
 			// Parse and validate the query test results
-			var queryResults map[string][]QueryTestResult
+			var queryResults map[string][]model.QueryTestResult
 			err = json.Unmarshal([]byte(testQueryResults), &queryResults)
 			assert.NoError(t, err)
 			assert.Equal(t, len(testQueries), len(queryResults[convFile]))
@@ -2115,7 +2116,7 @@ func TestGenerateExploreLink(t *testing.T) {
 			name:           "Loki explore link generation",
 			query:          `{job="loki"} |= "error"`,
 			datasource:     "loki-uid-123",
-			datasourceType: Loki,
+			datasourceType: shared.Loki,
 			from:           "now-1h",
 			to:             "now",
 			orgID:          1,
@@ -2147,7 +2148,7 @@ func TestGenerateExploreLink(t *testing.T) {
 			name:           "Elasticsearch explore link generation",
 			query:          `type:log AND (level:(ERROR OR FATAL OR CRITICAL))`,
 			datasource:     "es-uid-456",
-			datasourceType: Elasticsearch,
+			datasourceType: shared.Elasticsearch,
 			from:           "now-2h",
 			to:             "now-1h",
 			orgID:          2,
@@ -2212,7 +2213,7 @@ func TestGenerateExploreLink(t *testing.T) {
 			name:           "Empty datasource should work fine",
 			query:          `{job="test"}`,
 			datasource:     "",
-			datasourceType: Loki,
+			datasourceType: shared.Loki,
 			from:           "now-1h",
 			to:             "now",
 			orgID:          1,
@@ -2241,20 +2242,20 @@ func TestGenerateExploreLink(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create integrator with test configuration
 			integrator := &Integrator{
-				config: Configuration{
-					IntegratorConfig: IntegrationConfig{
+				config: model.Configuration{
+					IntegratorConfig: model.IntegrationConfig{
 						From:  tt.from,
 						To:    tt.to,
 						OrgID: tt.orgID,
 					},
-					DeployerConfig: DeploymentConfig{
+					DeployerConfig: model.DeploymentConfig{
 						GrafanaInstance: tt.grafanaURL,
 					},
 				},
 			}
 
 			// Test generateExploreLink
-			exploreLink, err := integrator.generateExploreLink(tt.query, tt.datasource, tt.datasourceType, ConversionConfig{}, ConversionConfig{})
+			exploreLink, err := integrator.generateExploreLink(tt.query, tt.datasource, tt.datasourceType, model.ConversionConfig{}, model.ConversionConfig{})
 
 			if tt.wantError {
 				assert.Error(t, err)
@@ -2310,7 +2311,7 @@ func TestIntegratorWithExploreLinkGeneration(t *testing.T) {
 	}{
 		{
 			name:           "Loki datasource generates correct explore link",
-			datasourceType: Loki,
+			datasourceType: shared.Loki,
 			query:          `{job="loki"} |= "error"`,
 			datasource:     "test-loki-datasource",
 			wantURLContains: []string{
@@ -2333,7 +2334,7 @@ func TestIntegratorWithExploreLinkGeneration(t *testing.T) {
 		},
 		{
 			name:           "Elasticsearch datasource generates correct explore link",
-			datasourceType: Elasticsearch,
+			datasourceType: shared.Elasticsearch,
 			query:          `type:log AND (level:(ERROR OR FATAL OR CRITICAL))`,
 			datasource:     "test-elasticsearch-datasource",
 			wantURLContains: []string{
@@ -2378,10 +2379,10 @@ func TestIntegratorWithExploreLinkGeneration(t *testing.T) {
 			assert.NoError(t, err)
 
 			// Create test conversion output
-			convOutput := ConversionOutput{
+			convOutput := model.ConversionOutput{
 				Queries:        testQueries,
 				ConversionName: "test_explore_link",
-				Rules: []SigmaRule{
+				Rules: []model.SigmaRule{
 					{
 						ID:    "996f8884-9144-40e7-ac63-29090ccde9a0",
 						Title: "Test Explore Link Rule",
@@ -2390,17 +2391,17 @@ func TestIntegratorWithExploreLinkGeneration(t *testing.T) {
 			}
 
 			// Create test configuration with query testing enabled
-			config := Configuration{
-				Folders: FoldersConfig{
+			config := model.Configuration{
+				Folders: model.FoldersConfig{
 					ConversionPath: convPath,
 					DeploymentPath: deployPath,
 				},
-				ConversionDefaults: ConversionConfig{
+				ConversionDefaults: model.ConversionConfig{
 					Target:         tt.datasourceType,
 					DataSource:     tt.datasource,
 					DataSourceType: tt.datasourceType,
 				},
-				Conversions: []ConversionConfig{
+				Conversions: []model.ConversionConfig{
 					{
 						Name:           "test_explore_link",
 						RuleGroup:      "Explore Link Test Rules",
@@ -2409,14 +2410,14 @@ func TestIntegratorWithExploreLinkGeneration(t *testing.T) {
 						DataSourceType: tt.datasourceType,
 					},
 				},
-				IntegratorConfig: IntegrationConfig{
+				IntegratorConfig: model.IntegrationConfig{
 					FolderID:    "test-folder",
 					OrgID:       1,
 					TestQueries: true,
 					From:        "now-1h",
 					To:          "now",
 				},
-				DeployerConfig: DeploymentConfig{
+				DeployerConfig: model.DeploymentConfig{
 					GrafanaInstance: "https://test.grafana.com",
 					Timeout:         "5s",
 				},
@@ -2506,7 +2507,7 @@ func TestIntegratorWithExploreLinkGeneration(t *testing.T) {
 			assert.NotEmpty(t, testQueryResults)
 
 			// Parse and validate the query test results
-			var queryResults map[string][]QueryTestResult
+			var queryResults map[string][]model.QueryTestResult
 			err = json.Unmarshal([]byte(testQueryResults), &queryResults)
 			assert.NoError(t, err)
 			assert.Equal(t, len(testQueries), len(queryResults[convFile]))
@@ -2600,10 +2601,10 @@ func TestIntegrationWithQueryTestingErrors(t *testing.T) {
 			assert.NoError(t, err)
 
 			// Create test conversion output
-			convOutput := ConversionOutput{
+			convOutput := model.ConversionOutput{
 				ConversionName: "test_continue",
 				Queries:        []string{"{job=\"test\"} |= \"error\"", "{job=\"test\"} |= \"info\""},
-				Rules: []SigmaRule{
+				Rules: []model.SigmaRule{
 					{
 						ID:    "996f8884-9144-40e7-ac63-29090ccde9a0",
 						Title: "Test Continue Rule",
@@ -2612,16 +2613,16 @@ func TestIntegrationWithQueryTestingErrors(t *testing.T) {
 			}
 
 			// Create test configuration with query testing enabled
-			config := Configuration{
-				Folders: FoldersConfig{
+			config := model.Configuration{
+				Folders: model.FoldersConfig{
 					ConversionPath: convPath,
 					DeploymentPath: deployPath,
 				},
-				ConversionDefaults: ConversionConfig{
+				ConversionDefaults: model.ConversionConfig{
 					Target:     "loki",
 					DataSource: "test-datasource",
 				},
-				Conversions: []ConversionConfig{
+				Conversions: []model.ConversionConfig{
 					{
 						Name:       "test_continue",
 						RuleGroup:  "Test Rules",
@@ -2629,7 +2630,7 @@ func TestIntegrationWithQueryTestingErrors(t *testing.T) {
 						DataSource: "test-datasource",
 					},
 				},
-				IntegratorConfig: IntegrationConfig{
+				IntegratorConfig: model.IntegrationConfig{
 					FolderID:                     "test-folder",
 					OrgID:                        1,
 					TestQueries:                  true,
@@ -2637,7 +2638,7 @@ func TestIntegrationWithQueryTestingErrors(t *testing.T) {
 					To:                           "now",
 					ContinueOnQueryTestingErrors: tt.continueOnErrors,
 				},
-				DeployerConfig: DeploymentConfig{
+				DeployerConfig: model.DeploymentConfig{
 					GrafanaInstance: "https://test.grafana.com",
 					Timeout:         "5s",
 				},

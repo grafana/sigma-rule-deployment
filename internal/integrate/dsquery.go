@@ -1,4 +1,4 @@
-package main
+package integrate
 
 import (
 	"bytes"
@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"net/url"
 	"time"
+
+	"github.com/grafana/sigma-rule-deployment/shared"
 )
 
 // DatasourceQuery is an interface for executing Grafana datasource queries
@@ -118,14 +120,14 @@ func (h *HTTPDatasourceQuery) ExecuteQuery(
 	switch {
 	case customModel != "":
 		// Use custom model to build the query object
-		escapedQuery, err := escapeQueryJSON(query)
+		escapedQuery, err := shared.EscapeQueryJSON(query)
 		if err != nil {
 			return nil, fmt.Errorf("failed to escape query: %v", err)
 		}
 
 		// Use sprintf to populate the custom model with refID, datasource UID, and escaped query
 		queryObj = json.RawMessage(fmt.Sprintf(customModel, refID, datasource.UID, escapedQuery))
-	case datasource.Type == Elasticsearch:
+	case datasource.Type == shared.Elasticsearch:
 		structQuery := Query{
 			RefID: refID,
 			Query: query,
@@ -160,7 +162,7 @@ func (h *HTTPDatasourceQuery) ExecuteQuery(
 			return nil, fmt.Errorf("failed to marshal query struct: %v", err)
 		}
 		queryObj = json.RawMessage(queryBytes)
-	case datasource.Type == Loki:
+	case datasource.Type == shared.Loki:
 		structQuery := Query{
 			RefID:     refID,
 			Expr:      query,

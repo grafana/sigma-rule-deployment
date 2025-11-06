@@ -1,5 +1,5 @@
 //nolint:goconst
-package main
+package integrate
 
 import (
 	"encoding/json"
@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jarcoal/httpmock"
+	"github.com/grafana/sigma-rule-deployment/shared"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -35,7 +36,7 @@ func TestGetDatasource(t *testing.T) {
 			mockStatusCode: 200,
 			mockResponse:   `{"id":1,"uid":"abc123","orgId":1,"name":"test-datasource","type":"loki","access":"proxy","url":"http://loki:3100"}`,
 			expectedUID:    "abc123",
-			expectedType:   Loki,
+			expectedType:   shared.Loki,
 			expectedName:   "test-datasource",
 			expectedError:  false,
 			expectedCallCount: map[string]int{
@@ -124,7 +125,7 @@ func TestTestQuery(t *testing.T) {
 				UID:    "loki123",
 				OrgID:  1,
 				Name:   "test-loki",
-				Type:   Loki,
+				Type:   shared.Loki,
 				Access: "proxy",
 				URL:    "http://loki:3100",
 			},
@@ -166,7 +167,7 @@ func TestTestQuery(t *testing.T) {
 				UID:    "dej6qd07cf8cgc",
 				OrgID:  1,
 				Name:   "test-elasticsearch",
-				Type:   Elasticsearch,
+				Type:   shared.Elasticsearch,
 				Access: "proxy",
 				URL:    "http://elasticsearch:9200",
 			},
@@ -244,7 +245,7 @@ func TestTestQuery(t *testing.T) {
 				UID:    "loki123",
 				OrgID:  1,
 				Name:   "test-loki",
-				Type:   Loki,
+				Type:   shared.Loki,
 				Access: "proxy",
 				URL:    "http://loki:3100",
 			},
@@ -268,7 +269,7 @@ func TestTestQuery(t *testing.T) {
 				UID:    "loki123",
 				OrgID:  1,
 				Name:   "test-loki",
-				Type:   Loki,
+				Type:   shared.Loki,
 				Access: "proxy",
 				URL:    "http://loki:3100",
 			},
@@ -293,7 +294,7 @@ func TestTestQuery(t *testing.T) {
 				UID:    "test-elasticsearch-uid",
 				OrgID:  1,
 				Name:   "test-elasticsearch",
-				Type:   Elasticsearch,
+				Type:   shared.Elasticsearch,
 				Access: "proxy",
 				URL:    "http://elasticsearch:9200",
 			},
@@ -391,7 +392,7 @@ func TestTestQuery(t *testing.T) {
 				UID:    "no-such-datasource",
 				OrgID:  1,
 				Name:   "nonexistent-datasource",
-				Type:   Loki,
+				Type:   shared.Loki,
 				Access: "proxy",
 			},
 			mockQueryStatusCode: 404,
@@ -474,7 +475,7 @@ func TestElasticsearchQueryStructure(t *testing.T) {
 		UID:    "dej6qd07cf8cgc",
 		OrgID:  1,
 		Name:   "test-elasticsearch",
-		Type:   Elasticsearch,
+		Type:   shared.Elasticsearch,
 		Access: "proxy",
 		URL:    "http://elasticsearch:9200",
 	}
@@ -599,7 +600,7 @@ func TestLokiQueryStructure(t *testing.T) {
 		UID:    "loki123",
 		OrgID:  1,
 		Name:   "test-loki",
-		Type:   Loki,
+		Type:   shared.Loki,
 		Access: "proxy",
 		URL:    "http://loki:3100",
 	}

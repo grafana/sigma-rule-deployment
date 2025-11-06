@@ -1,4 +1,4 @@
-package main
+package deploy
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/grafana/sigma-rule-deployment/internal/model"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -538,9 +539,9 @@ func TestLoadConfig(t *testing.T) {
 	err := d.LoadConfig(ctx)
 	assert.NoError(t, err)
 	if d.config.freshDeploy {
-		err = d.configFreshDeployment(ctx)
+		err = d.ConfigFreshDeployment(ctx)
 	} else {
-		err = d.configNormalMode()
+		err = d.ConfigNormalMode()
 	}
 	assert.NoError(t, err)
 
@@ -713,7 +714,7 @@ func TestUpdateAlertGroupInterval(t *testing.T) {
 					body, err := io.ReadAll(r.Body)
 					assert.NoError(t, err)
 
-					var updatedGroup AlertRuleGroup
+					var updatedGroup model.AlertRuleGroup
 					err = json.Unmarshal(body, &updatedGroup)
 					assert.NoError(t, err)
 

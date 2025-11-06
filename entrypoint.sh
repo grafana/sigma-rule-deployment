@@ -2,12 +2,12 @@
 
 function _integrate() {
     echo "Integrating Sigma Rules"
-    integrate "$@"
+    sigma-deployer integrate "$@"
 }
 
 function _deploy() {
     echo "Deploying Sigma Rules"
-    deploy "$@"
+    sigma-deployer deploy "$@"
 }
 
 function _convert() {
@@ -27,10 +27,10 @@ function _convert() {
     shopt -u nocasematch
 
     if [ ${#valid_plugins[@]} -gt 0 ]; then
-        uv add --directory /app/convert "${valid_plugins[@]}"
+        uv add --directory /app/actions/convert "${valid_plugins[@]}"
     fi
 
-    uv run --directory /app/convert main.py
+    uv run --directory /app/actions/convert main.py
 }
 
 set -euo pipefail
@@ -61,3 +61,4 @@ case "$1" in
     exit 1
     ;;
 esac
+
