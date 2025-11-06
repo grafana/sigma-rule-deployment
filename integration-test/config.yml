@@ -18,9 +18,9 @@ conversions:
       - pipelines/test-1.yml
     rule_group: Every 1 Hour
     time_window: 1h
-  - name: multiple_queries
+  - name: combine_queries
     input:
-      - "rules/multiple-queries.yml"
+      - "rules/condition-split.yml"
     backend_options:
       case_sensitive: true
     pipelines:

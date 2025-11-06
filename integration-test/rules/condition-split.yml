@@ -1,7 +1,7 @@
-title: Multiple Queries Test Rule
+title: Condition Split Query Combination Test Rule
 id: 26654045-413c-4db1-be5f-36f34733a865
 status: test
-description: Tests that multiple queries are combined correctly.
+description: Tests that when a condition splits a query into multiple queries, they are combined correctly.
 author: kleimkuhler
 date: 2025-11-06
 logsource:

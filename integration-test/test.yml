@@ -8,10 +8,10 @@ conversions:
       - name: github_audit_test-1.json
         queries:
           - "{service_namespace=`cicd-o11y`} | logfmt | action=`repo.destroy`"
-  - name: Test Multiple Queries
-    description: Tests that multiple queries are combined correctly
+  - name: Test Combine Queries
+    description: Tests that an OR condition splits a query into multiple queries
     outputs:
-      - name: multiple-queries.json
+      - name: combine_queries-condition-split.json
         queries:
           - "{name=`test-datasource`} | json | username=`user1`"
           - "{name=`test-datasource`} | json | username=`user2`"
@@ -24,10 +24,10 @@ integrations:
           - refId: A0
             model:
               expr: sum(count_over_time({service_namespace=`cicd-o11y`} | logfmt | action=`repo.destroy`[$__auto]))
-  - name: Test Multiple Queries
-    description: Tests that multiple queries are combined correctly
+  - name: Test Combine Queries
+    description: Tests that split queries are combined correctly
     outputs:
-      - name: multiple_queries
+      - name: combine_queries_condition-split
         alerting_rules:
           - refId: A0
             model:
