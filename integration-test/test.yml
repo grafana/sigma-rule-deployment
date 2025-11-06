@@ -8,10 +8,10 @@ conversions:
       - name: github_audit_test-1.json
         queries:
           - "{service_namespace=`cicd-o11y`} | logfmt | action=`repo.destroy`"
-  - name: Test Query Splitting
+  - name: Test Multiple Queries
     description: Tests that multiple queries are combined correctly
     outputs:
-      - name: multiple_queries.json
+      - name: multiple-queries.json
         queries:
           - "{name=`test-datasource`} | json | username=`user1`"
           - "{name=`test-datasource`} | json | username=`user2`"
@@ -24,7 +24,7 @@ integrations:
           - refId: A0
             model:
               expr: sum(count_over_time({service_namespace=`cicd-o11y`} | logfmt | action=`repo.destroy`[$__auto]))
-  - name: Test Query Splitting
+  - name: Test Multiple Queries
     description: Tests that multiple queries are combined correctly
     outputs:
       - name: multiple_queries
