@@ -5,10 +5,10 @@ on:
     branches:
       - main
     paths:
-      - "actions/Dockerfile"
+      - "./Dockerfile"
   pull_request:
     paths:
-      - "actions/Dockerfile"
+      - "./Dockerfile"
   workflow_dispatch:
 
 permissions: {}
@@ -28,6 +28,6 @@ jobs:
       - name: Run Hadolint
         uses: hadolint/hadolint-action@2332a7b74a6de0dda2e2221d575162eba76ba5e5 # v3.3.0
         with:
-          dockerfile: actions/Dockerfile
+          dockerfile: ./Dockerfile
           failure-threshold: warning
           format: tty
