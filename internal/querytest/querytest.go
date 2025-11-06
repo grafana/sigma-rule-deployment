@@ -230,4 +230,3 @@ func (qt *QueryTester) TestQueries(queries map[string]string, config, defaultCon
 
 	return queryResults, nil
 }
-

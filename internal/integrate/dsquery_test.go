@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jarcoal/httpmock"
 	"github.com/grafana/sigma-rule-deployment/shared"
+	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

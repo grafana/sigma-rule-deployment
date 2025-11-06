@@ -212,7 +212,7 @@ func newTestDatasourceQuery() *testDatasourceQuery {
 	}
 }
 
-func (t *testDatasourceQuery) GetDatasource(dsName, baseURL, apiKey string, timeout time.Duration) (*integrate.GrafanaDatasource, error) {
+func (t *testDatasourceQuery) GetDatasource(dsName, _ string, _ string, _ time.Duration) (*integrate.GrafanaDatasource, error) {
 	t.datasourceLog = append(t.datasourceLog, dsName)
 	return &integrate.GrafanaDatasource{
 		UID:  dsName,
@@ -221,7 +221,7 @@ func (t *testDatasourceQuery) GetDatasource(dsName, baseURL, apiKey string, time
 	}, nil
 }
 
-func (t *testDatasourceQuery) ExecuteQuery(query, dsName, baseURL, apiKey, refID, from, to, customModel string, timeout time.Duration) ([]byte, error) {
+func (t *testDatasourceQuery) ExecuteQuery(query, dsName, _ string, _ string, _ string, _ string, _ string, _ string, _ time.Duration) ([]byte, error) {
 	t.queryLog = append(t.queryLog, query)
 	t.datasourceLog = append(t.datasourceLog, dsName)
 

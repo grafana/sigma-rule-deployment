@@ -37,4 +37,3 @@ func GenerateExploreLink(
 
 	return fmt.Sprintf("%s/explore?schemaVersion=1&panes=%s&orgId=%d", grafanaInstance, url.QueryEscape(pane), orgID), nil
 }
-

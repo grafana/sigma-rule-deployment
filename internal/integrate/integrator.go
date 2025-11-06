@@ -533,6 +533,7 @@ func writeRuleToFile(rule *model.ProvisionedAlertRule, outputFile string, pretty
 }
 
 // getC is a helper function that returns the first non-empty value
+//
 // Deprecated: Use shared.GetConfigValue instead
 func getC(config, defaultConf, def string) string {
 	return shared.GetConfigValue(config, defaultConf, def)

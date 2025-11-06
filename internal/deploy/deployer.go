@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"os"
@@ -620,10 +619,4 @@ func getAlertUIDFromFilename(filename string) string {
 		return ""
 	}
 	return matches[1]
-}
-
-func tryToClose(fileName string, c io.Closer) {
-	if err := c.Close(); err != nil {
-		log.Printf("Couldn't close '%s' properly: %v", fileName, err)
-	}
 }

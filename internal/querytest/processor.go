@@ -67,4 +67,3 @@ func ProcessFrame(frame model.Frame, result *model.QueryTestResult, showSampleVa
 	}
 	return nil
 }
-

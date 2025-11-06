@@ -1781,33 +1781,6 @@ func TestIntegratorWithQueryTesting(t *testing.T) {
 	}
 }
 
-// Enhanced testDatasourceQuery to support error injection for testing continue_on_query_testing_errors
-type testDatasourceQueryWithErrors struct {
-	*testDatasourceQuery
-	mockErrors map[string]error
-}
-
-func newTestDatasourceQueryWithErrors() *testDatasourceQueryWithErrors {
-	return &testDatasourceQueryWithErrors{
-		testDatasourceQuery: newTestDatasourceQuery(),
-		mockErrors:          make(map[string]error),
-	}
-}
-
-func (t *testDatasourceQueryWithErrors) AddMockError(query string, err error) {
-	t.mockErrors[query] = err
-}
-
-func (t *testDatasourceQueryWithErrors) ExecuteQuery(query, dsName, baseURL, apiKey, refID, from, to, customModel string, timeout time.Duration) ([]byte, error) {
-	// Check if we should return an error for this query
-	if err, exists := t.mockErrors[query]; exists {
-		return nil, err
-	}
-
-	// Otherwise use the parent implementation
-	return t.testDatasourceQuery.ExecuteQuery(query, dsName, baseURL, apiKey, refID, from, to, customModel, timeout)
-}
-
 func TestIntegratorWithExploreLinkGeneration(t *testing.T) {
 	tests := []struct {
 		name                 string
@@ -1995,7 +1968,6 @@ func TestIntegratorWithExploreLinkGeneration(t *testing.T) {
 			// Run integration
 			err = integrator.Run()
 			assert.NoError(t, err)
-
 		})
 	}
 }

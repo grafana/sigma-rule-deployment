@@ -162,4 +162,3 @@ func CheckStatusCode(resp *http.Response, expectedCodes ...int) error {
 	body, _ := ReadResponseBody(resp)
 	return fmt.Errorf("unexpected status code %d: %s, Response: %s", resp.StatusCode, resp.Status, string(body))
 }
-
