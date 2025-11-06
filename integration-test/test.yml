@@ -11,7 +11,7 @@ conversions:
   - name: Test Combine Queries
     description: Tests that an OR condition splits a query into multiple queries
     outputs:
-      - name: combine_queries-condition-split.json
+      - name: combine_queries_condition-split.json
         queries:
           - "{name=`test-datasource`} | json | username=`user1`"
           - "{name=`test-datasource`} | json | username=`user2`"
