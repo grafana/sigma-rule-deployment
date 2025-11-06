@@ -18,9 +18,9 @@ conversions:
       - pipelines/test-1.yml
     rule_group: Every 1 Hour
     time_window: 1h
-  - name: oversized_query
+  - name: multiple_queries
     input:
-      - "rules/oversized*"
+      - "rules/multiple-queries.yml"
     backend_options:
       case_sensitive: true
     pipelines:
