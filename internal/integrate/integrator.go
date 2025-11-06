@@ -18,7 +18,6 @@ import (
 	"github.com/grafana/sigma-rule-deployment/internal/model"
 	"github.com/grafana/sigma-rule-deployment/shared"
 	"github.com/spaolacci/murmur3"
-	"gopkg.in/yaml.v3"
 )
 
 const TRUE = "true"
@@ -45,15 +44,10 @@ func (i *Integrator) LoadConfig() error {
 	}
 	fmt.Printf("Loading config from %s\n", configFile)
 
-	// Read the YAML config file
-	cfg, err := shared.ReadLocalFile(configFile)
+	// Read and parse the YAML config file
+	config, err := shared.LoadConfigFromFile(configFile)
 	if err != nil {
-		return fmt.Errorf("error reading config file: %v", err)
-	}
-	config := model.Configuration{}
-	err = yaml.Unmarshal([]byte(cfg), &config)
-	if err != nil {
-		return fmt.Errorf("error unmarshalling config file: %v", err)
+		return err
 	}
 	i.config = config
 	i.prettyPrint = strings.ToLower(os.Getenv("PRETTY_PRINT")) == TRUE

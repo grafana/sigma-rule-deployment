@@ -1,7 +1,6 @@
 package deploy
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -16,7 +15,6 @@ import (
 
 	"github.com/grafana/sigma-rule-deployment/internal/model"
 	"github.com/grafana/sigma-rule-deployment/shared"
-	"gopkg.in/yaml.v3"
 )
 
 // Regex to parse the alert UID from the filename
@@ -44,7 +42,7 @@ type deploymentConfig struct {
 
 type Deployer struct {
 	config         deploymentConfig
-	client         *http.Client
+	client         *shared.GrafanaClient
 	groupsToUpdate map[string]bool
 }
 
@@ -55,9 +53,12 @@ func NewDeployer() *Deployer {
 }
 
 func (d *Deployer) SetClient() {
-	d.client = &http.Client{
-		Timeout: d.config.timeout,
-	}
+	d.client = shared.NewGrafanaClient(
+		d.config.endpoint,
+		d.config.saToken,
+		"sigma-rule-deployment/deployer",
+		d.config.timeout,
+	)
 }
 
 func (d *Deployer) IsFreshDeploy() bool {
@@ -170,17 +171,10 @@ func (d *Deployer) LoadConfig(_ context.Context) error {
 	if configFile == "" {
 		return fmt.Errorf("Deployer config file is not set or empty")
 	}
-	configFile = filepath.Clean(configFile)
-
-	// Read the YAML config file
-	configFileContent, err := shared.ReadLocalFile(configFile)
+	// Read and parse the YAML config file
+	configYAML, err := shared.LoadConfigFromFile(configFile)
 	if err != nil {
-		return fmt.Errorf("error reading config file: %v", err)
-	}
-	configYAML := model.Configuration{}
-	err = yaml.Unmarshal([]byte(configFileContent), &configYAML)
-	if err != nil {
-		return fmt.Errorf("error unmarshalling config file: %v", err)
+		return err
 	}
 	d.config = deploymentConfig{
 		endpoint:        configYAML.DeployerConfig.GrafanaInstance,
@@ -339,18 +333,7 @@ func (d *Deployer) createAlert(ctx context.Context, content string, updateIfExis
 	d.groupsToUpdate[alert.RuleGroup] = true
 
 	// Prepare the request
-	url := fmt.Sprintf("%sapi/v1/provisioning/alert-rules", d.config.endpoint)
-
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer([]byte(content)))
-	if err != nil {
-		return "", false, err
-	}
-
-	req.Header.Add("Content-Type", "application/json")
-	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", d.config.saToken))
-	req.Header.Add("User-Agent", "sigma-rule-deployment/deployer")
-
-	res, err := d.client.Do(req)
+	res, err := d.client.PostRaw(ctx, "api/v1/provisioning/alert-rules", []byte(content))
 	if err != nil {
 		return "", false, err
 	}
@@ -358,7 +341,7 @@ func (d *Deployer) createAlert(ctx context.Context, content string, updateIfExis
 
 	// Check the response
 	resp := Response{}
-	if err := json.NewDecoder(res.Body).Decode(&resp); err != nil {
+	if err := shared.ReadJSONResponse(res, &resp); err != nil {
 		return "", false, err
 	}
 
@@ -427,17 +410,8 @@ func (d *Deployer) updateAlert(ctx context.Context, content string, createIfNotF
 	d.groupsToUpdate[alert.RuleGroup] = true
 
 	// Prepare the request
-	url := fmt.Sprintf("%sapi/v1/provisioning/alert-rules/%s", d.config.endpoint, alert.UID)
-
-	req, err := http.NewRequestWithContext(ctx, "PUT", url, bytes.NewBufferString(content))
-	if err != nil {
-		return "", false, err
-	}
-	req.Header.Add("Content-Type", "application/json")
-	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", d.config.saToken))
-	req.Header.Add("User-Agent", "sigma-rule-deployment/deployer")
-
-	res, err := d.client.Do(req)
+	path := fmt.Sprintf("api/v1/provisioning/alert-rules/%s", alert.UID)
+	res, err := d.client.PutRaw(ctx, path, []byte(content))
 	if err != nil {
 		return "", false, err
 	}
@@ -466,58 +440,41 @@ func (d *Deployer) updateAlert(ctx context.Context, content string, createIfNotF
 
 func (d *Deployer) updateAlertGroupInterval(ctx context.Context, folderUID string, group string, interval int64) error {
 	log.Printf("Checking alert group interval for %s/%s to %d", folderUID, group, interval)
-	url := fmt.Sprintf("%sapi/v1/provisioning/folder/%s/rule-groups/%s", d.config.endpoint, folderUID, group)
+	path := fmt.Sprintf("api/v1/provisioning/folder/%s/rule-groups/%s", folderUID, group)
 
 	// Get the current alert group content
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return err
-	}
-	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", d.config.saToken))
-
-	res, err := d.client.Do(req)
+	res, err := d.client.Get(ctx, path)
 	if err != nil {
 		return err
 	}
 	defer res.Body.Close()
 
 	// Check the response
-	if res.StatusCode != http.StatusOK {
+	if err := shared.CheckStatusCode(res, http.StatusOK); err != nil {
 		log.Printf("Can't find alert group. Status: %d", res.StatusCode)
-		return fmt.Errorf("error finding alert group %s/%s: returned status %s", folderUID, group, res.Status)
+		return fmt.Errorf("error finding alert group %s/%s: %w", folderUID, group, err)
 	}
 	resp := model.AlertRuleGroup{}
-	if err := json.NewDecoder(res.Body).Decode(&resp); err != nil {
+	if err := shared.ReadJSONResponse(res, &resp); err != nil {
 		return err
 	}
 
 	if resp.Interval != interval {
 		log.Printf("Updating alert group interval for %s/%s to %d", folderUID, group, interval)
 		resp.Interval = interval
-		content, err := json.Marshal(resp)
-		if err != nil {
-			log.Printf("Can't update alert group interval. Error: %s", err.Error())
-			return fmt.Errorf("error updating alert group interval %s/%s: returned error %s", folderUID, group, err.Error())
-		}
 
 		// Note the implicit race condition - if a rule is added to the group between these two requests,
 		// they will be overwritten by this request. There's nothing we can do about this; alerting
 		// would need to update their API to allow the interval to be updated independent of the alert rules
-		req, err := http.NewRequestWithContext(ctx, "PUT", url, bytes.NewBuffer(content))
+		updateRes, err := d.client.Put(ctx, path, resp)
 		if err != nil {
 			return err
 		}
-		req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", d.config.saToken))
-		req.Header.Add("Content-Type", "application/json")
-		res, err := d.client.Do(req)
-		if err != nil {
-			return err
-		}
-		defer res.Body.Close()
+		defer updateRes.Body.Close()
 
-		if res.StatusCode != http.StatusOK {
-			log.Printf("Can't update alert group interval. Status: %d", res.StatusCode)
-			return fmt.Errorf("error updating alert group interval %s/%s: returned status %s", folderUID, group, res.Status)
+		if err := shared.CheckStatusCode(updateRes, http.StatusOK); err != nil {
+			log.Printf("Can't update alert group interval. Status: %d", updateRes.StatusCode)
+			return fmt.Errorf("error updating alert group interval %s/%s: %w", folderUID, group, err)
 		}
 	}
 
@@ -526,16 +483,8 @@ func (d *Deployer) updateAlertGroupInterval(ctx context.Context, folderUID strin
 
 func (d *Deployer) deleteAlert(ctx context.Context, uid string) (string, error) {
 	// Prepare the request
-	url := fmt.Sprintf("%sapi/v1/provisioning/alert-rules/%s", d.config.endpoint, uid)
-
-	req, err := http.NewRequestWithContext(ctx, "DELETE", url, bytes.NewBuffer([]byte{}))
-	if err != nil {
-		return "", err
-	}
-	req.Header.Add("Content-Type", "application/json")
-	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", d.config.saToken))
-
-	res, err := d.client.Do(req)
+	path := fmt.Sprintf("api/v1/provisioning/alert-rules/%s", uid)
+	res, err := d.client.Delete(ctx, path)
 	if err != nil {
 		return "", err
 	}
@@ -571,29 +520,21 @@ func (d *Deployer) checkAlertsMatch(a, b model.Alert) bool {
 
 func (d *Deployer) getAlert(ctx context.Context, uid string) (model.Alert, error) {
 	// Prepare the request
-	url := fmt.Sprintf("%sapi/v1/provisioning/alert-rules/%s", d.config.endpoint, uid)
-
-	req, err := http.NewRequestWithContext(ctx, "GET", url, bytes.NewBuffer([]byte{}))
-	if err != nil {
-		return model.Alert{}, err
-	}
-	req.Header.Add("Content-Type", "application/json")
-	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", d.config.saToken))
-
-	res, err := d.client.Do(req)
+	path := fmt.Sprintf("api/v1/provisioning/alert-rules/%s", uid)
+	res, err := d.client.Get(ctx, path)
 	if err != nil {
 		return model.Alert{}, err
 	}
 	defer res.Body.Close()
 
 	// Check the response code
-	if res.StatusCode != http.StatusOK {
+	if err := shared.CheckStatusCode(res, http.StatusOK); err != nil {
 		log.Printf("Can't get alert. Status: %d", res.StatusCode)
-		return model.Alert{}, fmt.Errorf("error getting alert: returned status %s", res.Status)
+		return model.Alert{}, fmt.Errorf("error getting alert: %w", err)
 	}
 
 	alert := model.Alert{}
-	if err := json.NewDecoder(res.Body).Decode(&alert); err != nil {
+	if err := shared.ReadJSONResponse(res, &alert); err != nil {
 		return model.Alert{}, err
 	}
 
@@ -607,30 +548,21 @@ func (d *Deployer) listAlerts(ctx context.Context) ([]string, error) {
 
 	alertList := []string{}
 	// Prepare the request
-	url := fmt.Sprintf("%sapi/v1/provisioning/alert-rules", d.config.endpoint)
-
-	req, err := http.NewRequestWithContext(ctx, "GET", url, bytes.NewBuffer([]byte{}))
-	if err != nil {
-		return []string{}, err
-	}
-	req.Header.Add("Content-Type", "application/json")
-	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", d.config.saToken))
-
-	res, err := d.client.Do(req)
+	res, err := d.client.Get(ctx, "api/v1/provisioning/alert-rules")
 	if err != nil {
 		return []string{}, err
 	}
 	defer res.Body.Close()
 
 	// Check the response code
-	if res.StatusCode != http.StatusOK {
+	if err := shared.CheckStatusCode(res, http.StatusOK); err != nil {
 		log.Printf("Can't list alerts. Status: %d", res.StatusCode)
-		return []string{}, fmt.Errorf("error listing alert: returned status %s", res.Status)
+		return []string{}, fmt.Errorf("error listing alert: %w", err)
 	}
 
 	// Check the response body
 	alertsReturned := []model.Alert{}
-	if err := json.NewDecoder(res.Body).Decode(&alertsReturned); err != nil {
+	if err := shared.ReadJSONResponse(res, &alertsReturned); err != nil {
 		return []string{}, err
 	}
 

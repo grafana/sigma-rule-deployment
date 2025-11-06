@@ -1,10 +1,9 @@
 package integrate
 
 import (
-	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"time"
@@ -199,32 +198,22 @@ func (h *HTTPDatasourceQuery) ExecuteQuery(
 		return nil, err
 	}
 
-	dsQueryURL, err := url.JoinPath(baseURL, "api/ds/query")
+	// Create Grafana client for the request
+	client := shared.NewGrafanaClient(baseURL, apiKey, "sigma-rule-deployment/integrator", timeout)
+
+	// Use url.JoinPath to construct the path relative to baseURL
+	queryPath, err := url.JoinPath("api/ds/query")
 	if err != nil {
-		return nil, fmt.Errorf("failed to construct API URL: %v", err)
+		return nil, fmt.Errorf("failed to construct API path: %v", err)
 	}
 
-	req, err := http.NewRequest("POST", dsQueryURL, bytes.NewBuffer(jsonBody))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %v", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
-	req.Header.Set("User-Agent", "sigma-rule-deployment/integrator")
-
-	client := &http.Client{
-		Timeout: timeout,
-	}
-
-	resp, err := client.Do(req)
+	resp, err := client.PostRaw(context.Background(), queryPath, jsonBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute request: %v", err)
 	}
 	defer resp.Body.Close()
 
-	responseData, err := io.ReadAll(resp.Body)
+	responseData, err := shared.ReadResponseBody(resp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response body: %v", err)
 	}
@@ -257,52 +246,28 @@ func (h *HTTPDatasourceQuery) GetDatasource(
 func (h *HTTPDatasourceQuery) getDatasourceByUID(
 	uid, baseURL, apiKey string, timeout time.Duration,
 ) (*GrafanaDatasource, error) {
-	dsURL, err := url.JoinPath(baseURL, "api/datasources/uid", uid)
+	// Create Grafana client for the request
+	client := shared.NewGrafanaClient(baseURL, apiKey, "sigma-rule-deployment/integrator", timeout)
+
+	// Construct the path
+	path, err := url.JoinPath("api/datasources/uid", uid)
 	if err != nil {
-		return nil, fmt.Errorf("failed to construct API URL: %v", err)
+		return nil, fmt.Errorf("failed to construct API path: %v", err)
 	}
 
-	return h.getDatasourceRequest(dsURL, apiKey, timeout)
-}
-
-func (h *HTTPDatasourceQuery) getDatasourceRequest(
-	baseURL, apiKey string, timeout time.Duration,
-) (*GrafanaDatasource, error) {
-	req, err := http.NewRequest("GET", baseURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %v", err)
-	}
-
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "sigma-rule-deployment/integrator")
-
-	client := &http.Client{
-		Timeout: timeout,
-	}
-	resp, err := client.Do(req)
+	resp, err := client.Get(context.Background(), path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute request: %v", err)
 	}
 	defer resp.Body.Close()
 
-	responseData, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %v", err)
-	}
-
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusBadRequest {
+		responseData, _ := shared.ReadResponseBody(resp)
 		return nil, fmt.Errorf("HTTP error getting datasource: %s, Response: %s", resp.Status, string(responseData))
 	}
 
-	if len(responseData) == 0 {
-		return nil, fmt.Errorf("empty response from datasource")
-	}
-
 	var datasource GrafanaDatasource
-	err = json.Unmarshal(responseData, &datasource)
-	if err != nil {
+	if err := shared.ReadJSONResponse(resp, &datasource); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal response body: %v", err)
 	}
 
