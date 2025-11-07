@@ -31,10 +31,10 @@ integrations:
         alerting_rules:
           - refId: A0
             model:
-              expr: "sum(count_over_time({name=`test-datasource`} | json | username=`user1`"
+              expr: "sum(count_over_time({name=`test-datasource`} | json | username=`user1`[$__auto]))"
           - refId: A1
             model:
-              expr: "sum(count_over_time({name=`test-datasource`} | json | username=`user2`"
+              expr: "sum(count_over_time({name=`test-datasource`} | json | username=`user2`[$__auto]))"
           - refId: B
             model:
               type: math
