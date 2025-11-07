@@ -88,26 +88,45 @@ jobs:
             return pullRequest.head.ref;
           result-encoding: string
 
-      - name: Check whether to convert all rules
-        shell: bash
+      - name: Check whether to convert all rules and react
         id: convert_all
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
         env:
-          COMMENT_BODY: ${{ github.event.comment.body }}
           ALL_RULES: ${{ inputs.all_rules }}
-        run: |
-          if [ -z "$COMMENT_BODY" ]; then
-            echo "No comment body found"
-            echo "convert_all=$ALL_RULES" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          if [[ $COMMENT_BODY == "sigma"* ]]; then
-              if [[ $COMMENT_BODY == *"convert all"* ]]; then
-                  echo "convert_all=true" >> "$GITHUB_OUTPUT"
-              else
-                  echo "convert_all=$ALL_RULES" >> "$GITHUB_OUTPUT"
-              fi
-          fi
+        with:
+          script: |
+            const allRules = process.env.ALL_RULES === 'true';
+            let convertAll = allRules;
+            
+            // Check comment body if this is an issue_comment event
+            if (context.eventName === 'issue_comment' && context.payload.comment) {
+              const commentBody = context.payload.comment.body.toLowerCase();
+              
+              if (commentBody.includes('sigma') && commentBody.includes('convert all')) {
+                convertAll = true;
+                
+                // React with eyes emoji
+                try {
+                  await github.rest.reactions.createForIssueComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    comment_id: context.payload.comment.id,
+                    content: 'eyes'
+                  });
+                  console.log(`Reacted to comment ${context.payload.comment.id} with eyes emoji`);
+                } catch (error) {
+                  // If reaction already exists, that's okay - GitHub returns 200 in that case
+                  // But if it's a different error, log it
+                  if (error.status !== 200) {
+                    console.log(`Could not react to comment: ${error.message}`);
+                  }
+                }
+              }
+            }
+            
+            // Set output for convert_all
+            core.setOutput('convert_all', convertAll.toString());
+            console.log(`convert_all set to: ${convertAll}`);
 
       - name: Checkout repository
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
