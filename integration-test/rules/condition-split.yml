@@ -11,7 +11,9 @@ detection:
     username: user1
   selection2:
     username: user2
-  condition: selection1 or selection2
+  condition:
+    - selection1
+    - selection2
 falsepositives:
   - This is a test rule, there are no false positives.
 level: informational
