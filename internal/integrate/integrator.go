@@ -383,9 +383,16 @@ func (i *Integrator) ConvertToAlert(rule *model.ProvisionedAlertRule, queries []
 		}
 		queryData = append(queryData, alertQuery)
 	}
-	reducer := json.RawMessage(
-		fmt.Sprintf(`{"refId":"B","hide":false,"type":"reduce","datasource":{"uid":"__expr__","type":"__expr__"},"conditions":[{"type":"query","evaluator":{"params":[],"type":"gt"},"operator":{"type":"and"},"query":{"params":["B"]},"reducer":{"params":[],"type":"last"}}],"reducer":"last","expression":"%s"}`,
-			strings.Join(refIDs, "||")))
+	// Use Math expression to combine queries: ${A0}+${A1}+...
+	// For single query: ${A0}
+	// For multiple queries: ${A0}+${A1}+${A2}
+	mathExpression := make([]string, len(refIDs))
+	for i, refID := range refIDs {
+		mathExpression[i] = fmt.Sprintf("${%s}", refID)
+	}
+	combiner := json.RawMessage(
+		fmt.Sprintf(`{"refId":"B","hide":false,"type":"math","datasource":{"uid":"__expr__","type":"__expr__"},"expression":"%s"}`,
+			strings.Join(mathExpression, "+")))
 	threshold := json.RawMessage(`{"refId":"C","hide":false,"type":"threshold","datasource":{"uid":"__expr__","type":"__expr__"},"conditions":[{"type":"query","evaluator":{"params":[1],"type":"gt"},"operator":{"type":"and"},"query":{"params":["C"]},"reducer":{"params":[],"type":"last"}}],"expression":"B"}`)
 
 	queryData = append(queryData,
@@ -394,7 +401,7 @@ func (i *Integrator) ConvertToAlert(rule *model.ProvisionedAlertRule, queries []
 			DatasourceUID:     "__expr__",
 			RelativeTimeRange: timerange,
 			QueryType:         "",
-			Model:             reducer,
+			Model:             combiner,
 		},
 		model.AlertQuery{
 			RefID:             "C",

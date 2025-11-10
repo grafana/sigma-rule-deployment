@@ -17,19 +17,20 @@ import (
 
 func TestConvertToAlert(t *testing.T) {
 	tests := []struct {
-		name             string
-		queries          []string
-		rule             *model.ProvisionedAlertRule
-		titles           string
-		convConfig       model.ConversionConfig
-		integratorConfig model.IntegrationConfig
-		convObject       model.ConversionOutput
-		wantQueryText    string
-		wantDuration     model.Duration
-		wantUnchanged    bool
-		wantError        bool
-		wantLabels       map[string]string
-		wantAnnotations  map[string]string
+		name                   string
+		queries                []string
+		rule                   *model.ProvisionedAlertRule
+		titles                 string
+		convConfig             model.ConversionConfig
+		integratorConfig       model.IntegrationConfig
+		convObject             model.ConversionOutput
+		wantQueryText          string
+		wantDuration           model.Duration
+		wantUnchanged          bool
+		wantError              bool
+		wantLabels             map[string]string
+		wantAnnotations        map[string]string
+		wantCombinerExpression string
 	}{
 		{
 			name:    "valid new loki query",
@@ -95,6 +96,24 @@ func TestConvertToAlert(t *testing.T) {
 			wantError:    true,
 		},
 		{
+			name:    "multiple queries use math combiner",
+			queries: []string{"{job=`.+`} | json | test=`true`", "{job=`.+`} | json | test=`false`"},
+			titles:  "Multiple Query Test",
+			rule: &model.ProvisionedAlertRule{
+				UID: "multi-test",
+			},
+			convConfig: model.ConversionConfig{
+				Name:       "conv",
+				Target:     "loki",
+				DataSource: "test_ds",
+				RuleGroup:  "Every 5 Minutes",
+				TimeWindow: "5m",
+			},
+			wantQueryText:          "sum(count_over_time({job=`.+`} | json | test=`true`[$__auto]))",
+			wantDuration:           model.Duration(5 * time.Minute),
+			wantCombinerExpression: `"expression":"${A0}+${A1}"`,
+		},
+		{
 			name:    "skip unchanged queries",
 			queries: []string{`{job=".+"} | json | test="true"`},
 			titles:  "New Alert Rule Title", // This should be ignored
@@ -106,7 +125,7 @@ func TestConvertToAlert(t *testing.T) {
 						Model: json.RawMessage(`{"refId":"A0","datasource":{"type":"loki","uid":"nil"},"hide":false,"expr":"sum(count_over_time({job=\".+\"} | json | test=\"true\"[$__auto]))","queryType":"instant","editorMode":"code"}`),
 					},
 					{
-						Model: json.RawMessage(`{"refId":"B","hide":false,"type":"reduce","datasource":{"uid":"__expr__","type":"__expr__"},"conditions":[{"type":"query","evaluator":{"params":[],"type":"gt"},"operator":{"type":"and"},"query":{"params":["B"]},"reducer":{"params":[],"type":"last"}}],"reducer":"last","expression":"A0"}`),
+						Model: json.RawMessage(`{"refId":"B","hide":false,"type":"math","datasource":{"uid":"__expr__","type":"__expr__"},"expression":"${A0}"}`),
 					},
 					{
 						Model: json.RawMessage(`{"refId":"C","hide":false,"type":"threshold","datasource":{"uid":"__expr__","type":"__expr__"},"conditions":[{"type":"query","evaluator":{"params":[1],"type":"gt"},"operator":{"type":"and"},"query":{"params":["C"]},"reducer":{"params":[],"type":"last"}}],"expression":"B"}`),
@@ -272,6 +291,11 @@ func TestConvertToAlert(t *testing.T) {
 					assert.Equal(t, tt.convConfig.RuleGroup, tt.rule.RuleGroup)
 					assert.Equal(t, tt.convConfig.DataSource, tt.rule.Data[0].DatasourceUID)
 					assert.Equal(t, tt.titles, tt.rule.Title)
+
+					if tt.wantCombinerExpression != "" {
+						combinerModel := string(tt.rule.Data[2].Model)
+						assert.Contains(t, combinerModel, tt.wantCombinerExpression)
+					}
 
 					if tt.convConfig.Lookback != "" {
 						lookbackDuration, err := time.ParseDuration(tt.convConfig.Lookback)
