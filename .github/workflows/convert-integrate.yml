@@ -102,7 +102,7 @@ jobs:
             if (context.eventName === 'issue_comment' && context.payload.comment) {
               const commentBody = context.payload.comment.body.toLowerCase();
               
-              if (commentBody.includes('sigma') && commentBody.includes('convert all')) {
+              if (commentBody.startsWith('sigma') && commentBody.includes('convert all')) {
                 convertAll = true;
                 
                 // React with eyes emoji
@@ -115,11 +115,7 @@ jobs:
                   });
                   console.log(`Reacted to comment ${context.payload.comment.id} with eyes emoji`);
                 } catch (error) {
-                  // If reaction already exists, that's okay - GitHub returns 200 in that case
-                  // But if it's a different error, log it
-                  if (error.status !== 200) {
-                    console.log(`Could not react to comment: ${error.message}`);
-                  }
+                  console.log(`Could not react to comment: ${error.message}`);
                 }
               }
             }
