@@ -18,6 +18,15 @@ conversions:
       - pipelines/test-1.yml
     rule_group: Every 1 Hour
     time_window: 1h
+  - name: combine_queries
+    input:
+      - "rules/condition-split.yml"
+    backend_options:
+      case_sensitive: true
+    pipelines:
+      - pipelines/datasources/test-1.yml
+    rule_group: Every 1 Hour
+    time_window: 1h
 integration:
   folder_id: ae9ojcgwmy48wf # sigma-rule-deployment
   org_id: 1
