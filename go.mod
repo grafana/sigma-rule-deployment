@@ -1,13 +1,11 @@
 module github.com/grafana/sigma-rule-deployment
 
-go 1.25.0
-
-toolchain go1.25.3
+go 1.25.4
 
 require (
 	github.com/google/uuid v1.6.0
 	github.com/jarcoal/httpmock v1.4.1
-	github.com/prometheus/common v0.67.1
+	github.com/prometheus/common v0.67.2
 	github.com/spaolacci/murmur3 v1.1.0
 	github.com/stretchr/testify v1.11.1
 	gopkg.in/yaml.v3 v3.0.1

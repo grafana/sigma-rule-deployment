@@ -355,14 +355,14 @@ func (i *Integrator) SetOutputs() error {
 }
 
 func (i *Integrator) ConvertToAlert(rule *model.ProvisionedAlertRule, queries []string, titles string, config model.ConversionConfig, conversionFile string, conversionObject model.ConversionOutput) error {
-	datasource := getC(config.DataSource, i.config.ConversionDefaults.DataSource, "nil")
-	timewindow := getC(config.TimeWindow, i.config.ConversionDefaults.TimeWindow, "1m")
+	datasource := shared.GetConfigValue(config.DataSource, i.config.ConversionDefaults.DataSource, "nil")
+	timewindow := shared.GetConfigValue(config.TimeWindow, i.config.ConversionDefaults.TimeWindow, "1m")
 	duration, err := time.ParseDuration(timewindow)
 	if err != nil {
 		return fmt.Errorf("error parsing time window: %v", err)
 	}
 
-	lookback := getC(config.Lookback, i.config.ConversionDefaults.Lookback, "0s")
+	lookback := shared.GetConfigValue(config.Lookback, i.config.ConversionDefaults.Lookback, "0s")
 	lookbackDuration, err := time.ParseDuration(lookback)
 	if err != nil {
 		return fmt.Errorf("error parsing lookback: %v", err)
@@ -422,7 +422,7 @@ func (i *Integrator) ConvertToAlert(rule *model.ProvisionedAlertRule, queries []
 	// alerting rule metadata
 	rule.OrgID = i.config.IntegratorConfig.OrgID
 	rule.FolderUID = i.config.IntegratorConfig.FolderID
-	rule.RuleGroup = getC(config.RuleGroup, i.config.ConversionDefaults.RuleGroup, "Default")
+	rule.RuleGroup = shared.GetConfigValue(config.RuleGroup, i.config.ConversionDefaults.RuleGroup, "Default")
 	rule.NoDataState = model.OK
 	rule.ExecErrState = model.OkErrState
 	rule.Title = titles
@@ -441,7 +441,7 @@ func (i *Integrator) ConvertToAlert(rule *model.ProvisionedAlertRule, queries []
 	rule.Annotations["LogSourceUid"] = datasource
 
 	// LogSourceType annotation (target)
-	logSourceType := getC(config.Target, i.config.ConversionDefaults.Target, shared.Loki)
+	logSourceType := shared.GetConfigValue(config.Target, i.config.ConversionDefaults.Target, shared.Loki)
 	rule.Annotations["LogSourceType"] = logSourceType
 
 	// Path to associated conversion file
@@ -532,13 +532,6 @@ func writeRuleToFile(rule *model.ProvisionedAlertRule, outputFile string, pretty
 	return nil
 }
 
-// getC is a helper function that returns the first non-empty value
-//
-// Deprecated: Use shared.GetConfigValue instead
-func getC(config, defaultConf, def string) string {
-	return shared.GetConfigValue(config, defaultConf, def)
-}
-
 func summariseSigmaRules(rules []model.SigmaRule) (id uuid.UUID, title string, err error) {
 	if len(rules) == 0 {
 		return uuid.Nil, "", fmt.Errorf("no rules provided")
@@ -581,8 +574,8 @@ func getRuleUID(conversionName string, conversionID uuid.UUID) string {
 
 // createAlertQuery creates an AlertQuery based on the target data source and configuration
 func createAlertQuery(query string, refID string, datasource string, timerange model.RelativeTimeRange, config model.ConversionConfig, defaultConf model.ConversionConfig) (model.AlertQuery, error) {
-	datasourceType := getC(config.DataSourceType, defaultConf.DataSourceType, getC(config.Target, defaultConf.Target, shared.Loki))
-	customModel := getC(config.QueryModel, defaultConf.QueryModel, "")
+	datasourceType := shared.GetConfigValue(config.DataSourceType, defaultConf.DataSourceType, shared.GetConfigValue(config.Target, defaultConf.Target, shared.Loki))
+	customModel := shared.GetConfigValue(config.QueryModel, defaultConf.QueryModel, "")
 
 	// Modify query based on target data source
 	if datasourceType == shared.Loki {

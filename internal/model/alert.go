@@ -184,7 +184,7 @@ func (d *Duration) UnmarshalYAML(unmarshal func(any) error) error {
 		*d = Duration(time.Duration(value) * time.Second)
 		return nil
 	default:
-		return fmt.Errorf("invalid duration %v", value)
+		return fmt.Errorf("invalid duration %v", v)
 	}
 }
 
