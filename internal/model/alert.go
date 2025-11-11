@@ -1,4 +1,4 @@
-package definitions
+package model
 
 import (
 	"encoding/json"
@@ -35,7 +35,7 @@ type ProvisionedAlertRule struct {
 	// example: A
 	Condition string `json:"condition"`
 	// required: true
-	// example: [{"refId":"A","queryType":"","relativeTimeRange":{"from":0,"to":0},"datasourceUid":"__expr__","model":{"conditions":[{"evaluator":{"params":[0,0],"type":"gt"},"operator":{"type":"and"},"query":{"params":[]},"reducer":{"params":[],"type":"avg"},"type":"query"}],"datasource":{"type":"__expr__","uid":"__expr__"},"expression":"1 == 1","hide":false,"intervalMs":1000,"maxDataPoints":43200,"refId":"A","type":"math"}}]
+	// example: [{"refId":"A","queryType":"","relativeTimeRange":{"from":0,"to":0},"datasourceUid":"__expr__","model":{"conditions":[{"evaluator":{"params":[0,0],"type":"gt"},"operator":{"type":"and"},"query":{"params":[]},"reducer":{"params":[],"type":"avg"},"type":"query"}],"datasource":{"type":"__expr__","uid":"__expr__"},"expression":"1 == 1","hide":false,"intervalMs":1000,"maxDataPoints":43200,"refId":"A","type":"math"}}]
 	Data []AlertQuery `json:"data"`
 	// readonly: true
 	Updated time.Time `json:"updated,omitempty"`
@@ -57,7 +57,7 @@ type ProvisionedAlertRule struct {
 	Provenance Provenance `json:"provenance,omitempty"`
 	// example: false
 	IsPaused bool `json:"isPaused"`
-	// example: {"receiver":"email","group_by":["alertname","grafana_folder","cluster"],"group_wait":"30s","group_interval":"1m","repeat_interval":"4d","mute_time_intervals":["Weekends","Holidays"]}
+	// example: {"receiver":"email","group_by":["alertname","grafana_folder","cluster"],"group_wait":"30s","group_interval":"1m","repeat_interval":"4d","mute_time_intervals":["Weekends","Holidays"]}
 	NotificationSettings *AlertRuleNotificationSettings `json:"notification_settings"`
 	// example: {"metric":"grafana_alerts_ratio", "from":"A"} //nolint:gofumpt
 	Record *Record `json:"record"`

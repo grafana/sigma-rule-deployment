@@ -1,4 +1,4 @@
-package main
+package deploy
 
 import (
 	"context"
@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/grafana/sigma-rule-deployment/internal/model"
+	"github.com/grafana/sigma-rule-deployment/shared"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -174,7 +176,7 @@ func TestUpdateAlert(t *testing.T) {
 			endpoint: server.URL + "/",
 			saToken:  "my-test-token",
 		},
-		client:         server.Client(),
+		client:         shared.NewGrafanaClient(server.URL+"/", "my-test-token", "sigma-rule-deployment/deployer", defaultRequestTimeout),
 		groupsToUpdate: map[string]bool{},
 	}
 
@@ -276,7 +278,7 @@ func TestCreateAlert(t *testing.T) {
 			endpoint: server.URL + "/",
 			saToken:  "my-test-token",
 		},
-		client:         server.Client(),
+		client:         shared.NewGrafanaClient(server.URL+"/", "my-test-token", "sigma-rule-deployment/deployer", defaultRequestTimeout),
 		groupsToUpdate: map[string]bool{},
 	}
 
@@ -435,7 +437,7 @@ func TestDeleteAlert(t *testing.T) {
 			endpoint: server.URL + "/",
 			saToken:  "my-test-token",
 		},
-		client: server.Client(),
+		client: shared.NewGrafanaClient(server.URL+"/", "my-test-token", "sigma-rule-deployment/deployer", defaultRequestTimeout),
 	}
 
 	uid, err := d.deleteAlert(ctx, "abcd123")
@@ -510,7 +512,7 @@ func TestListAlerts(t *testing.T) {
 			folderUID: "efgh456",
 			orgID:     23,
 		},
-		client: server.Client(),
+		client: shared.NewGrafanaClient(server.URL+"/", "my-test-token", "sigma-rule-deployment/deployer", defaultRequestTimeout),
 	}
 
 	retrievedAlerts, err := d.listAlerts(ctx)
@@ -538,9 +540,9 @@ func TestLoadConfig(t *testing.T) {
 	err := d.LoadConfig(ctx)
 	assert.NoError(t, err)
 	if d.config.freshDeploy {
-		err = d.configFreshDeployment(ctx)
+		err = d.ConfigFreshDeployment(ctx)
 	} else {
-		err = d.configNormalMode()
+		err = d.ConfigNormalMode()
 	}
 	assert.NoError(t, err)
 
@@ -583,9 +585,7 @@ func TestFakeAlertFilename(t *testing.T) {
 		config: deploymentConfig{
 			alertPath: "deployments",
 		},
-		client: &http.Client{
-			Timeout: defaultRequestTimeout,
-		},
+		client: shared.NewGrafanaClient("", "", "sigma-rule-deployment/deployer", defaultRequestTimeout),
 	}
 	assert.Equal(t, "abcd123", getAlertUIDFromFilename(d.fakeAlertFilename("abcd123")))
 }
@@ -597,9 +597,7 @@ func TestListAlertsInDeploymentFolder(t *testing.T) {
 			folderUID: "abcdef123",
 			orgID:     1,
 		},
-		client: &http.Client{
-			Timeout: defaultRequestTimeout,
-		},
+		client: shared.NewGrafanaClient("", "", "sigma-rule-deployment/deployer", defaultRequestTimeout),
 	}
 	alerts, err := d.listAlertsInDeploymentFolder()
 	assert.NoError(t, err)
@@ -713,7 +711,7 @@ func TestUpdateAlertGroupInterval(t *testing.T) {
 					body, err := io.ReadAll(r.Body)
 					assert.NoError(t, err)
 
-					var updatedGroup AlertRuleGroup
+					var updatedGroup model.AlertRuleGroup
 					err = json.Unmarshal(body, &updatedGroup)
 					assert.NoError(t, err)
 
@@ -735,7 +733,7 @@ func TestUpdateAlertGroupInterval(t *testing.T) {
 					endpoint: server.URL + "/",
 					saToken:  "my-test-token",
 				},
-				client: server.Client(),
+				client: shared.NewGrafanaClient(server.URL+"/", "my-test-token", "sigma-rule-deployment/deployer", defaultRequestTimeout),
 			}
 
 			// Call the function being tested
