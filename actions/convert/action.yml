@@ -173,11 +173,19 @@ runs:
 
     - name: Comment Conversions
       id: comment-conversions
-      uses: grafana/sigma-rule-deployment/actions/comment-sigma-results@07429f6c2458289fcce6d6fcabc94d3ac8c7b8de
-      with:
-        pull_request_number: ${{ github.event.number || github.event.issue.number }}
-        changed_files: ${{ steps.generate-comment-data.outputs.changed_files }}
-        deleted_files: ${{ steps.generate-comment-data.outputs.deleted_files }}
-        comment_title: 'Sigma Rule Conversions'
-        comment_identifier: 'Sigma Rule Conversions'
-        github_token: ${{ github.token }}
+      shell: bash
+      env:
+        PULL_REQUEST_NUMBER: ${{ github.event.number || github.event.issue.number }}
+        CHANGED_FILES: ${{ steps.generate-comment-data.outputs.changed_files }}
+        DELETED_FILES: ${{ steps.generate-comment-data.outputs.deleted_files }}
+        COMMENT_TITLE: 'Sigma Rule Conversions'
+        COMMENT_IDENTIFIER: 'Sigma Rule Conversions'
+        GITHUB_TOKEN: ${{ github.token }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        GITHUB_ACTIONS: 'true'
+      run: |
+        cd "${{ github.workspace }}/scripts/comment-sigma-results"
+        if [ ! -d "node_modules" ]; then
+          npm ci
+        fi
+        node comment.js

@@ -1,0 +1,19 @@
+{
+  "name": "comment-sigma-results",
+  "version": "1.0.0",
+  "description": "Script to post Sigma rule conversion/integration results as PR comments",
+  "type": "module",
+  "main": "comment.js",
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "start": "node comment.js"
+  },
+  "dependencies": {
+    "@actions/core": "^1.11.1",
+    "@actions/github": "^6.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
+

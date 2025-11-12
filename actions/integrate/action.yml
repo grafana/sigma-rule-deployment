@@ -188,92 +188,22 @@ runs:
         echo changed_files=${CHANGED_FILES//\\n/} >> $GITHUB_OUTPUT
         echo deleted_files=${DELETED_FILES//\\n/} >> $GITHUB_OUTPUT
 
-    - name: Build Test Results Table
-      id: build-test-results
-      uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
-      env:
-        TEST_RESULTS: ${{ steps.set-output.outputs.test_query_results }}
-      with:
-        result-encoding: string
-        script: |
-          const fs = require('fs');
-          const path = require('path');
-          
-          let testResults = {};
-          try {
-            testResults = JSON.parse(process.env.TEST_RESULTS);
-          } catch (e) {
-            console.log("No test results found");
-          }
-
-          // Function to extract title from JSON file
-          // Note: some of this code is copied from the comment-sigma-results action.yml
-          // If you change this code, please update the comment-sigma-results action.yml as well.
-          function extractTitle(filePath) {
-            try {
-              if (!fs.existsSync(filePath)) {
-                console.log(`File does not exist: ${filePath}`);
-                return path.basename(filePath);
-              }
-
-              const content = fs.readFileSync(filePath, 'utf8');
-              
-              // Try JSON parsing first
-              try {
-                const jsonData = JSON.parse(content);
-
-                // Check for title at top level (for alert rule files)
-                if (jsonData.title && typeof jsonData.title === 'string') {
-                  return jsonData.title.trim();
-                }
-
-                // Check for title in rules array (for conversion output files)
-                if (jsonData.rules && Array.isArray(jsonData.rules) && jsonData.rules.length > 0) {
-                  const firstRule = jsonData.rules[0];
-                  if (firstRule && firstRule.title && typeof firstRule.title === 'string') {
-                    return firstRule.title.trim();
-                  }
-                }
-              } catch (jsonError) {
-                // JSON parsing failed, will try regex fallback
-                console.log(`JSON parsing failed for ${filePath}: ${jsonError.message}, trying regex fallback`);
-              }
-
-              // Fallback to regex if JSON parsing didn't find title
-              const titleMatch = content.match(/"title":\s*"([^"]+)"/);
-              if (titleMatch && titleMatch[1]) {
-                return titleMatch[1].trim();
-              }
-
-              // Final fallback to filename if no title found
-              console.log(`No title found in ${filePath} using JSON or regex`);
-              return path.basename(filePath);
-            } catch (error) {
-              console.log(`Error reading file ${filePath}: ${error.message}`);
-              // Fallback to filename if file can't be read
-              return path.basename(filePath);
-            }
-          }
-
-          let resultTable = `### Test Results\n\n| File name | Link | Result count | Errors |\n| --- | --- | --- | --- |\n`;
-
-          for (const [key, value] of Object.entries(testResults)) {
-            const title = extractTitle(key);
-            for (const result of value) {
-              resultTable += `| ${title} | [See in Explore](${result.link}) | ${result.stats.count} | ${result.stats.errors.length} |\n`;
-            }
-          }
-
-          return resultTable;
-
     - name: Comment Integrations
       id: comment-integrations
-      uses: grafana/sigma-rule-deployment/actions/comment-sigma-results@07429f6c2458289fcce6d6fcabc94d3ac8c7b8de
-      with:
-        pull_request_number: ${{ github.event.number || github.event.issue.number }}
-        changed_files: ${{ steps.generate-comment-data.outputs.changed_files }}
-        deleted_files: ${{ steps.generate-comment-data.outputs.deleted_files }}
-        comment_title: 'Sigma Rule Integrations'
-        comment_identifier: 'Sigma Rule Integrations'
-        additional_content: ${{ steps.build-test-results.outputs.result }}
-        github_token: ${{ github.token }}
+      shell: bash
+      env:
+        PULL_REQUEST_NUMBER: ${{ github.event.number || github.event.issue.number }}
+        CHANGED_FILES: ${{ steps.generate-comment-data.outputs.changed_files }}
+        DELETED_FILES: ${{ steps.generate-comment-data.outputs.deleted_files }}
+        COMMENT_TITLE: 'Sigma Rule Integrations'
+        COMMENT_IDENTIFIER: 'Sigma Rule Integrations'
+        TEST_RESULTS: ${{ steps.set-output.outputs.test_query_results }}
+        GITHUB_TOKEN: ${{ github.token }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        GITHUB_ACTIONS: 'true'
+      run: |
+        cd "${{ github.workspace }}/scripts/comment-sigma-results"
+        if [ ! -d "node_modules" ]; then
+          npm ci
+        fi
+        node comment.js
