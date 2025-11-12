@@ -203,8 +203,6 @@ jobs:
 
           # wait for the required PR checks to complete
           if gh pr checks "integration-test-main-update-${GITHUB_PR_NUMBER}" --watch; then
-            gh pr edit "integration-test-main-update-${GITHUB_PR_NUMBER}" \
-            --remove-reviewer "grafana/security-operations"
             gh pr ready "integration-test-main-update-${GITHUB_PR_NUMBER}"
             gh pr merge "integration-test-main-update-${GITHUB_PR_NUMBER}" --auto --squash
             sleep 5 # wait for the merge to complete
