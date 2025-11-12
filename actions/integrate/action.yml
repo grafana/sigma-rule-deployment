@@ -268,7 +268,7 @@ runs:
 
     - name: Comment Integrations
       id: comment-integrations
-      uses: grafana/sigma-rule-deployment/actions/comment-sigma-results@5634d68e67cdc28522dec72a231d3127a21b4abe
+      uses: grafana/sigma-rule-deployment/actions/comment-sigma-results@07429f6c2458289fcce6d6fcabc94d3ac8c7b8de
       with:
         pull_request_number: ${{ github.event.number || github.event.issue.number }}
         changed_files: ${{ steps.generate-comment-data.outputs.changed_files }}
