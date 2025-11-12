@@ -1,4 +1,4 @@
-name: "Build Consolidated Image"
+name: "Build & Integration Test Image"
 
 on:
   push:
@@ -152,7 +152,13 @@ jobs:
           RESULT=$(gh pr list --json id,title -H "integration-test-pr-${GITHUB_PR_NUMBER}" | jq -r '. | length')
 
           if [ "$RESULT" -eq 0 ]; then
-            gh pr create --title "Integration Test PR ${GITHUB_PR_NUMBER}" --body "This PR to test Sigma Rule Deployment App from Sigma Rule Deployment Integration Test App for grafana/sigma-rule-deployment#${GITHUB_PR_NUMBER}" --head "integration-test-pr-${GITHUB_PR_NUMBER}" --base main
+            gh pr create \
+              --title "Integration Test PR ${GITHUB_PR_NUMBER}" \
+              --body "This PR to test Sigma Rule Deployment App from Sigma Rule Deployment Integration Test App for grafana/sigma-rule-deployment#${GITHUB_PR_NUMBER}" \
+              --head "integration-test-pr-${GITHUB_PR_NUMBER}" \
+              --base main \
+              --draft \
+              --label "automated"
           fi
       - name: Update integration main branch to latest and send test comment
         working-directory: ./sigma-rule-deployment-integration-test
@@ -186,11 +192,18 @@ jobs:
           git commit -m "update main branch to relevant hash" --allow-empty
 
           git push origin "integration-test-main-update-${GITHUB_PR_NUMBER}" --force
-          gh pr create --title "Integration Test Main Update ${GITHUB_PR_NUMBER}" --body "This PR updates the main branch to the relevant hash for grafana/sigma-rule-deployment#${GITHUB_PR_NUMBER}" --head "integration-test-main-update-${GITHUB_PR_NUMBER}" --base main
+          gh pr create \
+            --title "Integration Test Main Update ${GITHUB_PR_NUMBER}" \
+            --body "This PR updates the main branch to the relevant hash for grafana/sigma-rule-deployment#${GITHUB_PR_NUMBER}" \
+            --head "integration-test-main-update-${GITHUB_PR_NUMBER}" \
+            --base main \
+            --label "automated" \
+            --draft
           sleep 10 # wait for the PR checks to start...
 
           # wait for the required PR checks to complete
           if gh pr checks "integration-test-main-update-${GITHUB_PR_NUMBER}" --watch; then
+            gh pr ready "integration-test-main-update-${GITHUB_PR_NUMBER}"
             gh pr merge "integration-test-main-update-${GITHUB_PR_NUMBER}" --auto --squash
             sleep 5 # wait for the merge to complete
             gh pr comment "integration-test-pr-${GITHUB_PR_NUMBER}" --body "sigma convert all"
