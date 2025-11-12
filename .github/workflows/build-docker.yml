@@ -157,7 +157,8 @@ jobs:
               --body "This PR to test Sigma Rule Deployment App from Sigma Rule Deployment Integration Test App for grafana/sigma-rule-deployment#${GITHUB_PR_NUMBER}" \
               --head "integration-test-pr-${GITHUB_PR_NUMBER}" \
               --base main \
-              --reviewer "@me"
+              --draft \
+              --label "automated"
           fi
       - name: Update integration main branch to latest and send test comment
         working-directory: ./sigma-rule-deployment-integration-test
@@ -196,7 +197,9 @@ jobs:
             --body "This PR updates the main branch to the relevant hash for grafana/sigma-rule-deployment#${GITHUB_PR_NUMBER}" \
             --head "integration-test-main-update-${GITHUB_PR_NUMBER}" \
             --base main \
-            --reviewer "@me"
+            --label "automated"
+          gh pr edit "integration-test-main-update-${GITHUB_PR_NUMBER}" \
+            --remove-reviewer "grafana/security-operations"
           sleep 10 # wait for the PR checks to start...
 
           # wait for the required PR checks to complete
