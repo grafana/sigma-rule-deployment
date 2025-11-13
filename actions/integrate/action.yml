@@ -202,7 +202,8 @@ runs:
         GITHUB_REPOSITORY: ${{ github.repository }}
         GITHUB_ACTIONS: 'true'
       run: |
-        cd "$GITHUB_ACTION_PATH/scripts/comment-sigma-results"
+        REPO_ROOT="$(cd "$GITHUB_ACTION_PATH/../.." && pwd)"
+        cd "$REPO_ROOT/scripts/comment-sigma-results"
         if [ ! -d "node_modules" ]; then
           npm ci
         fi
