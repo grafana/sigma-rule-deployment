@@ -184,7 +184,7 @@ runs:
         GITHUB_REPOSITORY: ${{ github.repository }}
         GITHUB_ACTIONS: 'true'
       run: |
-        cd "${{ github.workspace }}/scripts/comment-sigma-results"
+        cd "./scripts/comment-sigma-results"
         if [ ! -d "node_modules" ]; then
           npm ci
         fi
