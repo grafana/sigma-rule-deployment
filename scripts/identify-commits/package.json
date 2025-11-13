@@ -1,0 +1,19 @@
+{
+  "name": "identify-commits",
+  "version": "1.0.0",
+  "description": "Script to identify relevant commits in a pull request for change detection",
+  "type": "module",
+  "main": "identify-commits.js",
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "start": "node identify-commits.js"
+  },
+  "dependencies": {
+    "@actions/core": "^1.11.1",
+    "@actions/github": "^6.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
+

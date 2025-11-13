@@ -52,45 +52,20 @@ runs:
     - name: Identify relevant commits
       if: ${{ inputs.changed_files_from_base == 'false' }}
       id: commits
-      uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+      shell: bash
       env:
+        PULL_REQUEST_NUMBER: ${{ github.event.number || github.event.issue.number }}
         ACTIONS_USERNAME: ${{ inputs.actions_username }}
-      with:
-        script: |
-          const iterator = await github.paginate(github.rest.pulls.listCommits.endpoint.merge({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            pull_number: context.issue.number,
-            per_page: 1
-          }));
-          let previous_commit = "";
-          let first_commit = "";
-          let last_commit = "";
-          let base_commit = "";
-          for (const remote_commit of iterator) {
-            if (previous_commit === "" && remote_commit.parents.length > 0) {
-              previous_commit = remote_commit.parents[0].sha;
-              base_commit = remote_commit.parents[0].sha;
-              first_commit = remote_commit.sha;
-            }
-            if (remote_commit.commit.author.name === process.env.ACTIONS_USERNAME) {
-              previous_commit = remote_commit.sha;
-              last_commit = remote_commit.sha;
-            }
-          }
-          console.log(`Base commit or base ref: ${base_commit}`);
-          console.log(`Last commit or base ref: ${previous_commit}`);
-          console.log(`PR First Commit: ${first_commit}`);
-          console.log(`PR Last Commit by automation: ${last_commit}`);
-          console.log(`PR Previous Ref: ${last_commit || previous_commit}`);
-
-          core.setOutput('base-commit', base_commit);
-          core.setOutput('previous-commit', previous_commit);
-          core.setOutput('first-commit', first_commit);
-          core.setOutput('last-commit', last_commit);
-          core.setOutput('previous-ref', last_commit || previous_commit);
-
-          return {};
+        GITHUB_TOKEN: ${{ github.token }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        GITHUB_ACTIONS: 'true'
+      run: |
+        REPO_ROOT="$(cd "$GITHUB_ACTION_PATH/../.." && pwd)"
+        cd "$REPO_ROOT/scripts/identify-commits"
+        if [ ! -d "node_modules" ]; then
+          npm ci
+        fi
+        node identify-commits.js
 
     - name: Get Changed Files
       id: changed-files
