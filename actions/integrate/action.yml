@@ -149,34 +149,34 @@ runs:
       run: |
         mv github-output $GITHUB_OUTPUT
 
-    - name: Generate Comment Data
-      id: generate-comment-data
-      shell: bash
-      env:
-        BASE_REF: ${{ steps.commits.outputs.base-commit }}
-        DEPLOYMENT_PATH: ${{ steps.config-paths.outputs.deployment_path }}
-      run: |
-        git add "$DEPLOYMENT_PATH"
-        CHANGED_FILES=$(git diff "$BASE_REF" --name-only --diff-filter=ACMR -- "$DEPLOYMENT_PATH")
-        DELETED_FILES=$(git diff "$BASE_REF" --name-only --diff-filter=D -- "$DEPLOYMENT_PATH")
-
-        echo changed_files=${CHANGED_FILES//\\n/} >> $GITHUB_OUTPUT
-        echo deleted_files=${DELETED_FILES//\\n/} >> $GITHUB_OUTPUT
-
     - name: Comment Integrations
       id: comment-integrations
       shell: bash
       env:
         PULL_REQUEST_NUMBER: ${{ github.event.number || github.event.issue.number }}
-        CHANGED_FILES: ${{ steps.generate-comment-data.outputs.changed_files }}
-        DELETED_FILES: ${{ steps.generate-comment-data.outputs.deleted_files }}
+        BASE_REF: ${{ steps.commits.outputs.base-commit }}
+        DEPLOYMENT_PATH: ${{ steps.config-paths.outputs.deployment_path }}
+        TEST_RESULTS: ${{ steps.set-output.outputs.test_query_results }}
         COMMENT_TITLE: 'Sigma Rule Integrations'
         COMMENT_IDENTIFIER: 'Sigma Rule Integrations'
-        TEST_RESULTS: ${{ steps.set-output.outputs.test_query_results }}
         GITHUB_TOKEN: ${{ github.token }}
         GITHUB_REPOSITORY: ${{ github.repository }}
         GITHUB_ACTIONS: 'true'
       run: |
+        # Generate comment data (git operations)
+        git add "$DEPLOYMENT_PATH"
+        CHANGED_FILES=$(git diff "$BASE_REF" --name-only --diff-filter=ACMR -- "$DEPLOYMENT_PATH")
+        DELETED_FILES=$(git diff "$BASE_REF" --name-only --diff-filter=D -- "$DEPLOYMENT_PATH")
+        
+        # Normalize: replace newlines with spaces
+        CHANGED_FILES=${CHANGED_FILES//$'\n'/ }
+        DELETED_FILES=${DELETED_FILES//$'\n'/ }
+        
+        # Export for comment.js
+        export CHANGED_FILES
+        export DELETED_FILES
+        
+        # Run comment script
         REPO_ROOT="$(cd "$GITHUB_ACTION_PATH/../.." && pwd)"
         cd "$REPO_ROOT/scripts/comment-sigma-results"
         if [ ! -d "node_modules" ]; then
