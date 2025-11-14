@@ -70,17 +70,8 @@ runs:
       env:
         ACTION_REF: ${{ github.action_ref }}
       run: |
-        # Check if the action_ref is a tag (starts with v followed by numbers/dots)
-        if [[ "$ACTION_REF" =~ ^v[0-9]+(\.[0-9]+)*(\.[0-9]+)?$ ]]; then
-          echo "image_ref=$ACTION_REF" >> $GITHUB_OUTPUT
-          echo "Using tag: $ACTION_REF"
-        elif [[ "$ACTION_REF" == "latest" ]]; then
-          echo "image_ref=latest" >> $GITHUB_OUTPUT
-          echo "Using latest tag"
-        else
-          echo "image_ref=sha-$ACTION_REF" >> $GITHUB_OUTPUT
-          echo "Using SHA: sha-$ACTION_REF"
-        fi
+        REPO_ROOT="$(cd "$GITHUB_ACTION_PATH/../.." && pwd)"
+        "$REPO_ROOT/scripts/determine-image-ref/determine-image-ref.sh" "$ACTION_REF"
     - name: Identify relevant commits
       if: ${{ inputs.changed_files_from_base == 'false' }}
       id: commits
