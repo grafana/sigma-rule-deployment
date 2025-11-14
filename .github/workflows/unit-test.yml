@@ -169,7 +169,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@1e60f620b9541d2be6a9c9f7d0a99a5ad73d9c38 # v4.0.4
+        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v4.0.4
         with:
           node-version: "18"
 
