@@ -154,3 +154,42 @@ jobs:
       - name: Run unit tests
         run: |
           go test -v ./internal/querytest/...
+
+  scripts-test:
+    name: Run unit tests for scripts
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v4.0.4
+        with:
+          node-version: "25"
+          package-manager-cache: false
+
+      - name: Install dependencies for comment-sigma-results
+        run: |
+          cd scripts/comment-sigma-results
+          npm ci
+
+      - name: Run unit tests for comment-sigma-results
+        run: |
+          cd scripts/comment-sigma-results
+          npm test
+
+      - name: Install dependencies for identify-commits
+        run: |
+          cd scripts/identify-commits
+          npm ci
+
+      - name: Run unit tests for identify-commits
+        run: |
+          cd scripts/identify-commits
+          npm test

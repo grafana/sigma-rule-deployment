@@ -70,66 +70,32 @@ runs:
       env:
         ACTION_REF: ${{ github.action_ref }}
       run: |
-        # Check if the action_ref is a tag (starts with v followed by numbers/dots)
-        if [[ "$ACTION_REF" =~ ^v[0-9]+(\.[0-9]+)*(\.[0-9]+)?$ ]]; then
-          echo "image_ref=$ACTION_REF" >> $GITHUB_OUTPUT
-          echo "Using tag: $ACTION_REF"
-        elif [[ "$ACTION_REF" == "latest" ]]; then
-          echo "image_ref=latest" >> $GITHUB_OUTPUT
-          echo "Using latest tag"
-        else
-          echo "image_ref=sha-$ACTION_REF" >> $GITHUB_OUTPUT
-          echo "Using SHA: sha-$ACTION_REF"
-        fi
+        REPO_ROOT="$(cd "$GITHUB_ACTION_PATH/../.." && pwd)"
+        "$REPO_ROOT/scripts/determine-image-ref/determine-image-ref.sh" "$ACTION_REF"
     - name: Identify relevant commits
       if: ${{ inputs.changed_files_from_base == 'false' }}
       id: commits
-      uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+      shell: bash
       env:
+        PULL_REQUEST_NUMBER: ${{ github.event.number || github.event.issue.number }}
         ACTIONS_USERNAME: ${{ inputs.actions_username }}
-      with:
-        script: |
-          const iterator = await github.paginate(github.rest.pulls.listCommits.endpoint.merge({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            pull_number: context.issue.number,
-            per_page: 1
-          }));
-          let previous_commit = "";
-          let first_commit = "";
-          let last_commit = "";
-          let base_commit = "";
-          for (const remote_commit of iterator) {
-            if (previous_commit === "" && remote_commit.parents.length > 0) {
-              previous_commit = remote_commit.parents[0].sha;
-              base_commit = remote_commit.parents[0].sha;
-              first_commit = remote_commit.sha;
-            }
-            if (remote_commit.commit.author.name === process.env.ACTIONS_USERNAME) {
-              previous_commit = remote_commit.sha;
-              last_commit = remote_commit.sha;
-            }
-          }
-          console.log(`Last commit or base ref: ${previous_commit}`);
-          console.log(`PR First Commit: ${first_commit}`);
-          console.log(`PR Last Commit by automation: ${last_commit}`);
-          console.log(`PR Previous Ref: ${last_commit || previous_commit}`);
-          console.log(`PR Base Ref: ${base_commit}`);
-
-          core.setOutput('previous-commit', previous_commit);
-          core.setOutput('first-commit', first_commit);
-          core.setOutput('last-commit', last_commit);
-          core.setOutput('previous-ref', last_commit || previous_commit);
-          core.setOutput('base-ref', base_commit);
-
-          return {};
+        GITHUB_TOKEN: ${{ github.token }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        GITHUB_ACTIONS: 'true'
+      run: |
+        REPO_ROOT="$(cd "$GITHUB_ACTION_PATH/../.." && pwd)"
+        cd "$REPO_ROOT/scripts/identify-commits"
+        if [ ! -d "node_modules" ]; then
+          npm ci
+        fi
+        node identify-commits.js
     - name: Calculate Change Files
       id: changed-files
       shell: bash
       env:
         CONVERSION_PATH: ${{ steps.config-paths.outputs.conversion_path }}
         PREVIOUS_REF: ${{ steps.commits.outputs.previous-ref }}
-        BASE_REF: ${{ steps.commits.outputs.base-ref }}
+        BASE_REF: ${{ steps.commits.outputs.base-commit }}
       run: |
         git fetch origin
         echo "Using CONVERSION_PATH: $CONVERSION_PATH"
@@ -174,106 +140,37 @@ runs:
       run: |
         mv github-output $GITHUB_OUTPUT
 
-    - name: Generate Comment Data
-      id: generate-comment-data
+    - name: Comment Integrations
+      id: comment-integrations
       shell: bash
       env:
-        BASE_REF: ${{ steps.commits.outputs.base-ref }}
+        PULL_REQUEST_NUMBER: ${{ github.event.number || github.event.issue.number }}
+        BASE_REF: ${{ steps.commits.outputs.base-commit }}
         DEPLOYMENT_PATH: ${{ steps.config-paths.outputs.deployment_path }}
+        TEST_RESULTS: ${{ steps.set-output.outputs.test_query_results }}
+        COMMENT_TITLE: 'Sigma Rule Integrations'
+        COMMENT_IDENTIFIER: 'Sigma Rule Integrations'
+        GITHUB_TOKEN: ${{ github.token }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        GITHUB_ACTIONS: 'true'
       run: |
+        # Generate comment data (git operations)
         git add "$DEPLOYMENT_PATH"
         CHANGED_FILES=$(git diff "$BASE_REF" --name-only --diff-filter=ACMR -- "$DEPLOYMENT_PATH")
         DELETED_FILES=$(git diff "$BASE_REF" --name-only --diff-filter=D -- "$DEPLOYMENT_PATH")
-
-        echo changed_files=${CHANGED_FILES//\\n/} >> $GITHUB_OUTPUT
-        echo deleted_files=${DELETED_FILES//\\n/} >> $GITHUB_OUTPUT
-
-    - name: Build Test Results Table
-      id: build-test-results
-      uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
-      env:
-        TEST_RESULTS: ${{ steps.set-output.outputs.test_query_results }}
-      with:
-        result-encoding: string
-        script: |
-          const fs = require('fs');
-          const path = require('path');
-          
-          let testResults = {};
-          try {
-            testResults = JSON.parse(process.env.TEST_RESULTS);
-          } catch (e) {
-            console.log("No test results found");
-          }
-
-          // Function to extract title from JSON file
-          // Note: some of this code is copied from the comment-sigma-results action.yml
-          // If you change this code, please update the comment-sigma-results action.yml as well.
-          function extractTitle(filePath) {
-            try {
-              if (!fs.existsSync(filePath)) {
-                console.log(`File does not exist: ${filePath}`);
-                return path.basename(filePath);
-              }
-
-              const content = fs.readFileSync(filePath, 'utf8');
-              
-              // Try JSON parsing first
-              try {
-                const jsonData = JSON.parse(content);
-
-                // Check for title at top level (for alert rule files)
-                if (jsonData.title && typeof jsonData.title === 'string') {
-                  return jsonData.title.trim();
-                }
-
-                // Check for title in rules array (for conversion output files)
-                if (jsonData.rules && Array.isArray(jsonData.rules) && jsonData.rules.length > 0) {
-                  const firstRule = jsonData.rules[0];
-                  if (firstRule && firstRule.title && typeof firstRule.title === 'string') {
-                    return firstRule.title.trim();
-                  }
-                }
-              } catch (jsonError) {
-                // JSON parsing failed, will try regex fallback
-                console.log(`JSON parsing failed for ${filePath}: ${jsonError.message}, trying regex fallback`);
-              }
-
-              // Fallback to regex if JSON parsing didn't find title
-              const titleMatch = content.match(/"title":\s*"([^"]+)"/);
-              if (titleMatch && titleMatch[1]) {
-                return titleMatch[1].trim();
-              }
-
-              // Final fallback to filename if no title found
-              console.log(`No title found in ${filePath} using JSON or regex`);
-              return path.basename(filePath);
-            } catch (error) {
-              console.log(`Error reading file ${filePath}: ${error.message}`);
-              // Fallback to filename if file can't be read
-              return path.basename(filePath);
-            }
-          }
-
-          let resultTable = `### Test Results\n\n| File name | Link | Result count | Errors |\n| --- | --- | --- | --- |\n`;
-
-          for (const [key, value] of Object.entries(testResults)) {
-            const title = extractTitle(key);
-            for (const result of value) {
-              resultTable += `| ${title} | [See in Explore](${result.link}) | ${result.stats.count} | ${result.stats.errors.length} |\n`;
-            }
-          }
-
-          return resultTable;
-
-    - name: Comment Integrations
-      id: comment-integrations
-      uses: grafana/sigma-rule-deployment/actions/comment-sigma-results@07429f6c2458289fcce6d6fcabc94d3ac8c7b8de
-      with:
-        pull_request_number: ${{ github.event.number || github.event.issue.number }}
-        changed_files: ${{ steps.generate-comment-data.outputs.changed_files }}
-        deleted_files: ${{ steps.generate-comment-data.outputs.deleted_files }}
-        comment_title: 'Sigma Rule Integrations'
-        comment_identifier: 'Sigma Rule Integrations'
-        additional_content: ${{ steps.build-test-results.outputs.result }}
-        github_token: ${{ github.token }}
+        
+        # Normalize: replace newlines with spaces
+        CHANGED_FILES=${CHANGED_FILES//$'\n'/ }
+        DELETED_FILES=${DELETED_FILES//$'\n'/ }
+        
+        # Export for comment.js
+        export CHANGED_FILES
+        export DELETED_FILES
+        
+        # Run comment script
+        REPO_ROOT="$(cd "$GITHUB_ACTION_PATH/../.." && pwd)"
+        cd "$REPO_ROOT/scripts/comment-sigma-results"
+        if [ ! -d "node_modules" ]; then
+          npm ci
+        fi
+        node comment.js
