@@ -14,7 +14,7 @@ COPY shared/ ./shared/
 # Build the unified sigma-deployer binary
 RUN go build -ldflags="-s -w" -o /build/sigma-deployer ./cmd/sigma-deployer
 
-FROM python:3.10-alpine@sha256:63f6d26c66126481336273c8d34a2017729843ac3b2de2897c428f27e066f1be
+FROM python:3.12-alpine@sha256:d82291d418d5c47f267708393e40599ae836f2260b0519dd38670e9d281657f5
 
 WORKDIR /app
 
