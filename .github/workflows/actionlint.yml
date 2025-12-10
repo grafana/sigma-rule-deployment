@@ -21,12 +21,12 @@ jobs:
       contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           persist-credentials: false
 
       - name: Run actionlint
-        uses: raven-actions/actionlint@3a24062651993d40fed1019b58ac6fbdfbf276cc # v2.0.1
+        uses: raven-actions/actionlint@591b1dfdbabb809cef4c22b7b93f37cd994d9368 # v2.0.2
         with:
           files: ".github/workflows/*.yml,.github/workflows/*.yaml"
           fail-on-error: true
