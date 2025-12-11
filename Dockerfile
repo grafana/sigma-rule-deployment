@@ -25,7 +25,7 @@ COPY --from=builder /build/sigma-deployer /usr/local/bin/sigma-deployer
 COPY ./actions/convert ./actions/convert
 
 WORKDIR /app/actions/convert
-RUN apk add --no-cache bash~=5.2 && \
+RUN apk add --no-cache bash~=5.3 && \
     python -m pip install --no-cache-dir --upgrade pip~=25.3.0 && \
     pip install --no-cache-dir uv~=0.9.0
 
