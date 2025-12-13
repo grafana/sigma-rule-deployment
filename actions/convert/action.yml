@@ -151,7 +151,7 @@ runs:
         export DELETED_FILES
         
         # Run comment script
-        REPO_ROOT="$(cd "$GITHUB_ACTION_PATH/../.." && pwd)"
+        REPO_ROOT="$GITHUB_WORKSPACE"
         cd "$REPO_ROOT/scripts/comment-sigma-results"
         if [ ! -d "node_modules" ]; then
           npm ci
