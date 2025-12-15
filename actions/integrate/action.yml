@@ -153,6 +153,7 @@ runs:
         GITHUB_TOKEN: ${{ github.token }}
         GITHUB_REPOSITORY: ${{ github.repository }}
         GITHUB_ACTIONS: 'true'
+        RULE_DIRECTORY_PATH: ${{ github.workspace }}
       run: |
         # Generate comment data (git operations)
         git add "$DEPLOYMENT_PATH"
@@ -168,8 +169,8 @@ runs:
         export DELETED_FILES
         
 
-        echo "this is previous working directory: $PWD"
-        RULE_DIRECTORY_PATH=$PWD
+        echo "this is previous working directory: $RULE_DIRECTORY_PATH"
+        # RULE_DIRECTORY_PATH=$PWD
         # Run comment script
         REPO_ROOT="$(cd "$GITHUB_ACTION_PATH/../.." && pwd)"
         cd "$REPO_ROOT/scripts/comment-sigma-results"
