@@ -173,7 +173,5 @@ runs:
         if [ ! -d "node_modules" ]; then
           npm ci
         fi
-        cd "$REPO_ROOT"
-        echo "this is my current directory: $REPO_ROOT"
-        echo "these are the contents of the current directory: $(ls -la $REPO_ROOT)"
-        node "scripts/comment-sigma-results/comment.js"
+
+        node comment.js

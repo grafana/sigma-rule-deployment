@@ -156,5 +156,5 @@ runs:
         if [ ! -d "node_modules" ]; then
           npm ci
         fi
-        cd "$REPO_ROOT"
-        node "scripts/comment-sigma-results/comment.js"
+
+        node comment.js
