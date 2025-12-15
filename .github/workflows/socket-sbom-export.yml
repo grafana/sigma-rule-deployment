@@ -28,7 +28,7 @@ jobs:
         uses: grafana/shared-workflows/actions/socket-export-sbom@aaa9916466b048d34e1b3639421d5d699e7d38ba #https://github.com/grafana/shared-workflows/pull/1603
         with:
           socket_api_token: ${{ fromJSON(steps.vault-secrets.outputs.secrets).SOCKET_API_TOKEN }}
-          output_file: ${{ inputs.output_file }}
+          output_file: sbom.json
 
       - name: Upload SBOM artifact
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
