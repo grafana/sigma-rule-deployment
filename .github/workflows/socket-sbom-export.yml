@@ -1,12 +1,8 @@
 name: Get Repo SBOM from Socket API
 
 on:
-  workflow_dispatch:
-    inputs:
-      output_file:
-        description: "Output file path for the SBOM"
-        required: false
-        default: "spdx.json"
+  pull_request:
+    types: opened
 
 jobs:
   export-sbom:
