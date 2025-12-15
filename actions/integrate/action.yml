@@ -167,9 +167,13 @@ runs:
         export CHANGED_FILES
         export DELETED_FILES
         
+
+        echo "this is previous working directory: $PWD"
         # Run comment script
         REPO_ROOT="$(cd "$GITHUB_ACTION_PATH/../.." && pwd)"
         cd "$REPO_ROOT/scripts/comment-sigma-results"
+        echo "this is my current directory: $REPO_ROOT/scripts/comment-sigma-results"
+        echo "this is action path: $GITHUB_ACTION_PATH"
         if [ ! -d "node_modules" ]; then
           npm ci
         fi
