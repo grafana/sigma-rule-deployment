@@ -24,7 +24,7 @@ jobs:
 
       - name: Export SBOM from Socket
         id: export-sbom
-        uses: grafana/shared-workflows/actions/socket-export-sbom@fb5e72155222bb553a0b546b6c1d739654158f09 #https://github.com/grafana/shared-workflows/pull/1603
+        uses: grafana/shared-workflows/actions/socket-export-sbom@1b9cbbda953554560bff6601003b55adc9d002c6 #https://github.com/grafana/shared-workflows/pull/1603
         with:
           socket_api_token: ${{ fromJSON(steps.vault-secrets.outputs.secrets).SOCKET_API_TOKEN }}
           output_file: sbom.json
