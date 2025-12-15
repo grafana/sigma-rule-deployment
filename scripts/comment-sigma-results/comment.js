@@ -24,7 +24,7 @@ import fs from 'fs';
 import path from 'path';
 
 // Get the root of the repository - this is used to resolve the absolute path to the file when the scrupt runs from a different repo
-const repoRoot = process.env.GITHUB_ACTION_PATH || process.cwd();
+const repoRoot = process.env.RULE_DIRECTORY_PATH || process.cwd();
 
 /**
  * Extract title from JSON file

@@ -169,6 +169,7 @@ runs:
         
 
         echo "this is previous working directory: $PWD"
+        RULE_DIRECTORY_PATH=$PWD
         # Run comment script
         REPO_ROOT="$(cd "$GITHUB_ACTION_PATH/../.." && pwd)"
         cd "$REPO_ROOT/scripts/comment-sigma-results"
