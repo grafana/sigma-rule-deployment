@@ -23,7 +23,7 @@ import * as github from '@actions/github';
 import fs from 'fs';
 import path from 'path';
 
-// Get the root of the repository - this is used to resolve the absolute path to the file when the scrupt runs from a different repo
+// Get the root of the repository - this is used to resolve the absolute path to the file when the scripts runs from a different repo
 const repoRoot = process.env.RULE_DIRECTORY_PATH || process.cwd();
 
 /**
