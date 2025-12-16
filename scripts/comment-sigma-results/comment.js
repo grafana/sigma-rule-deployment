@@ -23,17 +23,26 @@ import * as github from '@actions/github';
 import fs from 'fs';
 import path from 'path';
 
+// Get the root of the repository - this is used to resolve the absolute path to the file when the scripts runs from a different repo
+const repoRoot = process.env.RULE_DIRECTORY_PATH || process.cwd();
+
 /**
  * Extract title from JSON file
  */
+
+
 function extractTitle(filePath) {
   try {
-    if (!fs.existsSync(filePath)) {
-      console.log(`File does not exist: ${filePath}`);
+    const absolutePath = path.isAbsolute(filePath)
+      ? filePath
+      : path.join(repoRoot, filePath);
+
+    if (!fs.existsSync(absolutePath)) {
+      console.log(`File does not exist: ${absolutePath}`);
       return path.basename(filePath);
     }
 
-    const content = fs.readFileSync(filePath, 'utf8');
+    const content = fs.readFileSync(absolutePath, 'utf8');
     
     // Try JSON parsing first
     try {

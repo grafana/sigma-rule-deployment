@@ -153,6 +153,7 @@ runs:
         GITHUB_TOKEN: ${{ github.token }}
         GITHUB_REPOSITORY: ${{ github.repository }}
         GITHUB_ACTIONS: 'true'
+        RULE_DIRECTORY_PATH: ${{ github.workspace }}
       run: |
         # Generate comment data (git operations)
         git add "$DEPLOYMENT_PATH"
@@ -173,4 +174,5 @@ runs:
         if [ ! -d "node_modules" ]; then
           npm ci
         fi
+
         node comment.js
