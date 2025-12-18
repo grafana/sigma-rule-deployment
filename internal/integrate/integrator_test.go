@@ -230,6 +230,7 @@ func TestConvertToAlert(t *testing.T) {
 			convObject: model.ConversionOutput{
 				Rules: []model.SigmaRule{
 					{
+						Title:     "A non-title case title",
 						Level:     "high",
 						Logsource: model.SigmaLogsource{Product: "okta", Service: "okta"},
 						Author:    "John Doe",
@@ -250,7 +251,9 @@ func TestConvertToAlert(t *testing.T) {
 					"Service": "{{.Logsource.Service}}",
 				},
 				TemplateAnnotations: map[string]string{
-					"Author": "{{.Author}}",
+					"Author":      "{{.Author}}",
+					"summary":     "{{title .Title }}",
+					"runbook_url": "https://my.runbook.url/{{ replaceAll .Title ` ` `_` }}",
 				},
 			},
 			wantQueryText: "sum(count_over_time({job=`.+`} | json | test=`true`[$__auto]))",
@@ -269,6 +272,8 @@ func TestConvertToAlert(t *testing.T) {
 				"Lookback":       "0s",
 				"Query":          "{job=`.+`} | json | test=`true`",
 				"TimeWindow":     "5m",
+				"summary":        "A Non-Title Case Title",
+				"runbook_url":    "https://my.runbook.url/A_non-title_case_title",
 			},
 		},
 	}

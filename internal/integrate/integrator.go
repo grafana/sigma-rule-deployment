@@ -16,9 +16,58 @@ import (
 	"github.com/grafana/sigma-rule-deployment/internal/model"
 	"github.com/grafana/sigma-rule-deployment/shared"
 	"github.com/spaolacci/murmur3"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 const TRUE = "true"
+
+var FUNC_MAP = template.FuncMap{
+	// Case conversion
+	"toUpper": strings.ToUpper,
+	"toLower": strings.ToLower,
+	"title":   cases.Title(language.AmericanEnglish).String, // use as strings.Title is deprecated
+
+	// Trimming
+	"trim":       strings.Trim,
+	"trimSpace":  strings.TrimSpace,
+	"trimPrefix": strings.TrimPrefix,
+	"trimSuffix": strings.TrimSuffix,
+	"trimLeft":   strings.TrimLeft,
+	"trimRight":  strings.TrimRight,
+
+	// Prefix/Suffix checking
+	"hasPrefix":   strings.HasPrefix,
+	"hasSuffix":   strings.HasSuffix,
+	"contains":    strings.Contains,
+	"containsAny": strings.ContainsAny,
+
+	// Replacement
+	"replace":    strings.Replace,
+	"replaceAll": strings.ReplaceAll,
+
+	// Splitting and joining
+	"split":       strings.Split,
+	"splitAfter":  strings.SplitAfter,
+	"splitAfterN": strings.SplitAfterN,
+	"splitN":      strings.SplitN,
+	"join":        strings.Join,
+	"fields":      strings.Fields,
+
+	// Searching
+	"index":        strings.Index,
+	"lastIndex":    strings.LastIndex,
+	"indexAny":     strings.IndexAny,
+	"lastIndexAny": strings.LastIndexAny,
+	"count":        strings.Count,
+
+	// Repeating
+	"repeat": strings.Repeat,
+
+	// Comparison
+	"compare":   strings.Compare,
+	"equalFold": strings.EqualFold,
+}
 
 type Integrator struct {
 	config      model.Configuration
@@ -456,7 +505,7 @@ func (i *Integrator) ConvertToAlert(rule *model.ProvisionedAlertRule, queries []
 
 	if i.config.IntegratorConfig.TemplateAnnotations != nil {
 		for key, value := range i.config.IntegratorConfig.TemplateAnnotations {
-			tmpl, err := template.New("annotation_" + key).Parse(value)
+			tmpl, err := template.New("annotation_" + key).Funcs(FUNC_MAP).Parse(value)
 			if err != nil {
 				return fmt.Errorf("error parsing template %s: %v", key, err)
 			}
