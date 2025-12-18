@@ -22,7 +22,7 @@ import (
 
 const TRUE = "true"
 
-var FUNC_MAP = template.FuncMap{
+var FuncMap = template.FuncMap{
 	// Case conversion
 	"toUpper": strings.ToUpper,
 	"toLower": strings.ToLower,
@@ -505,7 +505,7 @@ func (i *Integrator) ConvertToAlert(rule *model.ProvisionedAlertRule, queries []
 
 	if i.config.IntegratorConfig.TemplateAnnotations != nil {
 		for key, value := range i.config.IntegratorConfig.TemplateAnnotations {
-			tmpl, err := template.New("annotation_" + key).Funcs(FUNC_MAP).Parse(value)
+			tmpl, err := template.New("annotation_" + key).Funcs(FuncMap).Parse(value)
 			if err != nil {
 				return fmt.Errorf("error parsing template %s: %v", key, err)
 			}
