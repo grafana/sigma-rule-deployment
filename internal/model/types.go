@@ -47,9 +47,11 @@ type ConversionOutput struct {
 
 // Stats represents statistics from query testing
 type Stats struct {
-	Count  int               `json:"count"`
-	Fields map[string]string `json:"fields"`
-	Errors []string          `json:"errors"`
+	Count          int               `json:"count"`
+	ExecutionTime  int               `json:"executionTime"`
+	BytesProcessed int               `json:"bytesProcessed"`
+	Fields         map[string]string `json:"fields"`
+	Errors         []string          `json:"errors"`
 }
 
 // QueryTestResult represents the result of testing a query
@@ -62,6 +64,13 @@ type QueryTestResult struct {
 // Frame represents a single frame from a Grafana datasource query response
 type Frame struct {
 	Schema struct {
+		Meta struct {
+			Stats []struct {
+				Value       float64 `json:"value"`
+				DisplayName string  `json:"displayName"`
+				Unit        string  `json:"unit"`
+			} `json:"stats"`
+		} `json:"meta"`
 		Fields []struct {
 			Name string `json:"name"`
 			Type string `json:"type"`

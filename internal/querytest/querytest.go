@@ -105,11 +105,24 @@ func (qt *QueryTester) Run() error {
 		if len(queryResults) > 0 {
 			fmt.Printf("Query testing completed successfully for file %s\n", inputFile)
 			if len(queryResults) == 1 {
-				fmt.Printf("Query returned results: %d\n", queryResults[0].Stats.Count)
+				result := queryResults[0]
+				fmt.Printf("Query returned results: %d\n", result.Stats.Count)
+				if result.Stats.ExecutionTime > 0 {
+					fmt.Printf("Execution time: %d ms\n", result.Stats.ExecutionTime)
+				}
+				if result.Stats.BytesProcessed > 0 {
+					fmt.Printf("Bytes processed: %d\n", result.Stats.BytesProcessed)
+				}
 			} else {
 				fmt.Printf("Queries returned results:\n")
 				for i, result := range queryResults {
 					fmt.Printf("Query %d: %d\n", i, result.Stats.Count)
+					if result.Stats.ExecutionTime > 0 {
+						fmt.Printf("  Execution time: %d ms\n", result.Stats.ExecutionTime)
+					}
+					if result.Stats.BytesProcessed > 0 {
+						fmt.Printf("  Bytes processed: %d\n", result.Stats.BytesProcessed)
+					}
 				}
 			}
 		} else if err == nil {
@@ -193,8 +206,8 @@ func (qt *QueryTester) TestQueries(queries map[string]string, config, defaultCon
 			Datasource: datasource,
 			Link:       exploreLink,
 			Stats: model.Stats{
-				Fields: make(map[string]string),
-				Errors: make([]string, 0),
+				Fields:         make(map[string]string),
+				Errors:         make([]string, 0),
 			},
 		}
 
@@ -233,6 +246,17 @@ func (qt *QueryTester) TestQueries(queries map[string]string, config, defaultCon
 
 // ProcessFrame processes a single frame from the query response and updates the result stats
 func ProcessFrame(frame model.Frame, result *model.QueryTestResult, showSampleValues, showLogLines bool) error {
+	// Get metrics from frame metadata (Stats are nested within Schema.Meta)
+	for _, stat := range frame.Schema.Meta.Stats {
+		switch stat.DisplayName {
+		case "Summary: total bytes processed":
+			result.Stats.BytesProcessed = int(stat.Value)
+		case "Summary: exec time":
+			// Convert seconds to milliseconds for ExecutionTime
+			result.Stats.ExecutionTime = int(stat.Value * 1000)
+		}
+	}
+
 	// Map field names to their indices
 	fieldIndices := make(map[string]int)
 	for i, field := range frame.Schema.Fields {
