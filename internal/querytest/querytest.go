@@ -206,8 +206,8 @@ func (qt *QueryTester) TestQueries(queries map[string]string, config, defaultCon
 			Datasource: datasource,
 			Link:       exploreLink,
 			Stats: model.Stats{
-				Fields:         make(map[string]string),
-				Errors:         make([]string, 0),
+				Fields: make(map[string]string),
+				Errors: make([]string, 0),
 			},
 		}
 
