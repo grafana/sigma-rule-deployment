@@ -45,11 +45,17 @@ type ConversionOutput struct {
 	OutputFile     string      `json:"output_file"`
 }
 
+// MetricValue represents a value with its unit
+type MetricValue struct {
+	Value float64 `json:"value"`
+	Unit  string  `json:"unit"`
+}
+
 // Stats represents statistics from query testing
 type Stats struct {
 	Count          int               `json:"count"`
-	ExecutionTime  int               `json:"executionTime"`
-	BytesProcessed int               `json:"bytesProcessed"`
+	ExecutionTime  MetricValue       `json:"executionTime"`
+	BytesProcessed MetricValue       `json:"bytesProcessed"`
 	Fields         map[string]string `json:"fields"`
 	Errors         []string          `json:"errors"`
 }

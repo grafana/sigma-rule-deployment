@@ -107,21 +107,21 @@ func (qt *QueryTester) Run() error {
 			if len(queryResults) == 1 {
 				result := queryResults[0]
 				fmt.Printf("Query returned results: %d\n", result.Stats.Count)
-				if result.Stats.ExecutionTime > 0 {
-					fmt.Printf("Execution time: %d ms\n", result.Stats.ExecutionTime)
+				if result.Stats.ExecutionTime.Value > 0 {
+					fmt.Printf("Execution time: %g %s\n", result.Stats.ExecutionTime.Value, result.Stats.ExecutionTime.Unit)
 				}
-				if result.Stats.BytesProcessed > 0 {
-					fmt.Printf("Bytes processed: %d\n", result.Stats.BytesProcessed)
+				if result.Stats.BytesProcessed.Value > 0 {
+					fmt.Printf("Bytes processed: %g %s\n", result.Stats.BytesProcessed.Value, result.Stats.BytesProcessed.Unit)
 				}
 			} else {
 				fmt.Printf("Queries returned results:\n")
 				for i, result := range queryResults {
 					fmt.Printf("Query %d: %d\n", i, result.Stats.Count)
-					if result.Stats.ExecutionTime > 0 {
-						fmt.Printf("  Execution time: %d ms\n", result.Stats.ExecutionTime)
+					if result.Stats.ExecutionTime.Value > 0 {
+						fmt.Printf("  Execution time: %g %s\n", result.Stats.ExecutionTime.Value, result.Stats.ExecutionTime.Unit)
 					}
-					if result.Stats.BytesProcessed > 0 {
-						fmt.Printf("  Bytes processed: %d\n", result.Stats.BytesProcessed)
+					if result.Stats.BytesProcessed.Value > 0 {
+						fmt.Printf("  Bytes processed: %g %s\n", result.Stats.BytesProcessed.Value, result.Stats.BytesProcessed.Unit)
 					}
 				}
 			}
@@ -250,10 +250,15 @@ func ProcessFrame(frame model.Frame, result *model.QueryTestResult, showSampleVa
 	for _, stat := range frame.Schema.Meta.Stats {
 		switch stat.DisplayName {
 		case "Summary: total bytes processed":
-			result.Stats.BytesProcessed = int(stat.Value)
+			result.Stats.BytesProcessed = model.MetricValue{
+				Value: stat.Value,
+				Unit:  stat.Unit,
+			}
 		case "Summary: exec time":
-			// Convert seconds to milliseconds for ExecutionTime
-			result.Stats.ExecutionTime = int(stat.Value * 1000)
+			result.Stats.ExecutionTime = model.MetricValue{
+				Value: stat.Value,
+				Unit:  stat.Unit,
+			}
 		}
 	}
 
