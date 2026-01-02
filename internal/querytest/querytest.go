@@ -107,20 +107,20 @@ func (qt *QueryTester) Run() error {
 			if len(queryResults) == 1 {
 				result := queryResults[0]
 				fmt.Printf("Query returned results: %d\n", result.Stats.Count)
-				if result.Stats.ExecutionTime.Value > 0 {
+				if result.Stats.ExecutionTime.Unit != "" {
 					fmt.Printf("Execution time: %g %s\n", result.Stats.ExecutionTime.Value, result.Stats.ExecutionTime.Unit)
 				}
-				if result.Stats.BytesProcessed.Value > 0 {
+				if result.Stats.BytesProcessed.Unit != "" {
 					fmt.Printf("Bytes processed: %g %s\n", result.Stats.BytesProcessed.Value, result.Stats.BytesProcessed.Unit)
 				}
 			} else {
 				fmt.Printf("Queries returned results:\n")
 				for i, result := range queryResults {
 					fmt.Printf("Query %d: %d\n", i, result.Stats.Count)
-					if result.Stats.ExecutionTime.Value > 0 {
+					if result.Stats.ExecutionTime.Unit != "" {
 						fmt.Printf("  Execution time: %g %s\n", result.Stats.ExecutionTime.Value, result.Stats.ExecutionTime.Unit)
 					}
-					if result.Stats.BytesProcessed.Value > 0 {
+					if result.Stats.BytesProcessed.Unit != "" {
 						fmt.Printf("  Bytes processed: %g %s\n", result.Stats.BytesProcessed.Value, result.Stats.BytesProcessed.Unit)
 					}
 				}

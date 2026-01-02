@@ -94,11 +94,11 @@ function buildTestResultsTable(testResults) {
   for (const [filePath, results] of Object.entries(testResults)) {
     const title = extractTitle(filePath);
     for (const result of results) {
-      const executionTime = result.stats.executionTime?.value > 0
-        ? `${result.stats.executionTime.value} ${result.stats.executionTime.unit || ''}`.trim()
+      const executionTime = result.stats.executionTime?.unit
+        ? `${result.stats.executionTime.value} ${result.stats.executionTime.unit}`.trim()
         : '-';
-      const bytesProcessed = result.stats.bytesProcessed?.value > 0
-        ? `${result.stats.bytesProcessed.value.toLocaleString()} ${result.stats.bytesProcessed.unit || ''}`.trim()
+      const bytesProcessed = result.stats.bytesProcessed?.unit
+        ? `${result.stats.bytesProcessed.value.toLocaleString()} ${result.stats.bytesProcessed.unit}`.trim()
         : '-';
       resultTable += `| ${title} | [See in Explore](${result.link}) | ${result.stats.count} | ${executionTime} | ${bytesProcessed} | ${result.stats.errors.length} |\n`;
     }
