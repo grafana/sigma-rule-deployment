@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/grafana/sigma-rule-deployment/internal/integrate"
@@ -244,17 +245,20 @@ func (qt *QueryTester) TestQueries(queries map[string]string, config, defaultCon
 	return queryResults, nil
 }
 
+var bytesProcessedStatKey = "Summary: total bytes processed"
+var executionTimeStatKey = "Summary: exec time"
+
 // ProcessFrame processes a single frame from the query response and updates the result stats
 func ProcessFrame(frame model.Frame, result *model.QueryTestResult, showSampleValues, showLogLines bool) error {
 	// Get metrics from frame metadata (Stats are nested within Schema.Meta)
 	for _, stat := range frame.Schema.Meta.Stats {
-		switch stat.DisplayName {
-		case "Summary: total bytes processed":
+		switch {
+		case strings.Contains(stat.DisplayName, bytesProcessedStatKey):
 			result.Stats.BytesProcessed = model.MetricValue{
 				Value: stat.Value,
 				Unit:  stat.Unit,
 			}
-		case "Summary: exec time":
+		case strings.Contains(stat.DisplayName, executionTimeStatKey):
 			result.Stats.ExecutionTime = model.MetricValue{
 				Value: stat.Value,
 				Unit:  stat.Unit,
