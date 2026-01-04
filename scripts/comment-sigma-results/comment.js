@@ -89,12 +89,18 @@ function buildTestResultsTable(testResults) {
     return '';
   }
 
-  let resultTable = `### Test Results\n\n| File name | Link | Result count | Errors |\n| --- | --- | --- | --- |\n`;
+  let resultTable = `### Test Results\n\n| File name | Link | Result count | Execution time | Bytes processed | Errors |\n| --- | --- | --- | --- | --- | --- |\n`;
 
   for (const [filePath, results] of Object.entries(testResults)) {
     const title = extractTitle(filePath);
     for (const result of results) {
-      resultTable += `| ${title} | [See in Explore](${result.link}) | ${result.stats.count} | ${result.stats.errors.length} |\n`;
+      const executionTime = result.stats.executionTime?.unit
+        ? `${result.stats.executionTime.value} ${result.stats.executionTime.unit}`.trim()
+        : '-';
+      const bytesProcessed = result.stats.bytesProcessed?.unit
+        ? `${result.stats.bytesProcessed.value.toLocaleString()} ${result.stats.bytesProcessed.unit}`.trim()
+        : '-';
+      resultTable += `| ${title} | [See in Explore](${result.link}) | ${result.stats.count} | ${executionTime} | ${bytesProcessed} | ${result.stats.errors.length} |\n`;
     }
   }
 
