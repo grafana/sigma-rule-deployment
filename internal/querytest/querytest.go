@@ -245,8 +245,10 @@ func (qt *QueryTester) TestQueries(queries map[string]string, config, defaultCon
 	return queryResults, nil
 }
 
-var bytesProcessedStatKey = "Summary: total bytes processed"
-var executionTimeStatKey = "Summary: exec time"
+var (
+	bytesProcessedStatKey = "Summary: total bytes processed"
+	executionTimeStatKey  = "Summary: exec time"
+)
 
 // ProcessFrame processes a single frame from the query response and updates the result stats
 func ProcessFrame(frame model.Frame, result *model.QueryTestResult, showSampleValues, showLogLines bool) error {
