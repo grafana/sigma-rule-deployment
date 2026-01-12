@@ -780,13 +780,13 @@ func TestDoConversions(t *testing.T) {
 
 			// Create conversion output files
 			convFiles := make([]string, len(tt.addedFiles))
-			for _, fileName := range tt.addedFiles {
+			for i, fileName := range tt.addedFiles {
 				convBytes, err := json.Marshal(tt.convOutput)
 				assert.NoError(t, err)
 				convFile := filepath.Join(convPath, fileName)
 				err = os.WriteFile(convFile, convBytes, 0o600)
 				assert.NoError(t, err)
-				convFiles = append(convFiles, convFile)
+				convFiles[i] = convFile
 			}
 
 			// Set up integrator
@@ -901,7 +901,7 @@ func TestDoCleanup(t *testing.T) {
 
 			// Create files to be removed
 			removedFilePaths := make([]string, len(tt.removedFiles))
-			for _, fileName := range tt.removedFiles {
+			for i, fileName := range tt.removedFiles {
 				// Create dummy deployment file that should be removed
 				deployFile := filepath.Join(deployPath, fmt.Sprintf("alert_rule_%s_test_123abc.json", strings.TrimSuffix(fileName, ".json")))
 				dummyRule := &model.ProvisionedAlertRule{
@@ -911,7 +911,7 @@ func TestDoCleanup(t *testing.T) {
 				}
 				err = writeRuleToFile(dummyRule, deployFile, false)
 				assert.NoError(t, err)
-				removedFilePaths = append(removedFilePaths, filepath.Join(convPath, fileName))
+				removedFilePaths[i] = filepath.Join(convPath, fileName)
 			}
 
 			// Create orphaned conversion file
