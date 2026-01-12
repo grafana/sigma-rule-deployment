@@ -779,7 +779,7 @@ func TestDoConversions(t *testing.T) {
 			}
 
 			// Create conversion output files
-			var convFiles []string
+			convFiles := make([]string, len(tt.addedFiles))
 			for _, fileName := range tt.addedFiles {
 				convBytes, err := json.Marshal(tt.convOutput)
 				assert.NoError(t, err)
@@ -900,7 +900,7 @@ func TestDoCleanup(t *testing.T) {
 			}
 
 			// Create files to be removed
-			var removedFilePaths []string
+			removedFilePaths := make([]string, len(tt.removedFiles))
 			for _, fileName := range tt.removedFiles {
 				// Create dummy deployment file that should be removed
 				deployFile := filepath.Join(deployPath, fmt.Sprintf("alert_rule_%s_test_123abc.json", strings.TrimSuffix(fileName, ".json")))

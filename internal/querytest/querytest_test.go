@@ -137,7 +137,7 @@ func TestRun(t *testing.T) {
 			}
 
 			// Create conversion output files
-			var testFiles []string
+			testFiles := make([]string, len(tt.testFiles))
 			for _, fileName := range tt.testFiles {
 				convBytes, err := json.Marshal(tt.convOutput)
 				assert.NoError(t, err)
