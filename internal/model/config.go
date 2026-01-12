@@ -47,11 +47,29 @@ type DeploymentConfig struct {
 	Timeout         string `yaml:"timeout"`
 }
 
-// Configuration is the unified configuration structure
+// Configuration is the original (v1) unified configuration structure
 type Configuration struct {
 	Folders            FoldersConfig      `yaml:"folders"`
 	ConversionDefaults ConversionConfig   `yaml:"conversion_defaults"`
 	Conversions        []ConversionConfig `yaml:"conversions"`
 	IntegratorConfig   IntegrationConfig  `yaml:"integration"`
 	DeployerConfig     DeploymentConfig   `yaml:"deployment"`
+}
+
+type ConfigBlock struct {
+	Conversion  ConversionConfig  `yaml:"conversion"`
+	Integration IntegrationConfig `yaml:"integration"`
+	Deployment  DeploymentConfig  `yaml:"deployment"`
+}
+
+type NamedConfigBlock struct {
+	Name string `yaml:"name"`
+	ConfigBlock
+}
+
+type ConfigurationV2 struct {
+	Version        int                `yaml:"version"`
+	Folders        FoldersConfig      `yaml:"folders"`
+	Defaults       ConfigBlock        `yaml:"defaults"`
+	Configurations []NamedConfigBlock `yaml:"configurations"`
 }
