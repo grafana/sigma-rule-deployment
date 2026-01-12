@@ -137,14 +137,14 @@ func TestRun(t *testing.T) {
 			}
 
 			// Create conversion output files
-			var testFiles []string
-			for _, fileName := range tt.testFiles {
+			testFiles := make([]string, len(tt.testFiles))
+			for i, fileName := range tt.testFiles {
 				convBytes, err := json.Marshal(tt.convOutput)
 				assert.NoError(t, err)
 				convFile := filepath.Join(convPath, fileName)
 				err = os.WriteFile(convFile, convBytes, 0o600)
 				assert.NoError(t, err)
-				testFiles = append(testFiles, convFile)
+				testFiles[i] = convFile
 			}
 
 			// Create a temporary output file for capturing outputs
