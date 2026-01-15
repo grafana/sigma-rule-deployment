@@ -1,0 +1,36 @@
+name: "Export SBOM from Socket"
+
+on:
+  pull_request
+jobs:
+  export-sbom:
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - name: Get vault secrets
+        id: vault-secrets
+        uses: grafana/shared-workflows/actions/get-vault-secrets@get-vault-secrets/v1.3.0
+        with:
+          vault_instance: dev
+          repo_secrets: |
+            SOCKET_API_TOKEN=socket:SOCKET_SBOM_API_KEY
+          export_env: false
+
+      - name: Export SBOM from Socket
+        id: export-sbom
+        uses: grafana/shared-workflows/actions/socket-export-sbom@e2669db7f9b02fa2d359e693b4a99e7288bbe7fc
+        with:
+          socket_api_token: ${{ fromJSON(steps.vault-secrets.outputs.secrets).SOCKET_API_TOKEN }}
+          output_file: sbom.json
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: "sbom"
+          path: ${{ steps.export-sbom.outputs.path }}
+          retention-days: 30
