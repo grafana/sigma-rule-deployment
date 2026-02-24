@@ -3,6 +3,7 @@ package querytest
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -190,7 +191,9 @@ func TestRun(t *testing.T) {
 
 			// Verify test_query_results output was set if testing was performed
 			if tt.expectTestResults && len(tt.convOutput.Queries) > 0 {
-				outputBytes, err := os.ReadFile(outputFile.Name())
+				_, err = outputFile.Seek(0, 0)
+				assert.NoError(t, err)
+				outputBytes, err := io.ReadAll(outputFile)
 				assert.NoError(t, err)
 				outputContent := string(outputBytes)
 				assert.Contains(t, outputContent, "test_query_results=")
