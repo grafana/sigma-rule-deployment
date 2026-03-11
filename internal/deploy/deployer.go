@@ -16,6 +16,11 @@ import (
 	"github.com/grafana/sigma-rule-deployment/shared"
 )
 
+// sanitizeForLog removes characters that could be used for log injection (e.g. newlines).
+func sanitizeForLog(s string) string {
+	return strings.NewReplacer("\n", " ", "\r", " ").Replace(s)
+}
+
 // Regex to parse the alert UID from the filename
 var regexAlertFilename = regexp.MustCompile(`alert_rule_(?:.*)_([^\.]+)\.json`)
 
@@ -216,13 +221,13 @@ func (d *Deployer) LoadConfig(_ context.Context) error {
 			interval = config.TimeWindow
 		}
 		intervalDuration, err := time.ParseDuration(interval)
-		log.Printf("Interval duration from %s: %d", interval, int64(intervalDuration.Seconds()))
+		log.Printf("Interval duration from %s: %d", sanitizeForLog(interval), int64(intervalDuration.Seconds())) //nolint:gosec // G706: interval sanitized with sanitizeForLog before logging
 		if err != nil || int64(intervalDuration.Seconds()) <= 0 {
 			return fmt.Errorf("error parsing time window %s: %v", interval, err)
 		}
 		if _, ok := d.config.groupsIntervals[config.RuleGroup]; !ok {
 			d.config.groupsIntervals[config.RuleGroup] = int64(intervalDuration.Seconds())
-			log.Printf("Setting interval for rule group %s to %d", config.RuleGroup, d.config.groupsIntervals[config.RuleGroup])
+			log.Printf("Setting interval for rule group %s to %d", sanitizeForLog(config.RuleGroup), d.config.groupsIntervals[config.RuleGroup]) //nolint:gosec // G706: config.RuleGroup sanitized with sanitizeForLog before logging
 		} else if d.config.groupsIntervals[config.RuleGroup] != int64(intervalDuration.Seconds()) {
 			return fmt.Errorf("time window for rule group %s is different between conversion configs", config.RuleGroup)
 		}

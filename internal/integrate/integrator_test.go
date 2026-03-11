@@ -3,6 +3,7 @@ package integrate
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1170,7 +1171,9 @@ func TestRun(t *testing.T) {
 			assert.Equal(t, tt.expectConversionFiles, len(files))
 
 			// Verify rules_integrated output was set
-			outputBytes, err := os.ReadFile(outputFile.Name())
+			_, err = outputFile.Seek(0, 0)
+			assert.NoError(t, err)
+			outputBytes, err := io.ReadAll(outputFile)
 			assert.NoError(t, err)
 			outputContent := string(outputBytes)
 			assert.Contains(t, outputContent, "rules_integrated=")

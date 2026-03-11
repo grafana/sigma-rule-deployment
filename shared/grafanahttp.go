@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"time"
 )
 
@@ -66,7 +67,15 @@ func (c *GrafanaClient) Do(ctx context.Context, method, path string, body io.Rea
 		return nil, err
 	}
 
-	resp, err := c.client.Do(req)
+	baseParsed, err := url.Parse(c.baseURL)
+	if err != nil {
+		return nil, fmt.Errorf("invalid client base URL: %w", err)
+	}
+	if req.URL.Hostname() != baseParsed.Hostname() {
+		return nil, fmt.Errorf("request URL host %q does not match client base URL", req.URL.Host)
+	}
+
+	resp, err := c.client.Do(req) //nolint:gosec // G704: req.URL.Hostname() validated to match client base URL above
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute request: %w", err)
 	}

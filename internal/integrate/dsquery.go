@@ -32,7 +32,7 @@ type GrafanaDatasource struct {
 	TypeLogoURL       string          `json:"typeLogoUrl,omitempty"`
 	Access            string          `json:"access,omitempty"`
 	URL               string          `json:"url,omitempty"`
-	Password          string          `json:"password,omitempty"`
+	Password          string          `json:"password,omitempty"` //nolint:gosec // G117: Grafana API response shape; password is from API, not hardcoded
 	User              string          `json:"user,omitempty"`
 	Database          string          `json:"database,omitempty"`
 	BasicAuth         bool            `json:"basicAuth,omitempty"`
