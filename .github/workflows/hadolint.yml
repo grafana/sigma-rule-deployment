@@ -5,10 +5,10 @@ on:
     branches:
       - main
     paths:
-      - "./Dockerfile"
+      - "Dockerfile"
   pull_request:
     paths:
-      - "./Dockerfile"
+      - "Dockerfile"
   workflow_dispatch:
 
 permissions: {}
