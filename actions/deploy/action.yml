@@ -41,11 +41,11 @@ runs:
         fetch-depth: 0 # Important to ensure we'll have all the commits when a merge includes multiple
     - name: "Detect changed files"
       id: changed-files
-      uses: step-security/changed-files@95b56dadb92a30ca9036f16423fd3c088a71ee94 # v46.0.5
+      uses: step-security/changed-files@60967b822d3001fa82242f8d6b4ed46bc3600a68 # v47.0.1
       with:
         output_renamed_files_as_deleted_and_added: "true"
     - name: Login to GitHub Container Registry
-      uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+      uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
       with:
         registry: ghcr.io
         username: ${{ github.actor }}
