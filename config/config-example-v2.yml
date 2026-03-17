@@ -8,12 +8,12 @@ defaults:
     format: default
     skip_unsupported: true
     file_pattern: "*.yml"
-    data_source: grafanacloud-logs # The UID of a data source
     required_rule_fields:
       - level
       - logsource
       - author
   integration:
+    data_source: grafanacloud-logs # The UID of a data source
     rule_group: Every 5 Minutes
     time_window: 5m
     folder_id: XXXX
