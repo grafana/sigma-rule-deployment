@@ -8,7 +8,7 @@ import pytest
 from dynaconf.utils import DynaconfDict
 
 from convert import convert
-from convert.convert import convert_rules, is_path, is_safe_path, load_rules, filter_rule_fields
+from convert.convert import convert_rules, is_path, is_safe_path, load_rules, filter_rule_fields, _normalize_config
 
 
 @pytest.fixture
@@ -28,6 +28,34 @@ def mock_config():
                     "input": ["rules/*.yml"],
                     "target": "loki",
                     "format": "default",
+                }
+            ],
+        }
+    )
+
+
+@pytest.fixture
+def mock_config_v2():
+    """Mock v2 configuration object equivalent to mock_config."""
+    return DynaconfDict(
+        {
+            "version": 2,
+            "defaults": {
+                "conversion": {
+                    "target": "loki",
+                    "format": "default",
+                    "skip_unsupported": "true",
+                    "file_pattern": "*.yml",
+                },
+            },
+            "configurations": [
+                {
+                    "name": "test_conversion",
+                    "conversion": {
+                        "input": ["rules/*.yml"],
+                        "target": "loki",
+                        "format": "default",
+                    },
                 }
             ],
         }
@@ -1051,6 +1079,118 @@ def test_convert_rules_deletes_conversion_for_deleted_rule(temp_workspace, mock_
 
     # Verify the conversion file was deleted
     assert not conversion_file.exists()
+
+def test_normalize_config_v1():
+    """Test that v1 config is normalized correctly."""
+    config = DynaconfDict(
+        {
+            "conversion_defaults": {
+                "target": "loki",
+                "format": "default",
+                "skip_unsupported": True,
+                "verbose": True,
+            },
+            "conversions": [
+                {"name": "test", "input": ["rules/*.yml"]},
+            ],
+        }
+    )
+    defaults, conversions, verbose = _normalize_config(config)
+    assert defaults["target"] == "loki"
+    assert "verbose" not in defaults
+    assert verbose is True
+    assert len(conversions) == 1
+    assert conversions[0]["name"] == "test"
+
+
+def test_normalize_config_v2():
+    """Test that v2 config is normalized to the same shape as v1."""
+    config = DynaconfDict(
+        {
+            "version": 2,
+            "defaults": {
+                "conversion": {
+                    "target": "elastic",
+                    "format": "default",
+                    "verbose": True,
+                },
+            },
+            "configurations": [
+                {
+                    "name": "test",
+                    "conversion": {"input": ["rules/*.yml"], "format": "custom"},
+                }
+            ],
+        }
+    )
+    defaults, conversions, verbose = _normalize_config(config)
+    assert defaults["target"] == "elastic"
+    assert "verbose" not in defaults
+    assert verbose is True
+    assert len(conversions) == 1
+    assert conversions[0]["name"] == "test"
+    assert conversions[0]["input"] == ["rules/*.yml"]
+    assert conversions[0]["format"] == "custom"
+
+
+def test_convert_rules_successful_conversion_all_v2(temp_workspace, mock_config_v2):
+    """Test that convert_rules successfully converts Sigma rules using a v2 config."""
+    convert_rules(
+        config=mock_config_v2,
+        path_prefix=temp_workspace,
+        all_rules=True,
+    )
+
+    output_file = temp_workspace / "conversions" / "test_conversion_test.json"
+    assert output_file.exists()
+    data = json.loads(output_file.read_bytes())
+    assert data["conversion_name"] == "test_conversion"
+    assert len(data["queries"]) == 1
+    assert len(data["rules"]) == 1
+
+
+def test_convert_rules_missing_conversion_name_v2():
+    """Test that an error is raised when a v2 configuration item has no name."""
+    invalid_config = DynaconfDict(
+        {
+            "version": 2,
+            "configurations": [{"conversion": {"input": ["rules/*.yml"]}}],
+        }
+    )
+    with pytest.raises(
+        ValueError,
+        match="Conversion name is required",
+    ):
+        convert_rules(config=invalid_config, path_prefix="/tmp", all_rules=True)
+
+
+def test_convert_rules_absolute_input_path_v2():
+    """Test that an error is raised when a v2 conversion input path is absolute."""
+    invalid_config = DynaconfDict(
+        {
+            "version": 2,
+            "configurations": [
+                {
+                    "name": "test",
+                    "conversion": {"input": ["/absolute/path/*.yml"]},
+                }
+            ],
+        }
+    )
+    with pytest.raises(ValueError, match="must be relative"):
+        convert_rules(config=invalid_config, path_prefix="/tmp", all_rules=True)
+
+
+def test_convert_rules_invalid_output_dir_v2(temp_workspace, mock_config_v2):
+    """Test that an error is raised when v2 config specifies an output dir outside the project root."""
+    mock_config_v2["folders"] = {"conversion_path": "../outside"}
+    with pytest.raises(ValueError, match="outside the project root"):
+        convert_rules(
+            config=mock_config_v2,
+            path_prefix=temp_workspace,
+            all_rules=True,
+        )
+
 
 def test_filter_rule_fields():
     """Test that the filter_rule_fields function filters the rule fields correctly."""

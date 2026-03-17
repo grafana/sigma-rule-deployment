@@ -15,6 +15,31 @@ from sigma.cli.convert import convert
 from yaml import FullLoader, load_all
 
 
+def _normalize_config(config: Dynaconf) -> tuple[dict, list[dict], bool]:
+    """Normalize v1 or v2 config into a common internal shape.
+
+    Returns:
+        A tuple of (defaults, conversions, verbose) where:
+        - defaults is a flat dict of conversion-level default values
+        - conversions is a list of flat dicts, each with at least 'name' and 'input'
+        - verbose is the top-level verbose flag
+    """
+    version = config.get("version", 1)
+    if version == 2:
+        defaults = dict((config.get("defaults") or {}).get("conversion") or {})
+        raw = config.get("configurations") or []
+        conversions = []
+        for entry in raw:
+            item = dict(entry.get("conversion") or {})
+            item["name"] = entry.get("name")
+            conversions.append(item)
+    else:
+        defaults = dict(config.get("conversion_defaults") or {})
+        conversions = list(config.get("conversions") or [])
+    verbose = defaults.pop("verbose", config.get("verbose", False))
+    return defaults, conversions, verbose
+
+
 def convert_rules(
     config: Dynaconf,
     path_prefix: str | Path,
@@ -111,28 +136,27 @@ def convert_rules(
     # Create the output directory if it doesn't exist
     conversions_output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Get top-level default values
-    default_target = config.get("conversion_defaults.target", "loki")
-    default_format = config.get("conversion_defaults.format", "default")
-    default_skip_unsupported = config.get("conversion_defaults.skip_unsupported", True)
-    default_fail_unsupported = config.get("conversion_defaults.fail_unsupported", False)
-    default_encoding = config.get("conversion_defaults.encoding", "utf-8")
-    default_pipeline_check = config.get("conversion_defaults.pipeline_check", True)
-    default_file_pattern = config.get("conversion_defaults.file_pattern", "*.yml")
-    default_correlation_method = config.get(
-        "conversion_defaults.correlation_method", []
-    )
-    default_filters = config.get("conversion_defaults.filters", [])
-    default_backend_options = config.get("conversion_defaults.backend_options", {})
-    default_without_pipeline = config.get("conversion_defaults.without_pipeline", False)
-    default_pipelines = config.get("conversion_defaults.pipelines", [])
-    default_json_indent = config.get("conversion_defaults.json_indent", 0)
-    default_required_rule_fields = config.get("conversion_defaults.required_rule_fields", [])
-    verbose = config.get("verbose", False)
+    # Normalize config to a common shape regardless of v1/v2 format
+    defaults, conversions, verbose = _normalize_config(config)
+
+    default_target = defaults.get("target", "loki")
+    default_format = defaults.get("format", "default")
+    default_skip_unsupported = defaults.get("skip_unsupported", True)
+    default_fail_unsupported = defaults.get("fail_unsupported", False)
+    default_encoding = defaults.get("encoding", "utf-8")
+    default_pipeline_check = defaults.get("pipeline_check", True)
+    default_file_pattern = defaults.get("file_pattern", "*.yml")
+    default_correlation_method = defaults.get("correlation_method", [])
+    default_filters = defaults.get("filters", [])
+    default_backend_options = defaults.get("backend_options", {})
+    default_without_pipeline = defaults.get("without_pipeline", False)
+    default_pipelines = defaults.get("pipelines", [])
+    default_json_indent = defaults.get("json_indent", 0)
+    default_required_rule_fields = defaults.get("required_rule_fields", [])
 
     conversions_to_delete = []
     # Convert Sigma rules to the target format per each conversion object in the config
-    for conversion in config.get("conversions", []):
+    for conversion in conversions:
         # If the conversion name is not unique, we'll overwrite the output file,
         # which might not be the desired behavior for the user.
         name = conversion.get("name", None)
