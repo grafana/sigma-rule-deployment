@@ -196,7 +196,7 @@ def convert_rules(
                 raise ValueError("Invalid input file type")
 
         # Apply file_pattern filtering to exclude files that don't match the pattern
-        file_pattern = conversion.get("file_pattern", default_file_pattern)
+        file_pattern = conversion.get("file_pattern") or default_file_pattern
         filtered_files = [f for f in input_files if fnmatch.fnmatch(f, file_pattern)]
 
         # Skip conversion if no files match the pattern
@@ -211,17 +211,17 @@ def convert_rules(
             print("Converting all discovered rules")
 
         # Verify that all pipeline files are relative to the repository root (GITHUB_WORKSPACE)
-        for pipeline in conversion.get("pipelines", default_pipelines):
+        for pipeline in (conversion.get("pipelines") or default_pipelines):
             if Path(pipeline).is_absolute():
                 raise ValueError(
                     "Pipeline file path must be relative to the project root"
                 )
 
-        encoding = conversion.get("encoding", default_encoding)
+        encoding = conversion.get("encoding") or default_encoding
 
         pipelines = []
         any_pipeline_changed = False
-        for pipeline in conversion.get("pipelines", default_pipelines):
+        for pipeline in (conversion.get("pipelines") or default_pipelines):
             if is_path(pipeline, file_pattern):
                 pipeline_path = path_prefix / Path(pipeline)
                 pipelines.append(f"--pipeline={pipeline_path}")
@@ -260,7 +260,7 @@ def convert_rules(
                         else []
                     )
                 ),
-                *[f"--filter={f}" for f in conversion.get("filters", default_filters)],
+                *[f"--filter={f}" for f in (conversion.get("filters") or default_filters)],
                 "--file-pattern",
                 file_pattern,
                 "--output",
@@ -269,8 +269,8 @@ def convert_rules(
                 encoding,
                 *[
                     f"--backend-option={k}={v}"
-                    for k, v in conversion.get(
-                        "backend_options", default_backend_options
+                    for k, v in (
+                        conversion.get("backend_options") or default_backend_options
                     ).items()
                 ],
                 *(
@@ -339,7 +339,7 @@ def convert_rules(
                 output_file = path_prefix / conversions_output_dir / output_filename
 
                 # Filter the rules to only include the required fields, if empty, return the full rule dictionaries
-                required_rule_fields = conversion.get("required_rule_fields", default_required_rule_fields)
+                required_rule_fields = conversion.get("required_rule_fields") or default_required_rule_fields
 
                 # Create the output data structure
                 output_data = {
@@ -359,7 +359,7 @@ def convert_rules(
                         json.dumps(
                             output_data,
                             option=options,
-                        ).decode(encoding, "blackslashreplace")
+                        ).decode(encoding or "utf-8", "blackslashreplace")
                     )
 
                 print(f"Output written to {output_file}")

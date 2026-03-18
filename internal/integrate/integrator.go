@@ -507,23 +507,21 @@ func (i *Integrator) ConvertToAlert(rule *model.ProvisionedAlertRule, queries []
 	if cfg.Integration.TemplateAnnotations != nil {
 		templateAnnotations = cfg.Integration.TemplateAnnotations
 	}
-	if templateAnnotations != nil {
-		for key, value := range templateAnnotations {
-			tmpl, err := template.New("annotation_" + key).Funcs(FuncMap).Parse(value)
-			if err != nil {
-				return fmt.Errorf("error parsing template %s: %v", key, err)
-			}
-			var buf bytes.Buffer
-			if i.config.Defaults.Integration.TemplateAllRules {
-				err = tmpl.Execute(&buf, conversionObject.Rules)
-			} else {
-				err = tmpl.Execute(&buf, conversionObject.Rules[0])
-			}
-			if err != nil {
-				return fmt.Errorf("error executing template %s: %v", key, err)
-			}
-			rule.Annotations[key] = buf.String()
+	for key, value := range templateAnnotations {
+		tmpl, err := template.New("annotation_" + key).Funcs(FuncMap).Parse(value)
+		if err != nil {
+			return fmt.Errorf("error parsing template %s: %v", key, err)
 		}
+		var buf bytes.Buffer
+		if i.config.Defaults.Integration.TemplateAllRules {
+			err = tmpl.Execute(&buf, conversionObject.Rules)
+		} else {
+			err = tmpl.Execute(&buf, conversionObject.Rules[0])
+		}
+		if err != nil {
+			return fmt.Errorf("error executing template %s: %v", key, err)
+		}
+		rule.Annotations[key] = buf.String()
 	}
 
 	if rule.Labels == nil {
@@ -534,23 +532,21 @@ func (i *Integrator) ConvertToAlert(rule *model.ProvisionedAlertRule, queries []
 	if cfg.Integration.TemplateLabels != nil {
 		templateLabels = cfg.Integration.TemplateLabels
 	}
-	if templateLabels != nil {
-		for key, value := range templateLabels {
-			tmpl, err := template.New("label_" + key).Parse(value)
-			if err != nil {
-				return fmt.Errorf("error parsing template %s: %v", key, err)
-			}
-			var buf bytes.Buffer
-			if i.config.Defaults.Integration.TemplateAllRules {
-				err = tmpl.Execute(&buf, conversionObject.Rules)
-			} else {
-				err = tmpl.Execute(&buf, conversionObject.Rules[0])
-			}
-			if err != nil {
-				return fmt.Errorf("error executing template %s: %v", key, err)
-			}
-			rule.Labels[key] = buf.String()
+	for key, value := range templateLabels {
+		tmpl, err := template.New("label_" + key).Parse(value)
+		if err != nil {
+			return fmt.Errorf("error parsing template %s: %v", key, err)
 		}
+		var buf bytes.Buffer
+		if i.config.Defaults.Integration.TemplateAllRules {
+			err = tmpl.Execute(&buf, conversionObject.Rules)
+		} else {
+			err = tmpl.Execute(&buf, conversionObject.Rules[0])
+		}
+		if err != nil {
+			return fmt.Errorf("error executing template %s: %v", key, err)
+		}
+		rule.Labels[key] = buf.String()
 	}
 
 	return nil

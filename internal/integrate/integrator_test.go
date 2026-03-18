@@ -919,11 +919,12 @@ func TestDoConversionsMultipleConfigurations(t *testing.T) {
 		assert.NoError(t, err)
 		var rule model.ProvisionedAlertRule
 		assert.NoError(t, json.Unmarshal(content, &rule))
-		if strings.HasPrefix(f.Name(), "alert_rule_conv_loki_") {
+		switch {
+		case strings.HasPrefix(f.Name(), "alert_rule_conv_loki_"):
 			lokiRule = rule
-		} else if strings.HasPrefix(f.Name(), "alert_rule_conv_es_") {
+		case strings.HasPrefix(f.Name(), "alert_rule_conv_es_"):
 			esRule = rule
-		} else {
+		default:
 			t.Errorf("unexpected deployment file: %s", f.Name())
 		}
 	}

@@ -663,8 +663,8 @@ func TestDeployToMultipleGrafanaInstances(t *testing.T) {
 
 	conv1File := filepath.Join(tmpDir, "alert_rule_conv1_myrule_conv1uid1.json")
 	conv2File := filepath.Join(tmpDir, "alert_rule_conv2_myrule_conv2uid1.json")
-	assert.NoError(t, os.WriteFile(conv1File, []byte(conv1Alert), 0600))
-	assert.NoError(t, os.WriteFile(conv2File, []byte(conv2Alert), 0600))
+	assert.NoError(t, os.WriteFile(conv1File, []byte(conv1Alert), 0o600))
+	assert.NoError(t, os.WriteFile(conv2File, []byte(conv2Alert), 0o600))
 
 	d := Deployer{
 		config: deploymentConfig{

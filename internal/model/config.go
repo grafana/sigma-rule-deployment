@@ -57,11 +57,11 @@ type IntegrationConfig struct {
 type ConfigBlock struct {
 	Conversion  ConversionConfig  `yaml:"conversion"`
 	Integration IntegrationConfig `yaml:"integration"`
-	Deployment  DeploymentConfig    `yaml:"deployment"`
+	Deployment  DeploymentConfig  `yaml:"deployment"`
 }
 
 type NamedConfigBlock struct {
-	Name string `yaml:"name"`
+	Name        string `yaml:"name"`
 	ConfigBlock `yaml:",inline"`
 }
 
