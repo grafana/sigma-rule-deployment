@@ -15,31 +15,6 @@ from sigma.cli.convert import convert
 from yaml import FullLoader, load_all
 
 
-def _normalize_config(config: Dynaconf) -> tuple[dict, list[dict], bool]:
-    """Normalize v1 or v2 config into a common internal shape.
-
-    Returns:
-        A tuple of (defaults, conversions, verbose) where:
-        - defaults is a flat dict of conversion-level default values
-        - conversions is a list of flat dicts, each with at least 'name' and 'input'
-        - verbose is the top-level verbose flag
-    """
-    version = config.get("version", 1)
-    if version == 2:
-        defaults = dict((config.get("defaults") or {}).get("conversion") or {})
-        raw = config.get("configurations") or []
-        conversions = []
-        for entry in raw:
-            item = dict(entry.get("conversion") or {})
-            item["name"] = entry.get("name")
-            conversions.append(item)
-    else:
-        defaults = dict(config.get("conversion_defaults") or {})
-        conversions = list(config.get("conversions") or [])
-    verbose = defaults.pop("verbose", config.get("verbose", False))
-    return defaults, conversions, verbose
-
-
 def convert_rules(
     config: Dynaconf,
     path_prefix: str | Path,
@@ -136,8 +111,14 @@ def convert_rules(
     # Create the output directory if it doesn't exist
     conversions_output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Normalize config to a common shape regardless of v1/v2 format
-    defaults, conversions, verbose = _normalize_config(config)
+    defaults = dict((config.get("defaults") or {}).get("conversion") or {})
+    raw_conversions = config.get("configurations") or []
+    conversions = []
+    for entry in raw_conversions:
+        item = dict(entry.get("conversion") or {})
+        item["name"] = entry.get("name")
+        conversions.append(item)
+    verbose = defaults.pop("verbose", False)
 
     default_target = defaults.get("target", "loki")
     default_format = defaults.get("format", "default")
