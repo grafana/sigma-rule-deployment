@@ -59,11 +59,8 @@ func NewDeployer() *Deployer {
 }
 
 // clientForAlertFile returns the appropriate GrafanaClient for the given alert file,
-// based on the conversion name prefix in the filename. Falls back to the default client.
-func (d *Deployer) clientForAlertFile(filename string) *shared.GrafanaClient {
-	if len(d.perConversionClients) == 0 {
-		return d.client
-	}
+// based on the conversion name prefix in the filename. Falls back to defaultClient.
+func (d *Deployer) clientForAlertFile(filename string, defaultClient *shared.GrafanaClient) *shared.GrafanaClient {
 	base := filepath.Base(filename)
 	name := strings.TrimPrefix(base, "alert_rule_")
 	for convName, client := range d.perConversionClients {
@@ -71,7 +68,7 @@ func (d *Deployer) clientForAlertFile(filename string) *shared.GrafanaClient {
 			return client
 		}
 	}
-	return d.client
+	return defaultClient
 }
 
 func (d *Deployer) SetClient() {
@@ -111,7 +108,7 @@ func (d *Deployer) Deploy(ctx context.Context) ([]string, []string, []string, er
 			err := fmt.Errorf("invalid alert filename: %s", alertFile)
 			return alertsCreated, alertsUpdated, alertsDeleted, err
 		}
-		d.client = d.clientForAlertFile(alertFile)
+		d.client = d.clientForAlertFile(alertFile, defaultClient)
 		uid, err := d.deleteAlert(ctx, alertUID)
 		if err != nil {
 			return alertsCreated, alertsUpdated, alertsDeleted, err
@@ -130,7 +127,7 @@ func (d *Deployer) Deploy(ctx context.Context) ([]string, []string, []string, er
 			log.Printf("Can't read file %s: %v", alertFile, err)
 			return alertsCreated, alertsUpdated, alertsDeleted, err
 		}
-		d.client = d.clientForAlertFile(alertFile)
+		d.client = d.clientForAlertFile(alertFile, defaultClient)
 		uid, updated, err := d.createAlert(ctx, content, true)
 		if err != nil {
 			return alertsCreated, alertsUpdated, alertsDeleted, err
@@ -151,7 +148,7 @@ func (d *Deployer) Deploy(ctx context.Context) ([]string, []string, []string, er
 			log.Printf("Can't read file %s: %v", alertFile, err)
 			return alertsCreated, alertsUpdated, alertsDeleted, err
 		}
-		d.client = d.clientForAlertFile(alertFile)
+		d.client = d.clientForAlertFile(alertFile, defaultClient)
 		uid, created, err := d.updateAlert(ctx, content, true)
 		if err != nil {
 			return alertsCreated, alertsUpdated, alertsDeleted, err

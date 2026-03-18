@@ -3,6 +3,7 @@ package deploy
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -844,4 +845,134 @@ func TestUpdateAlertGroupInterval(t *testing.T) {
 				"Expected PUT request to be %v but was %v", tc.expectPutRequest, putRequestMade)
 		})
 	}
+}
+
+// TestLoadConfigPerConversionInstancesAndTimeout verifies that LoadConfig correctly reads
+// per-configuration GrafanaInstance and Timeout values and creates per-conversion clients
+// that route requests to the right Grafana endpoint, and that conv_c (no override) falls
+// back to the default client.
+func TestLoadConfigPerConversionInstancesAndTimeout(t *testing.T) {
+	ctx := context.Background()
+
+	serverAUIDs := []string{}
+	serverBUIDs := []string{}
+	defaultUIDs := []string{}
+
+	makeServer := func(receivedUIDs *[]string) *httptest.Server {
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			defer r.Body.Close()
+			body, _ := io.ReadAll(r.Body)
+			switch {
+			case strings.HasPrefix(r.URL.Path, "/api/v1/provisioning/alert-rules") && r.Method == http.MethodPost:
+				alert, err := parseAlert(string(body))
+				if err != nil {
+					t.Errorf("failed to parse alert: %v", err)
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+				*receivedUIDs = append(*receivedUIDs, alert.UID)
+				w.WriteHeader(http.StatusCreated)
+				_, _ = w.Write(body)
+			case strings.HasPrefix(r.URL.Path, "/api/v1/provisioning/folder/") && r.Method == http.MethodGet:
+				// Return the correct interval for each group so no PUT is triggered.
+				intervalByGroup := map[string]int{
+					"group_a": 300,
+					"group_b": 600,
+					"group_c": 900,
+				}
+				parts := strings.Split(r.URL.Path, "/")
+				group := parts[len(parts)-1]
+				interval := intervalByGroup[group]
+				w.WriteHeader(http.StatusOK)
+				body := fmt.Sprintf(`{"folderUID":"default-folder","interval":%d,"rules":[],"title":"%s"}`, interval, group)
+				_, _ = w.Write([]byte(body)) //nolint:gosec // G705: group comes from the URL path in a test-only mock handler
+			default:
+				t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+				w.WriteHeader(http.StatusNotFound)
+			}
+		}))
+	}
+
+	serverA := makeServer(&serverAUIDs)
+	defer serverA.Close()
+	serverB := makeServer(&serverBUIDs)
+	defer serverB.Close()
+	serverDefault := makeServer(&defaultUIDs)
+	defer serverDefault.Close()
+
+	// Write a config YAML that points conv_a and conv_b at their own servers, and conv_c at the default.
+	configContent := "version: 2\n" +
+		"folders:\n  deployment_path: \"./deployments\"\n" +
+		"defaults:\n" +
+		"  integration:\n    folder_id: default-folder\n    org_id: 1\n" +
+		"  deployment:\n    grafana_instance: " + serverDefault.URL + "\n    timeout: 10s\n" +
+		"configurations:\n" +
+		"  - name: conv_a\n    integration:\n      rule_group: \"group_a\"\n      time_window: \"5m\"\n" +
+		"    deployment:\n      grafana_instance: " + serverA.URL + "\n      timeout: 5s\n" +
+		"  - name: conv_b\n    integration:\n      rule_group: \"group_b\"\n      time_window: \"10m\"\n" +
+		"    deployment:\n      grafana_instance: " + serverB.URL + "\n      timeout: 30s\n" +
+		"  - name: conv_c\n    integration:\n      rule_group: \"group_c\"\n      time_window: \"15m\"\n"
+
+	configFile, err := os.CreateTemp(".", "test_per_instance_config_*.yml")
+	assert.NoError(t, err)
+	t.Cleanup(func() { os.Remove(configFile.Name()) })
+	_, err = configFile.WriteString(configContent)
+	assert.NoError(t, err)
+	assert.NoError(t, configFile.Close())
+
+	// Write alert files for each conversion in a temp dir.
+	tmpDir, err := os.MkdirTemp(".", "test-per-instance-*")
+	assert.NoError(t, err)
+	t.Cleanup(func() { os.RemoveAll(tmpDir) })
+
+	convAAlert := `{"uid":"conv-a-uid","title":"Conv A Alert","folderUID":"default-folder","orgID":1,"ruleGroup":"group_a"}`
+	convBAlert := `{"uid":"conv-b-uid","title":"Conv B Alert","folderUID":"default-folder","orgID":1,"ruleGroup":"group_b"}`
+	convCAlert := `{"uid":"conv-c-uid","title":"Conv C Alert","folderUID":"default-folder","orgID":1,"ruleGroup":"group_c"}`
+
+	convAFile := filepath.Join(tmpDir, "alert_rule_conv_a_rule_conv-a-uid.json")
+	convBFile := filepath.Join(tmpDir, "alert_rule_conv_b_rule_conv-b-uid.json")
+	convCFile := filepath.Join(tmpDir, "alert_rule_conv_c_rule_conv-c-uid.json")
+	assert.NoError(t, os.WriteFile(convAFile, []byte(convAAlert), 0o600))
+	assert.NoError(t, os.WriteFile(convBFile, []byte(convBAlert), 0o600))
+	assert.NoError(t, os.WriteFile(convCFile, []byte(convCAlert), 0o600))
+
+	os.Setenv("CONFIG_PATH", configFile.Name())
+	defer os.Unsetenv("CONFIG_PATH")
+	os.Setenv("DEPLOYER_GRAFANA_SA_TOKEN", "my-test-token")
+	defer os.Unsetenv("DEPLOYER_GRAFANA_SA_TOKEN")
+
+	d := NewDeployer()
+	assert.NoError(t, d.LoadConfig(ctx))
+
+	// Verify per-conversion clients were built for conv_a and conv_b but not conv_c.
+	assert.Len(t, d.perConversionClients, 2, "expected clients for conv_a and conv_b only")
+	assert.Contains(t, d.perConversionClients, "conv_a")
+	assert.Contains(t, d.perConversionClients, "conv_b")
+	assert.NotContains(t, d.perConversionClients, "conv_c")
+
+	// Verify per-config TimeWindow values were recorded correctly.
+	assert.Equal(t, map[string]int64{
+		"group_a": 300, // 5m
+		"group_b": 600, // 10m
+		"group_c": 900, // 15m
+	}, d.config.groupsIntervals)
+
+	// Deploy all three alert files and verify routing: conv_a → serverA, conv_b → serverB, conv_c → default.
+	d.config.alertsToAdd = []string{convAFile, convBFile, convCFile}
+	d.SetClient()
+
+	_, _, _, err = d.Deploy(ctx) //nolint:dogsled
+	assert.NoError(t, err)
+
+	assert.Contains(t, serverAUIDs, "conv-a-uid", "conv_a alert should route to serverA")
+	assert.NotContains(t, serverAUIDs, "conv-b-uid")
+	assert.NotContains(t, serverAUIDs, "conv-c-uid")
+
+	assert.Contains(t, serverBUIDs, "conv-b-uid", "conv_b alert should route to serverB")
+	assert.NotContains(t, serverBUIDs, "conv-a-uid")
+	assert.NotContains(t, serverBUIDs, "conv-c-uid")
+
+	assert.Contains(t, defaultUIDs, "conv-c-uid", "conv_c alert should route to the default server")
+	assert.NotContains(t, defaultUIDs, "conv-a-uid")
+	assert.NotContains(t, defaultUIDs, "conv-b-uid")
 }

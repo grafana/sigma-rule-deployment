@@ -370,6 +370,41 @@ def test_convert_rules_handles_empty_output_on_rule(temp_workspace, mock_config)
     assert not output_file.exists()
 
 
+def test_convert_rules_required_rule_fields_per_conversion(temp_workspace):
+    """Test that required_rule_fields is respected per conversion, overriding the default."""
+    config = DynaconfDict(
+        {
+            "version": 2,
+            "defaults": {
+                "conversion": {
+                    "target": "loki",
+                    "format": "default",
+                    "skip_unsupported": "true",
+                    "file_pattern": "*.yml",
+                    "required_rule_fields": ["title", "level", "description"],
+                },
+            },
+            "configurations": [
+                {
+                    "name": "test_conversion",
+                    "conversion": {
+                        "input": ["rules/*.yml"],
+                        "required_rule_fields": ["title"],
+                    },
+                }
+            ],
+        }
+    )
+    convert_rules(config=config, path_prefix=temp_workspace, all_rules=True)
+
+    output_file = temp_workspace / "conversions" / "test_conversion_test.json"
+    assert output_file.exists()
+    data = json.loads(output_file.read_bytes())
+    assert len(data["rules"]) == 1
+    # Only "title" should be present — the per-conversion override takes precedence over the default
+    assert list(data["rules"][0].keys()) == ["title"]
+
+
 def test_load_rule_valid_yaml():
     """Test loading a valid YAML rule file."""
     with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
@@ -791,6 +826,90 @@ def test_load_rule_empty_file():
                 "--pipeline-check",
                 "--skip-unsupported",
                 "--verbose",
+            ],
+        ),
+        # Test overriding skip_unsupported per conversion (default false, conversion true)
+        (
+            {
+                "defaults": {"conversion": {"skip_unsupported": False}},
+                "configurations": [
+                    {
+                        "name": "test_skip",
+                        "conversion": {"input": ["test.yml"], "skip_unsupported": True},
+                    }
+                ],
+            },
+            [
+                "--target",
+                "loki",
+                "--format",
+                "default",
+                "--file-pattern",
+                "*.yml",
+                "--output",
+                "-",
+                "--encoding",
+                "utf-8",
+                "--json-indent",
+                "0",
+                "--pipeline-check",
+                "--skip-unsupported",
+            ],
+        ),
+        # Test overriding file_pattern per conversion (default *.json, conversion overrides to *.yml)
+        (
+            {
+                "defaults": {"conversion": {"file_pattern": "*.json"}},
+                "configurations": [
+                    {
+                        "name": "test_file_pattern",
+                        "conversion": {"input": ["test.yml"], "file_pattern": "*.yml"},
+                    }
+                ],
+            },
+            [
+                "--target",
+                "loki",
+                "--format",
+                "default",
+                "--file-pattern",
+                "*.yml",
+                "--output",
+                "-",
+                "--encoding",
+                "utf-8",
+                "--json-indent",
+                "0",
+                "--pipeline-check",
+                "--skip-unsupported",
+            ],
+        ),
+        # Test overriding encoding per conversion
+        (
+            {
+                "defaults": {"conversion": {"encoding": "latin1"}},
+                "configurations": [
+                    {
+                        "name": "test_encoding",
+                        "conversion": {"input": ["test.yml"], "encoding": "utf-8"},
+                    }
+                ],
+            },
+            [
+                "--target",
+                "loki",
+                "--format",
+                "default",
+                "--file-pattern",
+                "*.yml",
+                "--output",
+                "-",
+                "--encoding",
+                "utf-8",
+                "--json-indent",
+                "0",
+                "--pipeline-check",
+                "--skip-unsupported",
             ],
         ),
         # Test combination of several options

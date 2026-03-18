@@ -974,11 +974,15 @@ func TestDoConversionsMultipleConfigurations(t *testing.T) {
 				ConfigBlock: model.ConfigBlock{
 					Conversion: model.ConversionConfig{Target: "loki"},
 					Integration: model.IntegrationConfig{
-						DataSource: "loki-logs-ds",
-						FolderID:   "folder-loki",
-						OrgID:      10,
-						RuleGroup:  "Loki Alerts",
-						TimeWindow: "5m",
+						DataSource:          "loki-logs-ds",
+						FolderID:            "folder-loki",
+						OrgID:               10,
+						RuleGroup:           "Loki Alerts",
+						TimeWindow:          "5m",
+						Lookback:            "2m",
+						QueryModel:          `{"refId":"%s","datasource":{"type":"custom-model","uid":"%s"},"expr":"%s"}`,
+						TemplateLabels:      map[string]string{"team": "loki-team"},
+						TemplateAnnotations: map[string]string{"summary": "loki alert"},
 					},
 				},
 			},
@@ -987,12 +991,15 @@ func TestDoConversionsMultipleConfigurations(t *testing.T) {
 				ConfigBlock: model.ConfigBlock{
 					Conversion: model.ConversionConfig{Target: "esql"},
 					Integration: model.IntegrationConfig{
-						DataSource:     "es-logs-ds",
-						DataSourceType: "elasticsearch",
-						FolderID:       "folder-es",
-						OrgID:          20,
-						RuleGroup:      "ES Alerts",
-						TimeWindow:     "10m",
+						DataSource:          "es-logs-ds",
+						DataSourceType:      "elasticsearch",
+						FolderID:            "folder-es",
+						OrgID:               20,
+						RuleGroup:           "ES Alerts",
+						TimeWindow:          "10m",
+						Lookback:            "5m",
+						TemplateLabels:      map[string]string{"team": "es-team"},
+						TemplateAnnotations: map[string]string{"summary": "es alert"},
 					},
 				},
 			},
@@ -1054,8 +1061,10 @@ func TestDoConversionsMultipleConfigurations(t *testing.T) {
 	assert.Equal(t, "folder-loki", lokiRule.FolderUID, "loki folderID")
 	assert.Equal(t, "Loki Alerts", lokiRule.RuleGroup, "loki ruleGroup")
 	assert.Equal(t, "loki-logs-ds", lokiRule.Data[0].DatasourceUID, "loki datasource UID")
-	assert.Contains(t, string(lokiRule.Data[0].Model), `"type":"loki"`, "loki query model type")
-	assert.Contains(t, string(lokiRule.Data[0].Model), `"uid":"loki-logs-ds"`, "loki query model uid")
+	assert.Contains(t, string(lokiRule.Data[0].Model), `"type":"custom-model"`, "loki uses custom query_model")
+	assert.Equal(t, "2m", lokiRule.Annotations["Lookback"], "loki lookback")
+	assert.Equal(t, "loki-team", lokiRule.Labels["team"], "loki template label")
+	assert.Equal(t, "loki alert", lokiRule.Annotations["summary"], "loki template annotation")
 
 	// Elasticsearch conversion assertions
 	assert.Equal(t, int64(20), esRule.OrgID, "es orgID")
@@ -1064,12 +1073,18 @@ func TestDoConversionsMultipleConfigurations(t *testing.T) {
 	assert.Equal(t, "es-logs-ds", esRule.Data[0].DatasourceUID, "es datasource UID")
 	assert.Contains(t, string(esRule.Data[0].Model), `"type":"elasticsearch"`, "es query model type")
 	assert.Contains(t, string(esRule.Data[0].Model), `"uid":"es-logs-ds"`, "es query model uid")
+	assert.Equal(t, "5m", esRule.Annotations["Lookback"], "es lookback")
+	assert.Equal(t, "es-team", esRule.Labels["team"], "es template label")
+	assert.Equal(t, "es alert", esRule.Annotations["summary"], "es template annotation")
 
 	// Cross-check: values must not bleed between the two conversions
 	assert.NotEqual(t, lokiRule.OrgID, esRule.OrgID)
 	assert.NotEqual(t, lokiRule.FolderUID, esRule.FolderUID)
 	assert.NotEqual(t, lokiRule.RuleGroup, esRule.RuleGroup)
 	assert.NotEqual(t, lokiRule.Data[0].DatasourceUID, esRule.Data[0].DatasourceUID)
+	assert.NotEqual(t, lokiRule.Annotations["Lookback"], esRule.Annotations["Lookback"])
+	assert.NotEqual(t, lokiRule.Labels["team"], esRule.Labels["team"])
+	assert.NotEqual(t, lokiRule.Annotations["summary"], esRule.Annotations["summary"])
 }
 
 func TestDoCleanup(t *testing.T) {
