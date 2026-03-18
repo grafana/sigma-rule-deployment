@@ -553,9 +553,9 @@ func TestLoadConfig(t *testing.T) {
 					},
 				},
 			},
-			expAdd:    []string{"testdata/config.yml", "testdata/es-config.yml", "testdata/no-test-config.yml", "testdata/non-local-conv-config.yml", "testdata/non-local-deploy-config.yml", "testdata/sample_rule.json"},
+			expAdd:    []string{"testdata/config.yml", "testdata/es-config.yml", "testdata/no-test-config.yml", "testdata/non-local-conv-config.yml", "testdata/non-local-deploy-config.yml", "testdata/per-config-test-queries.yml", "testdata/sample_rule.json", "testdata/tested_rule.json", "testdata/untested_rule.json"},
 			expDel:    []string{},
-			expTest:   []string{"testdata/config.yml", "testdata/es-config.yml", "testdata/no-test-config.yml", "testdata/non-local-conv-config.yml", "testdata/non-local-deploy-config.yml", "testdata/sample_rule.json"},
+			expTest:   []string{"testdata/config.yml", "testdata/es-config.yml", "testdata/no-test-config.yml", "testdata/non-local-conv-config.yml", "testdata/non-local-deploy-config.yml", "testdata/per-config-test-queries.yml", "testdata/sample_rule.json", "testdata/tested_rule.json", "testdata/untested_rule.json"},
 			wantError: false,
 		},
 		{
@@ -597,9 +597,59 @@ func TestLoadConfig(t *testing.T) {
 					},
 				},
 			},
-			expAdd:    []string{"testdata/config.yml", "testdata/es-config.yml", "testdata/no-test-config.yml", "testdata/non-local-conv-config.yml", "testdata/non-local-deploy-config.yml", "testdata/sample_rule.json"},
+			expAdd:    []string{"testdata/config.yml", "testdata/es-config.yml", "testdata/no-test-config.yml", "testdata/non-local-conv-config.yml", "testdata/non-local-deploy-config.yml", "testdata/per-config-test-queries.yml", "testdata/sample_rule.json", "testdata/tested_rule.json", "testdata/untested_rule.json"},
 			expDel:    []string{},
 			expTest:   []string{},
+			wantError: false,
+		},
+		{
+			name:       "load all files when ALL_RULES is true, per-config TestQueries respected",
+			configPath: "testdata/per-config-test-queries.yml",
+			token:      "my-test-token",
+			changed:    "",
+			deleted:    "",
+			testFiles:  "",
+			allRules:   true,
+			expConfig: model.Configuration{
+				Version: 2,
+				Folders: model.FoldersConfig{
+					ConversionPath: "./testdata",
+					DeploymentPath: "./testdata",
+				},
+				Defaults: model.ConfigBlock{
+					Conversion: model.ConversionConfig{
+						Target:          "loki",
+						Format:          "default",
+						SkipUnsupported: "true",
+						FilePattern:     "*.yml",
+					},
+					Integration: model.IntegrationConfig{
+						DataSource:  "grafanacloud-logs",
+						FolderID:    "XXXX",
+						OrgID:       1,
+						TestQueries: false,
+						From:        "now-1h",
+						To:          "now",
+					},
+				},
+				Configurations: []model.NamedConfigBlock{
+					{
+						Name: "tested",
+						ConfigBlock: model.ConfigBlock{
+							Integration: model.IntegrationConfig{RuleGroup: "Every 5 Minutes", TimeWindow: "5m", TestQueries: true},
+						},
+					},
+					{
+						Name: "untested",
+						ConfigBlock: model.ConfigBlock{
+							Integration: model.IntegrationConfig{RuleGroup: "Every 5 Minutes", TimeWindow: "5m"},
+						},
+					},
+				},
+			},
+			expAdd:    []string{"testdata/config.yml", "testdata/es-config.yml", "testdata/no-test-config.yml", "testdata/non-local-conv-config.yml", "testdata/non-local-deploy-config.yml", "testdata/per-config-test-queries.yml", "testdata/sample_rule.json", "testdata/tested_rule.json", "testdata/untested_rule.json"},
+			expDel:    []string{},
+			expTest:   []string{"testdata/tested_rule.json"},
 			wantError: false,
 		},
 
@@ -671,6 +721,76 @@ func TestLoadConfig(t *testing.T) {
 	defer os.Unsetenv("DELETED_FILES")
 	defer os.Unsetenv("TEST_FILES")
 	defer os.Unsetenv("ALL_RULES")
+}
+
+func TestTestQueriesEnabledForFile(t *testing.T) {
+	makeConfig := func(defaultsEnabled bool, cfgs ...model.NamedConfigBlock) model.Configuration {
+		return model.Configuration{
+			Defaults: model.ConfigBlock{
+				Integration: model.IntegrationConfig{TestQueries: defaultsEnabled},
+			},
+			Configurations: cfgs,
+		}
+	}
+	namedCfg := func(name string, enabled bool) model.NamedConfigBlock {
+		return model.NamedConfigBlock{
+			Name: name,
+			ConfigBlock: model.ConfigBlock{
+				Integration: model.IntegrationConfig{TestQueries: enabled},
+			},
+		}
+	}
+
+	tests := []struct {
+		name     string
+		filename string
+		config   model.Configuration
+		want     bool
+	}{
+		{
+			name:     "defaults true, no named config match",
+			filename: "unrelated.json",
+			config:   makeConfig(true, namedCfg("myconv", false)),
+			want:     true,
+		},
+		{
+			name:     "defaults false, no named config match",
+			filename: "unrelated.json",
+			config:   makeConfig(false, namedCfg("myconv", true)),
+			want:     false,
+		},
+		{
+			name:     "defaults false, matching config has TestQueries true",
+			filename: "myconv_rule.json",
+			config:   makeConfig(false, namedCfg("myconv", true)),
+			want:     true,
+		},
+		{
+			name:     "defaults false, matching config has TestQueries false",
+			filename: "myconv_rule.json",
+			config:   makeConfig(false, namedCfg("myconv", false)),
+			want:     false,
+		},
+		{
+			name:     "defaults true, matching config has TestQueries false",
+			filename: "myconv_rule.json",
+			config:   makeConfig(true, namedCfg("myconv", false)),
+			want:     true,
+		},
+		{
+			name:     "prefix match is exact (underscore separator required)",
+			filename: "myconvmore_rule.json",
+			config:   makeConfig(false, namedCfg("myconv", true)),
+			want:     false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := testQueriesEnabledForFile(tt.filename, tt.config)
+			assert.Equal(t, tt.want, got)
+		})
+	}
 }
 
 func TestDoConversions(t *testing.T) {

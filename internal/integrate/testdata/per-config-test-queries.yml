@@ -1,0 +1,25 @@
+version: 2
+folders:
+  conversion_path: "./testdata"
+  deployment_path: "./testdata"
+defaults:
+  conversion:
+    target: loki
+    format: default
+    skip_unsupported: "true"
+    file_pattern: "*.yml"
+  integration:
+    data_source: grafanacloud-logs
+    folder_id: XXXX
+    org_id: 1
+    test_queries: false
+configurations:
+  - name: tested
+    integration:
+      rule_group: Every 5 Minutes
+      time_window: 5m
+      test_queries: true
+  - name: untested
+    integration:
+      rule_group: Every 5 Minutes
+      time_window: 5m

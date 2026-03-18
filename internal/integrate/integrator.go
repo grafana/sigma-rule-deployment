@@ -142,8 +142,7 @@ func (i *Integrator) LoadConfig() error {
 			}
 			if !info.IsDir() {
 				newUpdatedFiles = append(newUpdatedFiles, path)
-				// If all files is true, test all files
-				if AnyTestQueriesEnabled(i.config) {
+				if testQueriesEnabledForFile(filepath.Base(path), i.config) {
 					filesToBeTested = append(filesToBeTested, path)
 				}
 			}
@@ -163,15 +162,13 @@ func (i *Integrator) LoadConfig() error {
 				newUpdatedFiles = append(newUpdatedFiles, path)
 			}
 		}
-		if AnyTestQueriesEnabled(i.config) {
-			for _, path := range testFiles {
-				relpath, err := filepath.Rel(i.config.Folders.ConversionPath, path)
-				if err != nil {
-					return fmt.Errorf("error checking file path %s: %v", path, err)
-				}
-				if relpath == filepath.Base(path) {
-					filesToBeTested = append(filesToBeTested, path)
-				}
+		for _, path := range testFiles {
+			relpath, err := filepath.Rel(i.config.Folders.ConversionPath, path)
+			if err != nil {
+				return fmt.Errorf("error checking file path %s: %v", path, err)
+			}
+			if relpath == filepath.Base(path) && testQueriesEnabledForFile(filepath.Base(path), i.config) {
+				filesToBeTested = append(filesToBeTested, path)
 			}
 		}
 	}
@@ -690,4 +687,16 @@ func AnyTestQueriesEnabled(config model.Configuration) bool {
 		}
 	}
 	return false
+}
+
+// testQueriesEnabledForFile returns true if the file's associated configuration has TestQueries enabled.
+// Files are matched to configurations by the "{configName}_" filename prefix.
+// Falls back to the default TestQueries setting if no named configuration matches.
+func testQueriesEnabledForFile(filename string, config model.Configuration) bool {
+	for _, cfg := range config.Configurations {
+		if strings.HasPrefix(filename, cfg.Name+"_") {
+			return config.Defaults.Integration.TestQueries || cfg.Integration.TestQueries
+		}
+	}
+	return config.Defaults.Integration.TestQueries
 }

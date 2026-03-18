@@ -35,8 +35,8 @@ func TestLoadConfigFromFile_MissingVersion(t *testing.T) {
 }
 
 func TestLoadConfigFromFile_WrongVersion(t *testing.T) {
-	for _, v := range []int{0, 1, 3} {
-		path := writeConfigFile(t, "version: "+string(rune('0'+v))+"\n")
+	for _, v := range []string{"0", "1", "3"} {
+		path := writeConfigFile(t, "version: "+v+"\n")
 		_, err := LoadConfigFromFile(path)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "only version 2 is supported")
