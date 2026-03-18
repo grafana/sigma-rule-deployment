@@ -7,8 +7,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/grafana/sigma-rule-deployment/internal/model"
 	"github.com/grafana/sigma-rule-deployment/shared"
@@ -602,6 +604,97 @@ func TestListAlertsInDeploymentFolder(t *testing.T) {
 	alerts, err := d.listAlertsInDeploymentFolder()
 	assert.NoError(t, err)
 	assert.Equal(t, []string{"testdata/alert_rule_conversion_test_file_1_u123abc.json", "testdata/alert_rule_conversion_test_file_2_u456def.json", "testdata/alert_rule_conversion_test_file_3_u789ghi.json"}, alerts)
+}
+
+func TestDeployToMultipleGrafanaInstances(t *testing.T) {
+	ctx := context.Background()
+
+	// Track which alert UIDs each server received.
+	server1UIDs := []string{}
+	server2UIDs := []string{}
+
+	// makeAlertServer returns a mock server that records created alert UIDs and responds to rule-group requests.
+	// The provided uids slice is appended to on each POST (alert creation).
+	makeAlertServer := func(receivedUIDs *[]string) *httptest.Server {
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			defer r.Body.Close()
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				t.Errorf("failed to read request body: %v", err)
+				return
+			}
+
+			switch {
+			case strings.HasPrefix(r.URL.Path, "/api/v1/provisioning/alert-rules") && r.Method == http.MethodPost:
+				alert, err := parseAlert(string(body))
+				if err != nil {
+					t.Errorf("failed to parse alert: %v", err)
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+				*receivedUIDs = append(*receivedUIDs, alert.UID)
+				w.WriteHeader(http.StatusCreated)
+				_, _ = w.Write(body)
+
+			case strings.HasPrefix(r.URL.Path, "/api/v1/provisioning/folder/") && r.Method == http.MethodGet:
+				// Return a rule group with interval matching what the deployer expects, so no PUT is needed
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte(`{"folderUID":"folder1","interval":300,"rules":[],"title":"group1"}`))
+
+			default:
+				t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+				w.WriteHeader(http.StatusNotFound)
+			}
+		}))
+	}
+
+	server1 := makeAlertServer(&server1UIDs)
+	defer server1.Close()
+	server2 := makeAlertServer(&server2UIDs)
+	defer server2.Close()
+
+	// Write alert files to a relative temp directory (ReadLocalFile requires a local/relative path)
+	tmpDir, err := os.MkdirTemp(".", "test-multi-grafana-*")
+	assert.NoError(t, err)
+	defer os.RemoveAll(tmpDir)
+
+	conv1Alert := `{"uid":"conv1uid1","title":"Conv1 Alert","folderUID":"folder1","orgID":1,"ruleGroup":"group1"}`
+	conv2Alert := `{"uid":"conv2uid1","title":"Conv2 Alert","folderUID":"folder1","orgID":1,"ruleGroup":"group1"}`
+
+	conv1File := filepath.Join(tmpDir, "alert_rule_conv1_myrule_conv1uid1.json")
+	conv2File := filepath.Join(tmpDir, "alert_rule_conv2_myrule_conv2uid1.json")
+	assert.NoError(t, os.WriteFile(conv1File, []byte(conv1Alert), 0600))
+	assert.NoError(t, os.WriteFile(conv2File, []byte(conv2Alert), 0600))
+
+	d := Deployer{
+		config: deploymentConfig{
+			endpoint:        server1.URL + "/",
+			saToken:         "my-test-token",
+			alertPath:       tmpDir,
+			folderUID:       "folder1",
+			alertsToAdd:     []string{conv1File, conv2File},
+			groupsIntervals: map[string]int64{"group1": 300},
+		},
+		client: shared.NewGrafanaClient(server1.URL+"/", "my-test-token", "sigma-rule-deployment/deployer", defaultRequestTimeout),
+		perConversionClients: map[string]*shared.GrafanaClient{
+			"conv1": shared.NewGrafanaClient(server1.URL+"/", "my-test-token", "sigma-rule-deployment/deployer", 5*time.Second),
+			"conv2": shared.NewGrafanaClient(server2.URL+"/", "my-test-token", "sigma-rule-deployment/deployer", 30*time.Second),
+		},
+		groupsToUpdate: map[string]bool{},
+	}
+
+	created, updated, deleted, err := d.Deploy(ctx)
+	assert.NoError(t, err)
+	assert.Contains(t, created, "conv1uid1")
+	assert.Contains(t, created, "conv2uid1")
+	assert.Empty(t, updated)
+	assert.Empty(t, deleted)
+
+	// conv1 alert should have gone to server1, conv2 alert to server2
+	assert.Contains(t, server1UIDs, "conv1uid1")
+	assert.NotContains(t, server1UIDs, "conv2uid1")
+	assert.Contains(t, server2UIDs, "conv2uid1")
+	assert.NotContains(t, server2UIDs, "conv1uid1")
 }
 
 func TestUpdateAlertGroupInterval(t *testing.T) {

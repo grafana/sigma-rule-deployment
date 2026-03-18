@@ -9,12 +9,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// LoadConfigFromFile reads a YAML configuration file and unmarshals it into a Configuration struct.
+// LoadConfigFromFile reads a YAML configuration file and returns a Configuration.
 // The configPath is cleaned using filepath.Clean before reading.
 func LoadConfigFromFile(configPath string) (model.Configuration, error) {
 	configPath = filepath.Clean(configPath)
 
-	// Read the YAML config file
 	configContent, err := ReadLocalFile(configPath)
 	if err != nil {
 		return model.Configuration{}, fmt.Errorf("error reading config file: %w", err)
