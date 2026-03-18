@@ -98,6 +98,13 @@ def convert_rules(
         print("No changed or deleted files identified, but all_rules is false")
         exit(0)
 
+    # Validate config version
+    config_version = config.get("version")
+    if config_version != 2:
+        raise ValueError(
+            f"Unsupported config version {config_version!r}: only version 2 is supported"
+        )
+
     # Get the conversion path from the config
     conversion_path = "conversions"  # Default conversion path if none is set
     if folders := config.get("folders"):

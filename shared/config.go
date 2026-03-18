@@ -24,5 +24,9 @@ func LoadConfigFromFile(configPath string) (model.Configuration, error) {
 		return model.Configuration{}, fmt.Errorf("error unmarshalling config file: %w", err)
 	}
 
+	if config.Version != 2 {
+		return model.Configuration{}, fmt.Errorf("unsupported config version %d: only version 2 is supported", config.Version)
+	}
+
 	return config, nil
 }

@@ -109,6 +109,14 @@ def test_convert_rules_missing_path_prefix():
         convert_rules(config=DynaconfDict(), path_prefix="")
 
 
+@pytest.mark.parametrize("version", [None, 0, 1, 3, "2"])
+def test_convert_rules_unsupported_version(temp_workspace, version):
+    """Test that an error is raised when the config version is not 2."""
+    config = DynaconfDict({"version": version} if version is not None else {})
+    with pytest.raises(ValueError, match="only version 2 is supported"):
+        convert_rules(config=config, path_prefix=temp_workspace, all_rules=True)
+
+
 def test_convert_rules_invalid_output_dir(temp_workspace, mock_config):
     """Test that an error is raised when output directory is outside the project root."""
     mock_config["folders"] = {"conversion_path": "../outside"}
@@ -123,7 +131,7 @@ def test_convert_rules_invalid_output_dir(temp_workspace, mock_config):
 def test_convert_rules_missing_conversion_name():
     """Test that an error is raised when a configuration item has no name."""
     invalid_config = DynaconfDict(
-        {"configurations": [{"conversion": {"input": ["rules/*.yml"]}}]}
+        {"version": 2, "configurations": [{"conversion": {"input": ["rules/*.yml"]}}]}
     )
     with pytest.raises(
         ValueError,
@@ -139,9 +147,10 @@ def test_convert_rules_absolute_input_path():
     """Test that an error is raised when input file pattern is absolute."""
     invalid_config = DynaconfDict(
         {
+            "version": 2,
             "configurations": [
                 {"name": "test", "conversion": {"input": ["/absolute/path/*.yml"]}}
-            ]
+            ],
         }
     )
     with pytest.raises(ValueError, match="must be relative"):
@@ -862,7 +871,7 @@ def test_convert_rules_command_args(
     mock_invoke.return_value = mock_result
 
     # Create config with the tested parameters
-    config_dict = DynaconfDict(config_params)
+    config_dict = DynaconfDict({"version": 2, **config_params})
 
     # Mock Dynaconf to accept DynaconfDict
     dynaconf_instance = mock_dynaconf.return_value
@@ -976,6 +985,7 @@ def test_default_correlation_method(
     # Create config with default correlation method
     config_dict = DynaconfDict(
         {
+            "version": 2,
             "defaults": {"conversion": {"correlation_method": "default_corr"}},
             "configurations": [{"name": "test_default_corr", "conversion": {"input": ["test.yml"]}}],
         }
