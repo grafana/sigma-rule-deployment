@@ -39,7 +39,7 @@ func (qt *QueryTester) Run() error {
 		conversionContent, err := shared.ReadLocalFile(inputFile)
 		if err != nil {
 			fmt.Printf("Error reading file %s: %v\n", inputFile, err)
-			if !qt.config.IntegratorConfig.ContinueOnQueryTestingErrors {
+			if !qt.config.Defaults.Integration.ContinueOnError {
 				return err
 			}
 			continue
@@ -49,24 +49,32 @@ func (qt *QueryTester) Run() error {
 		err = json.Unmarshal([]byte(conversionContent), &conversionObject)
 		if err != nil {
 			fmt.Printf("Error unmarshalling conversion output for file %s: %v\n", inputFile, err)
-			if !qt.config.IntegratorConfig.ContinueOnQueryTestingErrors {
+			if !qt.config.Defaults.Integration.ContinueOnError {
 				return fmt.Errorf("error unmarshalling conversion output: %v", err)
 			}
 			continue
 		}
 
 		// Find matching configuration using ConversionName
-		var config model.ConversionConfig
-		for _, conf := range qt.config.Conversions {
-			if conf.Name == conversionObject.ConversionName {
-				config = conf
+		var cfg model.NamedConfigBlock
+		for _, c := range qt.config.Configurations {
+			if c.Name == conversionObject.ConversionName {
+				cfg = c
 				break
 			}
 		}
-		if config.Name == "" {
+		if cfg.Name == "" {
 			fmt.Printf("Warning: No configuration found for conversion name: %s, skipping file: %s\n", conversionObject.ConversionName, inputFile)
 			continue
 		}
+
+		// Skip if neither the default nor this configuration has TestQueries enabled
+		if !qt.config.Defaults.Integration.TestQueries && !cfg.Integration.TestQueries {
+			continue
+		}
+
+		// Per-configuration ContinueOnError overrides the global default (additive: either source enables it)
+		continueOnError := qt.config.Defaults.Integration.ContinueOnError || cfg.Integration.ContinueOnError
 
 		queries := conversionObject.Queries
 		if len(queries) == 0 {
@@ -83,12 +91,12 @@ func (qt *QueryTester) Run() error {
 
 		// Test all queries against the datasource
 		queryResults, err := qt.TestQueries(
-			queryMap, config, qt.config.ConversionDefaults,
+			queryMap, cfg, qt.config.Defaults,
 		)
 		if err != nil {
 			fmt.Printf("Error testing queries for file %s: %v\n", inputFile, err)
 			// Return error if continue on query testing errors is not enabled
-			if !qt.config.IntegratorConfig.ContinueOnQueryTestingErrors {
+			if !continueOnError {
 				return err
 			}
 		}
@@ -147,16 +155,22 @@ func (qt *QueryTester) Run() error {
 }
 
 // TestQueries tests a map of queries against the datasource
-func (qt *QueryTester) TestQueries(queries map[string]string, config, defaultConf model.ConversionConfig) ([]model.QueryTestResult, error) {
+func (qt *QueryTester) TestQueries(queries map[string]string, cfg model.NamedConfigBlock, defaults model.ConfigBlock) ([]model.QueryTestResult, error) {
 	queryResults := make([]model.QueryTestResult, 0, len(queries))
-	datasource := shared.GetConfigValue(config.DataSource, defaultConf.DataSource, "")
+	datasource := shared.GetConfigValue(cfg.Integration.DataSource, defaults.Integration.DataSource, "")
 	// Determine datasource type using the same logic as createAlertQuery
 	datasourceType := shared.GetConfigValue(
-		config.DataSourceType,
-		defaultConf.DataSourceType,
-		shared.GetConfigValue(config.Target, defaultConf.Target, shared.Loki),
+		cfg.Integration.DataSourceType,
+		defaults.Integration.DataSourceType,
+		shared.GetConfigValue(cfg.Conversion.Target, defaults.Conversion.Target, shared.Loki),
 	)
-	customModel := shared.GetConfigValue(config.QueryModel, defaultConf.QueryModel, "")
+	customModel := shared.GetConfigValue(cfg.Integration.QueryModel, defaults.Integration.QueryModel, "")
+	from := shared.GetConfigValue(cfg.Integration.From, defaults.Integration.From, "now-1h")
+	to := shared.GetConfigValue(cfg.Integration.To, defaults.Integration.To, "now")
+	grafanaInstance := shared.GetConfigValue(cfg.Deployment.GrafanaInstance, defaults.Deployment.GrafanaInstance, "")
+	timeout := shared.ParseDurationOrDefault(cfg.Deployment.Timeout, qt.timeout)
+	showSampleValues := defaults.Integration.ShowSampleValues || cfg.Integration.ShowSampleValues
+	showLogLines := defaults.Integration.ShowLogLines || cfg.Integration.ShowLogLines
 
 	// Sort refIDs to ensure consistent ordering
 	refIDs := make([]string, 0, len(queries))
@@ -170,13 +184,13 @@ func (qt *QueryTester) TestQueries(queries map[string]string, config, defaultCon
 		resp, err := integrate.TestQuery(
 			query,
 			datasource,
-			qt.config.DeployerConfig.GrafanaInstance,
+			grafanaInstance,
 			os.Getenv("INTEGRATOR_GRAFANA_SA_TOKEN"),
 			refID,
-			qt.config.IntegratorConfig.From,
-			qt.config.IntegratorConfig.To,
+			from,
+			to,
 			customModel,
-			qt.timeout,
+			timeout,
 		)
 		if err != nil {
 			return []model.QueryTestResult{
@@ -192,12 +206,13 @@ func (qt *QueryTester) TestQueries(queries map[string]string, config, defaultCon
 		}
 
 		// Generate explore link based on datasource type
+		orgID := shared.GetConfigValueInt64(cfg.Integration.OrgID, defaults.Integration.OrgID)
 		exploreLink, err := GenerateExploreLink(
-			query, datasource, datasourceType, config, defaultConf,
-			qt.config.DeployerConfig.GrafanaInstance,
-			qt.config.IntegratorConfig.From,
-			qt.config.IntegratorConfig.To,
-			qt.config.IntegratorConfig.OrgID,
+			query, datasource, datasourceType, cfg, defaults,
+			grafanaInstance,
+			from,
+			to,
+			orgID,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("error generating explore link: %v", err)
@@ -231,8 +246,8 @@ func (qt *QueryTester) TestQueries(queries map[string]string, config, defaultCon
 				if err := ProcessFrame(
 					frame,
 					&result,
-					qt.config.IntegratorConfig.ShowSampleValues,
-					qt.config.IntegratorConfig.ShowLogLines,
+					showSampleValues,
+					showLogLines,
 				); err != nil {
 					return nil, fmt.Errorf("error processing frame: %v", err)
 				}

@@ -45,15 +45,30 @@ type deploymentConfig struct {
 // Structures to unmarshal the YAML config file
 
 type Deployer struct {
-	config         deploymentConfig
-	client         *shared.GrafanaClient
-	groupsToUpdate map[string]bool
+	config               deploymentConfig
+	client               *shared.GrafanaClient
+	perConversionClients map[string]*shared.GrafanaClient
+	groupsToUpdate       map[string]bool
 }
 
 func NewDeployer() *Deployer {
 	return &Deployer{
-		groupsToUpdate: map[string]bool{},
+		groupsToUpdate:       map[string]bool{},
+		perConversionClients: map[string]*shared.GrafanaClient{},
 	}
+}
+
+// clientForAlertFile returns the appropriate GrafanaClient for the given alert file,
+// based on the conversion name prefix in the filename. Falls back to defaultClient.
+func (d *Deployer) clientForAlertFile(filename string, defaultClient *shared.GrafanaClient) *shared.GrafanaClient {
+	base := filepath.Base(filename)
+	name := strings.TrimPrefix(base, "alert_rule_")
+	for convName, client := range d.perConversionClients {
+		if strings.HasPrefix(name, convName+"_") {
+			return client
+		}
+	}
+	return defaultClient
 }
 
 func (d *Deployer) SetClient() {
@@ -78,6 +93,11 @@ func (d *Deployer) Deploy(ctx context.Context) ([]string, []string, []string, er
 	log.Printf("Preparing to deploy %d alerts, update %d alerts and delete %d alerts",
 		len(d.config.alertsToAdd), len(d.config.alertsToUpdate), len(d.config.alertsToRemove))
 
+	// Save the default client and ensure it is always restored, even on early return.
+	// d.client is temporarily swapped per alert file to route to the correct Grafana instance.
+	defaultClient := d.client
+	defer func() { d.client = defaultClient }()
+
 	// Process alert DELETIONS
 	// It is important to do this first for the case where an alert
 	// is recreated in a different file (with a different UID), to avoid conflicts on the alert title
@@ -88,6 +108,7 @@ func (d *Deployer) Deploy(ctx context.Context) ([]string, []string, []string, er
 			err := fmt.Errorf("invalid alert filename: %s", alertFile)
 			return alertsCreated, alertsUpdated, alertsDeleted, err
 		}
+		d.client = d.clientForAlertFile(alertFile, defaultClient)
 		uid, err := d.deleteAlert(ctx, alertUID)
 		if err != nil {
 			return alertsCreated, alertsUpdated, alertsDeleted, err
@@ -98,6 +119,7 @@ func (d *Deployer) Deploy(ctx context.Context) ([]string, []string, []string, er
 			alertsDeleted = append(alertsDeleted, uid)
 		}
 	}
+
 	// Process alert CREATIONS
 	for _, alertFile := range d.config.alertsToAdd {
 		content, err := shared.ReadLocalFile(alertFile)
@@ -105,6 +127,7 @@ func (d *Deployer) Deploy(ctx context.Context) ([]string, []string, []string, er
 			log.Printf("Can't read file %s: %v", alertFile, err)
 			return alertsCreated, alertsUpdated, alertsDeleted, err
 		}
+		d.client = d.clientForAlertFile(alertFile, defaultClient)
 		uid, updated, err := d.createAlert(ctx, content, true)
 		if err != nil {
 			return alertsCreated, alertsUpdated, alertsDeleted, err
@@ -117,6 +140,7 @@ func (d *Deployer) Deploy(ctx context.Context) ([]string, []string, []string, er
 			alertsCreated = append(alertsCreated, uid)
 		}
 	}
+
 	// Process alert UPDATES
 	for _, alertFile := range d.config.alertsToUpdate {
 		content, err := shared.ReadLocalFile(alertFile)
@@ -124,6 +148,7 @@ func (d *Deployer) Deploy(ctx context.Context) ([]string, []string, []string, er
 			log.Printf("Can't read file %s: %v", alertFile, err)
 			return alertsCreated, alertsUpdated, alertsDeleted, err
 		}
+		d.client = d.clientForAlertFile(alertFile, defaultClient)
 		uid, created, err := d.updateAlert(ctx, content, true)
 		if err != nil {
 			return alertsCreated, alertsUpdated, alertsDeleted, err
@@ -181,17 +206,17 @@ func (d *Deployer) LoadConfig(_ context.Context) error {
 		return err
 	}
 	d.config = deploymentConfig{
-		endpoint:        configYAML.DeployerConfig.GrafanaInstance,
+		endpoint:        configYAML.Defaults.Deployment.GrafanaInstance,
 		alertPath:       filepath.Clean(configYAML.Folders.DeploymentPath),
-		orgID:           configYAML.IntegratorConfig.OrgID,
-		folderUID:       configYAML.IntegratorConfig.FolderID,
+		orgID:           configYAML.Defaults.Integration.OrgID,
+		folderUID:       configYAML.Defaults.Integration.FolderID,
 		groupsIntervals: make(map[string]int64),
 		timeout:         defaultRequestTimeout,
 	}
 
 	// Parse timeout if provided
-	if configYAML.DeployerConfig.Timeout != "" {
-		parsedTimeout, err := time.ParseDuration(configYAML.DeployerConfig.Timeout)
+	if configYAML.Defaults.Deployment.Timeout != "" {
+		parsedTimeout, err := time.ParseDuration(configYAML.Defaults.Deployment.Timeout)
 		if err != nil {
 			log.Printf("Warning: Invalid timeout format in config, using default: %v\n", err)
 		} else {
@@ -210,26 +235,44 @@ func (d *Deployer) LoadConfig(_ context.Context) error {
 		return fmt.Errorf("the Grafana SA token is not set or empty")
 	}
 
+	// Build per-conversion clients for configurations that override the grafana_instance
+	d.perConversionClients = make(map[string]*shared.GrafanaClient)
+	for _, cfg := range configYAML.Configurations {
+		if cfg.Deployment.GrafanaInstance != "" {
+			endpoint := cfg.Deployment.GrafanaInstance
+			if !strings.HasSuffix(endpoint, "/") {
+				endpoint += "/"
+			}
+			timeout := shared.ParseDurationOrDefault(cfg.Deployment.Timeout, d.config.timeout)
+			d.perConversionClients[cfg.Name] = shared.NewGrafanaClient(
+				endpoint,
+				d.config.saToken,
+				"sigma-rule-deployment/deployer",
+				timeout,
+			)
+		}
+	}
+
 	// Extract the groups intervals from the conversion config
 	defaultInterval := "5m"
-	if configYAML.ConversionDefaults.TimeWindow != "" {
-		defaultInterval = configYAML.ConversionDefaults.TimeWindow
+	if configYAML.Defaults.Integration.TimeWindow != "" {
+		defaultInterval = configYAML.Defaults.Integration.TimeWindow
 	}
-	for _, config := range configYAML.Conversions {
+	for _, config := range configYAML.Configurations {
 		interval := defaultInterval
-		if config.TimeWindow != "" {
-			interval = config.TimeWindow
+		if config.Integration.TimeWindow != "" {
+			interval = config.Integration.TimeWindow
 		}
 		intervalDuration, err := time.ParseDuration(interval)
 		log.Printf("Interval duration from %s: %d", sanitizeForLog(interval), int64(intervalDuration.Seconds())) //nolint:gosec // G706: interval sanitized with sanitizeForLog before logging
 		if err != nil || int64(intervalDuration.Seconds()) <= 0 {
 			return fmt.Errorf("error parsing time window %s: %v", interval, err)
 		}
-		if _, ok := d.config.groupsIntervals[config.RuleGroup]; !ok {
-			d.config.groupsIntervals[config.RuleGroup] = int64(intervalDuration.Seconds())
-			log.Printf("Setting interval for rule group %s to %d", sanitizeForLog(config.RuleGroup), d.config.groupsIntervals[config.RuleGroup]) //nolint:gosec // G706: config.RuleGroup sanitized with sanitizeForLog before logging
-		} else if d.config.groupsIntervals[config.RuleGroup] != int64(intervalDuration.Seconds()) {
-			return fmt.Errorf("time window for rule group %s is different between conversion configs", config.RuleGroup)
+		if _, ok := d.config.groupsIntervals[config.Integration.RuleGroup]; !ok {
+			d.config.groupsIntervals[config.Integration.RuleGroup] = int64(intervalDuration.Seconds())
+			log.Printf("Setting interval for rule group %s to %d", sanitizeForLog(config.Integration.RuleGroup), d.config.groupsIntervals[config.Integration.RuleGroup]) //nolint:gosec // G706: config.RuleGroup sanitized with sanitizeForLog before logging
+		} else if d.config.groupsIntervals[config.Integration.RuleGroup] != int64(intervalDuration.Seconds()) {
+			return fmt.Errorf("time window for rule group %s is different between conversion configs", config.Integration.RuleGroup)
 		}
 	}
 

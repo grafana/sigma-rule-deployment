@@ -38,11 +38,11 @@ func main() {
 
 		// Run query testing if enabled
 		config := integrator.Config()
-		if config.IntegratorConfig.TestQueries {
+		if integrate.AnyTestQueriesEnabled(config) {
 			// Parse timeout from configuration
 			timeoutDuration := 10 * time.Second // Default timeout
-			if config.DeployerConfig.Timeout != "" {
-				parsedTimeout, err := time.ParseDuration(config.DeployerConfig.Timeout)
+			if config.Defaults.Deployment.Timeout != "" {
+				parsedTimeout, err := time.ParseDuration(config.Defaults.Deployment.Timeout)
 				if err != nil {
 					fmt.Printf("Warning: Invalid timeout format in config, using default: %v\n", err)
 				} else {
@@ -56,7 +56,7 @@ func main() {
 				timeoutDuration,
 			)
 			if err := queryTester.Run(); err != nil {
-				if !config.IntegratorConfig.ContinueOnQueryTestingErrors {
+				if !config.Defaults.Integration.ContinueOnError {
 					fmt.Printf("Error running query tests: %v\n", err)
 					os.Exit(1)
 				}
