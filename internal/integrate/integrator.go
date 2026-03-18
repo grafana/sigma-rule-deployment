@@ -476,10 +476,7 @@ func (i *Integrator) ConvertToAlert(rule *model.ProvisionedAlertRule, queries []
 	rule.Data = queryData
 
 	// alerting rule metadata
-	rule.OrgID = i.config.Defaults.Integration.OrgID
-	if cfg.Integration.OrgID != 0 {
-		rule.OrgID = cfg.Integration.OrgID
-	}
+	rule.OrgID = shared.GetConfigValueInt64(cfg.Integration.OrgID, i.config.Defaults.Integration.OrgID)
 	rule.FolderUID = shared.GetConfigValue(cfg.Integration.FolderID, i.config.Defaults.Integration.FolderID, "")
 	rule.RuleGroup = shared.GetConfigValue(cfg.Integration.RuleGroup, i.config.Defaults.Integration.RuleGroup, "Default")
 	rule.NoDataState = model.OK

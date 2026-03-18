@@ -247,12 +247,7 @@ func (d *Deployer) LoadConfig(_ context.Context) error {
 			if !strings.HasSuffix(endpoint, "/") {
 				endpoint += "/"
 			}
-			timeout := d.config.timeout
-			if cfg.Deployment.Timeout != "" {
-				if parsedTimeout, err := time.ParseDuration(cfg.Deployment.Timeout); err == nil {
-					timeout = parsedTimeout
-				}
-			}
+			timeout := shared.ParseDurationOrDefault(cfg.Deployment.Timeout, d.config.timeout)
 			d.perConversionClients[cfg.Name] = shared.NewGrafanaClient(
 				endpoint,
 				d.config.saToken,

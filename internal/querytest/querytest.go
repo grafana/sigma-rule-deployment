@@ -168,12 +168,7 @@ func (qt *QueryTester) TestQueries(queries map[string]string, cfg model.NamedCon
 	from := shared.GetConfigValue(cfg.Integration.From, defaults.Integration.From, "now-1h")
 	to := shared.GetConfigValue(cfg.Integration.To, defaults.Integration.To, "now")
 	grafanaInstance := shared.GetConfigValue(cfg.Deployment.GrafanaInstance, defaults.Deployment.GrafanaInstance, "")
-	timeout := qt.timeout
-	if cfg.Deployment.Timeout != "" {
-		if parsedTimeout, err := time.ParseDuration(cfg.Deployment.Timeout); err == nil {
-			timeout = parsedTimeout
-		}
-	}
+	timeout := shared.ParseDurationOrDefault(cfg.Deployment.Timeout, qt.timeout)
 	showSampleValues := defaults.Integration.ShowSampleValues || cfg.Integration.ShowSampleValues
 	showLogLines := defaults.Integration.ShowLogLines || cfg.Integration.ShowLogLines
 
@@ -211,10 +206,7 @@ func (qt *QueryTester) TestQueries(queries map[string]string, cfg model.NamedCon
 		}
 
 		// Generate explore link based on datasource type
-		orgID := defaults.Integration.OrgID
-		if cfg.Integration.OrgID != 0 {
-			orgID = cfg.Integration.OrgID
-		}
+		orgID := shared.GetConfigValueInt64(cfg.Integration.OrgID, defaults.Integration.OrgID)
 		exploreLink, err := GenerateExploreLink(
 			query, datasource, datasourceType, cfg, defaults,
 			grafanaInstance,
