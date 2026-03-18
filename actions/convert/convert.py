@@ -459,8 +459,7 @@ def filter_rule_fields(rule_dicts: list[dict[str, Any]], desired_fields: list[st
     """
     if not desired_fields:
         return rule_dicts
-    else:
-        # Ensure desired_fields contains at least the id and title fields
-        necessary_fields = set(["id", "title"] + desired_fields)
+    # Ensure desired_fields contains at least the id and title fields
+    necessary_fields = set(["id", "title"] + desired_fields)
 
     return [dict((field, rule_dict[field]) for field in necessary_fields if field in rule_dict) for rule_dict in rule_dicts]

@@ -164,7 +164,6 @@ func (d *Deployer) Deploy(ctx context.Context) ([]string, []string, []string, er
 			alertsUpdated = append(alertsUpdated, uid)
 		}
 	}
-	d.client = defaultClient
 
 	// Process alert group interval updates
 	if len(d.groupsToUpdate) > 0 {
