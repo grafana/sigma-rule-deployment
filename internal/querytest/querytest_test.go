@@ -325,6 +325,9 @@ func TestRunMultipleConfigurations(t *testing.T) {
 						TimeWindow:  "5m",
 						TestQueries: true,
 					},
+					Deployment: model.DeploymentConfig{
+						GrafanaInstance: "https://enabled.grafana.com",
+					},
 				},
 			},
 			{
@@ -358,6 +361,9 @@ func TestRunMultipleConfigurations(t *testing.T) {
 						RuleGroup:    "Show Lines Alerts",
 						TestQueries:  true,
 						ShowLogLines: true,
+					},
+					Deployment: model.DeploymentConfig{
+						Timeout: "30s",
 					},
 				},
 			},
@@ -399,11 +405,31 @@ func TestRunMultipleConfigurations(t *testing.T) {
 	// Should succeed because conv_continue has ContinueOnError: true
 	assert.NoError(t, err)
 
-	// conv_enabled was queried against enabled-ds with default from
-	assert.Contains(t, mock.calls, trackingCall{datasource: "enabled-ds", from: "now-1h"})
+	defaultTimeout := 5 * time.Second
 
-	// conv_continue was queried against continue-ds with its per-cfg from
-	assert.Contains(t, mock.calls, trackingCall{datasource: "continue-ds", from: "now-6h"})
+	// conv_enabled: per-cfg grafana instance, default timeout, default from
+	assert.Contains(t, mock.calls, trackingCall{
+		datasource:      "enabled-ds",
+		from:            "now-1h",
+		grafanaInstance: "https://enabled.grafana.com",
+		timeout:         defaultTimeout,
+	})
+
+	// conv_continue: default grafana instance, default timeout, per-cfg from
+	assert.Contains(t, mock.calls, trackingCall{
+		datasource:      "continue-ds",
+		from:            "now-6h",
+		grafanaInstance: "https://test.grafana.com",
+		timeout:         defaultTimeout,
+	})
+
+	// conv_show_lines: default grafana instance, per-cfg 30s timeout
+	assert.Contains(t, mock.calls, trackingCall{
+		datasource:      "show-lines-ds",
+		from:            "now-1h",
+		grafanaInstance: "https://test.grafana.com",
+		timeout:         30 * time.Second,
+	})
 
 	// conv_no_test was never queried even though its file was passed
 	for _, call := range mock.calls {
@@ -451,8 +477,10 @@ func TestRunMultipleConfigurations(t *testing.T) {
 
 // trackingCall records per-query invocation details for assertion
 type trackingCall struct {
-	datasource string
-	from       string
+	datasource      string
+	from            string
+	grafanaInstance string
+	timeout         time.Duration
 }
 
 // trackingDatasourceQuery records each ExecuteQuery call for assertion
@@ -469,7 +497,7 @@ func newTrackingDatasourceQuery() *trackingDatasourceQuery {
 }
 
 func (t *trackingDatasourceQuery) ExecuteQuery(query, dsName, baseURL, apiKey, refID, from, to, customModel string, timeout time.Duration) ([]byte, error) {
-	t.calls = append(t.calls, trackingCall{datasource: dsName, from: from})
+	t.calls = append(t.calls, trackingCall{datasource: dsName, from: from, grafanaInstance: baseURL, timeout: timeout})
 	return t.testDatasourceQueryWithErrors.ExecuteQuery(query, dsName, baseURL, apiKey, refID, from, to, customModel, timeout)
 }
 

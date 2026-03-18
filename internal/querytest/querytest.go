@@ -168,6 +168,12 @@ func (qt *QueryTester) TestQueries(queries map[string]string, cfg model.NamedCon
 	from := shared.GetConfigValue(cfg.Integration.From, defaults.Integration.From, "now-1h")
 	to := shared.GetConfigValue(cfg.Integration.To, defaults.Integration.To, "now")
 	grafanaInstance := shared.GetConfigValue(cfg.Deployment.GrafanaInstance, defaults.Deployment.GrafanaInstance, "")
+	timeout := qt.timeout
+	if cfg.Deployment.Timeout != "" {
+		if parsedTimeout, err := time.ParseDuration(cfg.Deployment.Timeout); err == nil {
+			timeout = parsedTimeout
+		}
+	}
 	showSampleValues := defaults.Integration.ShowSampleValues || cfg.Integration.ShowSampleValues
 	showLogLines := defaults.Integration.ShowLogLines || cfg.Integration.ShowLogLines
 
@@ -189,7 +195,7 @@ func (qt *QueryTester) TestQueries(queries map[string]string, cfg model.NamedCon
 			from,
 			to,
 			customModel,
-			qt.timeout,
+			timeout,
 		)
 		if err != nil {
 			return []model.QueryTestResult{
