@@ -1,16 +1,22 @@
+version: 2
 folders:
   deployment_path: "./deployments"
-conversion_defaults:
-  time_window: "6h"
-conversions:
-  - rule_group: "group1"
-    time_window: "10m"
-  - rule_group: "group2"
-    time_window: "1h"
-  - rule_group: "group3"
-    # Uses default time window
-integration:
-  folder_id: abcdef123
-  org_id: 23
-deployment:
-  grafana_instance: https://myinstance.grafana.com
+defaults:
+  integration:
+    folder_id: abcdef123
+    org_id: 23
+  deployment:
+    grafana_instance: https://myinstance.grafana.com
+configurations:
+  - name: group1_config
+    integration:
+      rule_group: "group1"
+      time_window: "10m"
+  - name: group2_config
+    integration:
+      rule_group: "group2"
+      time_window: "1h"
+  - name: group3_config
+    integration:
+      rule_group: "group3"
+      time_window: "6h"

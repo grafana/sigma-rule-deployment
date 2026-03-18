@@ -79,10 +79,19 @@ func TestDoConversionsSkipsManualDeployment(t *testing.T) {
 	convPath, deployPath := manualTestDirs(t, "skip_overwrite")
 
 	config := model.Configuration{
-		Folders:            model.FoldersConfig{ConversionPath: convPath, DeploymentPath: deployPath},
-		ConversionDefaults: model.ConversionConfig{Target: "loki", DataSource: "test-datasource"},
-		Conversions:        []model.ConversionConfig{{Name: "test_conv", RuleGroup: "Test Rules", TimeWindow: "5m"}},
-		IntegratorConfig:   model.IntegrationConfig{FolderID: "test-folder", OrgID: 1},
+		Folders: model.FoldersConfig{ConversionPath: convPath, DeploymentPath: deployPath},
+		Defaults: model.ConfigBlock{
+			Conversion:  model.ConversionConfig{Target: "loki"},
+			Integration: model.IntegrationConfig{DataSource: "test-datasource", FolderID: "test-folder", OrgID: 1},
+		},
+		Configurations: []model.NamedConfigBlock{
+			{
+				Name: "test_conv",
+				ConfigBlock: model.ConfigBlock{
+					Integration: model.IntegrationConfig{RuleGroup: "Test Rules", TimeWindow: "5m"},
+				},
+			},
+		},
 	}
 
 	convOutput := model.ConversionOutput{
@@ -137,8 +146,8 @@ func TestDoConversionsSkipsManualDeployment(t *testing.T) {
 func TestDoCleanupPreservesManual(t *testing.T) {
 	newConfig := func(convPath, deployPath string) model.Configuration {
 		return model.Configuration{
-			Folders:     model.FoldersConfig{ConversionPath: convPath, DeploymentPath: deployPath},
-			Conversions: []model.ConversionConfig{{Name: "test_conv"}},
+			Folders:        model.FoldersConfig{ConversionPath: convPath, DeploymentPath: deployPath},
+			Configurations: []model.NamedConfigBlock{{Name: "test_conv"}},
 		}
 	}
 
@@ -234,10 +243,19 @@ func TestDoConversionsRegeneratesManualFalseDeployment(t *testing.T) {
 	convPath, deployPath := manualTestDirs(t, "false_regen")
 
 	config := model.Configuration{
-		Folders:            model.FoldersConfig{ConversionPath: convPath, DeploymentPath: deployPath},
-		ConversionDefaults: model.ConversionConfig{Target: "loki", DataSource: "test-datasource"},
-		Conversions:        []model.ConversionConfig{{Name: "test_conv", RuleGroup: "Test Rules", TimeWindow: "5m"}},
-		IntegratorConfig:   model.IntegrationConfig{FolderID: "test-folder", OrgID: 1},
+		Folders: model.FoldersConfig{ConversionPath: convPath, DeploymentPath: deployPath},
+		Defaults: model.ConfigBlock{
+			Conversion:  model.ConversionConfig{Target: "loki"},
+			Integration: model.IntegrationConfig{DataSource: "test-datasource", FolderID: "test-folder", OrgID: 1},
+		},
+		Configurations: []model.NamedConfigBlock{
+			{
+				Name: "test_conv",
+				ConfigBlock: model.ConfigBlock{
+					Integration: model.IntegrationConfig{RuleGroup: "Test Rules", TimeWindow: "5m"},
+				},
+			},
+		},
 	}
 
 	convOutput := model.ConversionOutput{
@@ -307,8 +325,8 @@ func TestDoCleanupKeepsUnparseableFile(t *testing.T) {
 	assert.NoError(t, os.WriteFile(deployFile, []byte(`{ broken json`), 0o600))
 
 	config := model.Configuration{
-		Folders:     model.FoldersConfig{ConversionPath: convPath, DeploymentPath: deployPath},
-		Conversions: []model.ConversionConfig{{Name: "test_conv"}},
+		Folders:        model.FoldersConfig{ConversionPath: convPath, DeploymentPath: deployPath},
+		Configurations: []model.NamedConfigBlock{{Name: "test_conv"}},
 	}
 	i := &Integrator{config: config, removedFiles: []string{filepath.Join(convPath, "test_conv.json")}}
 	assert.NoError(t, i.DoCleanup())
