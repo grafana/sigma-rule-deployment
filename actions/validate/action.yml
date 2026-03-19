@@ -34,6 +34,11 @@ runs:
       run: pip install check-jsonschema==0.33.3 pyyaml
     - name: Validate configuration
       shell: bash
+      env:
+        INPUTS_CONFIG_FILE: ${{ inputs.config_file }}
+        INPUTS_V2_SCHEMA_FILE: ${{ inputs.v2_schema_file }}
+        INPUTS_V1_SCHEMA_FILE: ${{ inputs.v1_schema_file }}
+        GH_TOKEN: ${{ inputs.github_token }}
       run: |
         WORKSPACE_REAL=$(realpath "$GITHUB_WORKSPACE")
 
@@ -139,8 +144,3 @@ runs:
         echo "Configuration is not valid in v1 or v2 format. Validation errors (v2 schema):"
         echo "$V2_OUTPUT"
         exit 1
-      env:
-        INPUTS_CONFIG_FILE: ${{ inputs.config_file }}
-        INPUTS_V2_SCHEMA_FILE: ${{ inputs.v2_schema_file }}
-        INPUTS_V1_SCHEMA_FILE: ${{ inputs.v1_schema_file }}
-        GH_TOKEN: ${{ inputs.github_token }}
