@@ -105,7 +105,7 @@ runs:
 
           # Generate suggested v2 config
           MIGRATED_FILE=$(mktemp)
-          python3 "${GITHUB_ACTION_PATH}/migrate_v1_to_v2.py" "$CONFIG_PATH" > "$MIGRATED_FILE"
+          python3 "${GITHUB_ACTION_PATH}/../../scripts/migrate-config-v1-to-v2/migrate_v1_to_v2.py" "$CONFIG_PATH" > "$MIGRATED_FILE"
 
           # Post a PR comment if a token is available and we are in a PR context
           if [ -n "$GH_TOKEN" ] && [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
