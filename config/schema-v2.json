@@ -403,10 +403,18 @@
             "description": "Deployment configuration settings",
             "properties": {
                 "grafana_instance": {
-                    "$ref": "#/$defs/urlPattern",
-                    "description": "URL of the target Grafana instance",
+                    "anyOf": [
+                        {"$ref": "#/$defs/urlPattern"},
+                        {
+                            "type": "array",
+                            "items": {"$ref": "#/$defs/urlPattern"},
+                            "minItems": 1
+                        }
+                    ],
+                    "description": "URL(s) of the target Grafana instance(s)",
                     "examples": [
-                        "https://myinstance.grafana.com"
+                        "https://myinstance.grafana.com",
+                        ["https://instance1.grafana.com", "https://instance2.grafana.com"]
                     ]
                 },
                 "timeout": {
