@@ -18,7 +18,7 @@ type GrafanaInstances []string
 
 // UnmarshalYAML allows GrafanaInstances to be decoded from either a scalar or a sequence node.
 func (g *GrafanaInstances) UnmarshalYAML(value *yaml.Node) error {
-	switch value.Kind {
+	switch value.Kind { //nolint:exhaustive // DocumentNode, MappingNode, AliasNode are invalid for this field and handled by the default case
 	case yaml.ScalarNode:
 		if value.Value == "" {
 			*g = nil

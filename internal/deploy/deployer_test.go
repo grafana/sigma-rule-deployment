@@ -1070,7 +1070,7 @@ func TestDeployWithMultipleInstanceListInConfig(t *testing.T) {
 
 	d.config.alertsToAdd = []string{convMultiFile, convDefaultFile}
 
-	_, _, _, err = d.Deploy(ctx)
+	_, _, _, err = d.Deploy(ctx) //nolint:dogsled
 	assert.NoError(t, err)
 
 	// conv_multi alert deployed to overrideServer and server1 (its list), not server2
