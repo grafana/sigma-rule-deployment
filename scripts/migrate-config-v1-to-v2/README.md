@@ -29,8 +29,7 @@ python migrate_v1_to_v2.py config.yml config-v2.yml
 ## Running tests
 
 ```bash
-pip install pytest pyyaml
-pytest test_migrate.py -v
+uv run --with pytest --with pyyaml pytest test_migrate.py -v
 ```
 
 ## Notes
