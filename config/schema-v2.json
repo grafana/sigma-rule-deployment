@@ -444,7 +444,6 @@
                     "format": "default",
                     "skip_unsupported": true,
                     "file_pattern": "*.yml",
-                    "data_source": "grafanacloud-logs",
                     "required_rule_fields": [
                         "level",
                         "logsource",
@@ -452,6 +451,7 @@
                     ]
                 },
                 "integration": {
+                    "data_source": "grafanacloud-logs",
                     "rule_group": "Every 5 Minutes",
                     "time_window": "5m",
                     "folder_id": "my48wfae9ojcgw",
