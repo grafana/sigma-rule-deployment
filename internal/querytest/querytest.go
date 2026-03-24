@@ -167,7 +167,8 @@ func (qt *QueryTester) TestQueries(queries map[string]string, cfg model.NamedCon
 	customModel := shared.GetConfigValue(cfg.Integration.QueryModel, defaults.Integration.QueryModel, "")
 	from := shared.GetConfigValue(cfg.Integration.From, defaults.Integration.From, "now-1h")
 	to := shared.GetConfigValue(cfg.Integration.To, defaults.Integration.To, "now")
-	grafanaInstance := shared.GetConfigValue(cfg.Deployment.GrafanaInstance, defaults.Deployment.GrafanaInstance, "")
+	grafanaInstances := cfg.Deployment.GrafanaInstance.WithDefault(defaults.Deployment.GrafanaInstance)
+	saToken := os.Getenv("INTEGRATOR_GRAFANA_SA_TOKEN")
 	timeout := shared.ParseDurationOrDefault(cfg.Deployment.Timeout, qt.timeout)
 	showSampleValues := defaults.Integration.ShowSampleValues || cfg.Integration.ShowSampleValues
 	showLogLines := defaults.Integration.ShowLogLines || cfg.Integration.ShowLogLines
@@ -181,80 +182,82 @@ func (qt *QueryTester) TestQueries(queries map[string]string, cfg model.NamedCon
 
 	for _, refID := range refIDs {
 		query := queries[refID]
-		resp, err := integrate.TestQuery(
-			query,
-			datasource,
-			grafanaInstance,
-			os.Getenv("INTEGRATOR_GRAFANA_SA_TOKEN"),
-			refID,
-			from,
-			to,
-			customModel,
-			timeout,
-		)
-		if err != nil {
-			return []model.QueryTestResult{
-				{
-					Datasource: datasource,
-					Link:       "",
-					Stats: model.Stats{
-						Fields: make(map[string]string),
-						Errors: []string{err.Error()},
+		for _, grafanaInstance := range grafanaInstances {
+			resp, err := integrate.TestQuery(
+				query,
+				datasource,
+				grafanaInstance,
+				saToken,
+				refID,
+				from,
+				to,
+				customModel,
+				timeout,
+			)
+			if err != nil {
+				return []model.QueryTestResult{
+					{
+						Datasource: datasource,
+						Link:       "",
+						Stats: model.Stats{
+							Fields: make(map[string]string),
+							Errors: []string{err.Error()},
+						},
 					},
-				},
-			}, fmt.Errorf("error testing query %s: %v", query, err)
-		}
-
-		// Generate explore link based on datasource type
-		orgID := shared.GetConfigValueInt64(cfg.Integration.OrgID, defaults.Integration.OrgID)
-		exploreLink, err := GenerateExploreLink(
-			query, datasource, datasourceType, cfg, defaults,
-			grafanaInstance,
-			from,
-			to,
-			orgID,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("error generating explore link: %v", err)
-		}
-		// Parse the response to extract statistics
-		result := model.QueryTestResult{
-			Datasource: datasource,
-			Link:       exploreLink,
-			Stats: model.Stats{
-				Fields: make(map[string]string),
-				Errors: make([]string, 0),
-			},
-		}
-
-		// Parse the response to extract statistics
-		var responseData model.QueryResponse
-		if err := json.Unmarshal(resp, &responseData); err != nil {
-			return nil, fmt.Errorf("error unmarshalling query response: %v", err)
-		}
-
-		// Process errors
-		for _, err := range responseData.Errors {
-			if err.Type != "cancelled" && err.Message != "" {
-				result.Stats.Errors = append(result.Stats.Errors, err.Message)
+				}, fmt.Errorf("error testing query %s: %v", query, err)
 			}
-		}
 
-		// Process data frames from all results
-		for _, resultFrame := range responseData.Results {
-			for _, frame := range resultFrame.Frames {
-				if err := ProcessFrame(
-					frame,
-					&result,
-					showSampleValues,
-					showLogLines,
-				); err != nil {
-					return nil, fmt.Errorf("error processing frame: %v", err)
+			// Generate explore link based on datasource type
+			orgID := shared.GetConfigValueInt64(cfg.Integration.OrgID, defaults.Integration.OrgID)
+			exploreLink, err := GenerateExploreLink(
+				query, datasource, datasourceType, cfg, defaults,
+				grafanaInstance,
+				from,
+				to,
+				orgID,
+			)
+			if err != nil {
+				return nil, fmt.Errorf("error generating explore link: %v", err)
+			}
+			// Parse the response to extract statistics
+			result := model.QueryTestResult{
+				Datasource: datasource,
+				Link:       exploreLink,
+				Stats: model.Stats{
+					Fields: make(map[string]string),
+					Errors: make([]string, 0),
+				},
+			}
+
+			// Parse the response to extract statistics
+			var responseData model.QueryResponse
+			if err := json.Unmarshal(resp, &responseData); err != nil {
+				return nil, fmt.Errorf("error unmarshalling query response: %v", err)
+			}
+
+			// Process errors
+			for _, err := range responseData.Errors {
+				if err.Type != "cancelled" && err.Message != "" {
+					result.Stats.Errors = append(result.Stats.Errors, err.Message)
 				}
 			}
-		}
 
-		queryResults = append(queryResults, result)
+			// Process data frames from all results
+			for _, resultFrame := range responseData.Results {
+				for _, frame := range resultFrame.Frames {
+					if err := ProcessFrame(
+						frame,
+						&result,
+						showSampleValues,
+						showLogLines,
+					); err != nil {
+						return nil, fmt.Errorf("error processing frame: %v", err)
+					}
+				}
+			}
+
+			queryResults = append(queryResults, result)
+		}
 	}
 
 	return queryResults, nil

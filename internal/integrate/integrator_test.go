@@ -1329,7 +1329,7 @@ func TestRun(t *testing.T) {
 				Defaults: model.ConfigBlock{
 					Conversion:  model.ConversionConfig{Target: "loki"},
 					Integration: model.IntegrationConfig{DataSource: "test-datasource", FolderID: "test-folder", OrgID: 1, TestQueries: true, From: "now-1h", To: "now"},
-					Deployment:  model.DeploymentConfig{GrafanaInstance: "https://test.grafana.com", Timeout: "5s"},
+					Deployment:  model.DeploymentConfig{GrafanaInstance: model.GrafanaInstances{"https://test.grafana.com"}, Timeout: "5s"},
 				},
 				Configurations: []model.NamedConfigBlock{
 					{
@@ -1936,7 +1936,7 @@ func TestIntegratorWithQueryTesting(t *testing.T) {
 						ShowLogLines:     tt.showLogLines,
 						ShowSampleValues: tt.showSampleValues,
 					},
-					Deployment: model.DeploymentConfig{GrafanaInstance: "https://test.grafana.com", Timeout: "5s"},
+					Deployment: model.DeploymentConfig{GrafanaInstance: model.GrafanaInstances{"https://test.grafana.com"}, Timeout: "5s"},
 				},
 				Configurations: []model.NamedConfigBlock{
 					{
@@ -2156,7 +2156,7 @@ func TestIntegratorWithExploreLinkGeneration(t *testing.T) {
 						From:           "now-1h",
 						To:             "now",
 					},
-					Deployment: model.DeploymentConfig{GrafanaInstance: "https://test.grafana.com", Timeout: "5s"},
+					Deployment: model.DeploymentConfig{GrafanaInstance: model.GrafanaInstances{"https://test.grafana.com"}, Timeout: "5s"},
 				},
 				Configurations: []model.NamedConfigBlock{
 					{

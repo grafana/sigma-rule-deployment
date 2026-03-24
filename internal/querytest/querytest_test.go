@@ -127,7 +127,7 @@ func TestRun(t *testing.T) {
 						ContinueOnError: tt.continueOnErrors,
 					},
 					Deployment: model.DeploymentConfig{
-						GrafanaInstance: "https://test.grafana.com",
+						GrafanaInstance: model.GrafanaInstances{"https://test.grafana.com"},
 						Timeout:         "5s",
 					},
 				},
@@ -312,7 +312,7 @@ func TestRunMultipleConfigurations(t *testing.T) {
 				// TestQueries intentionally not set in defaults — enabled per-cfg only
 			},
 			Deployment: model.DeploymentConfig{
-				GrafanaInstance: "https://test.grafana.com",
+				GrafanaInstance: model.GrafanaInstances{"https://test.grafana.com"},
 			},
 		},
 		Configurations: []model.NamedConfigBlock{
@@ -326,7 +326,7 @@ func TestRunMultipleConfigurations(t *testing.T) {
 						TestQueries: true,
 					},
 					Deployment: model.DeploymentConfig{
-						GrafanaInstance: "https://enabled.grafana.com",
+						GrafanaInstance: model.GrafanaInstances{"https://enabled.grafana.com"},
 					},
 				},
 			},
@@ -526,4 +526,123 @@ func (t *testDatasourceQueryWithErrors) ExecuteQuery(query, dsName, baseURL, api
 
 	// Otherwise use the parent implementation
 	return t.testDatasourceQuery.ExecuteQuery(query, dsName, baseURL, apiKey, refID, from, to, customModel, timeout)
+}
+
+// TestQueryTestingWithMultipleGrafanaInstances verifies that when grafana_instance is a list,
+// queries are executed against every instance in that list. Covers both a per-conversion
+// override list and falling back to the defaults list.
+func TestQueryTestingWithMultipleGrafanaInstances(t *testing.T) {
+	testDir := filepath.Join("testdata", "test_multi_instance_query")
+	err := os.MkdirAll(testDir, 0o755)
+	assert.NoError(t, err)
+	defer os.RemoveAll(testDir)
+
+	writeConvFile := func(name string, queries []string) string {
+		out := model.ConversionOutput{
+			ConversionName: name,
+			Queries:        queries,
+			Rules:          []model.SigmaRule{{ID: "test-id", Title: "Test Rule"}},
+		}
+		data, _ := json.Marshal(out)
+		path := filepath.Join(testDir, name+".json")
+		assert.NoError(t, os.WriteFile(path, data, 0o600))
+		return path
+	}
+
+	// conv_multi overrides grafana_instance with two specific instances.
+	// conv_default_multi has no override and inherits the two default instances.
+	convMultiFile := writeConvFile("conv_multi", []string{"{job=`multi`} | json"})
+	convDefaultFile := writeConvFile("conv_default_multi", []string{"{job=`default`} | json"})
+
+	config := model.Configuration{
+		Defaults: model.ConfigBlock{
+			Conversion: model.ConversionConfig{Target: "loki"},
+			Integration: model.IntegrationConfig{
+				DataSource:  "default-ds",
+				From:        "now-1h",
+				To:          "now",
+				TestQueries: true,
+			},
+			Deployment: model.DeploymentConfig{
+				GrafanaInstance: model.GrafanaInstances{"https://default1.grafana.com", "https://default2.grafana.com"},
+			},
+		},
+		Configurations: []model.NamedConfigBlock{
+			{
+				Name: "conv_multi",
+				ConfigBlock: model.ConfigBlock{
+					Integration: model.IntegrationConfig{
+						DataSource: "multi-ds",
+						RuleGroup:  "Multi Alerts",
+						TimeWindow: "5m",
+					},
+					Deployment: model.DeploymentConfig{
+						GrafanaInstance: model.GrafanaInstances{"https://instance1.grafana.com", "https://instance2.grafana.com"},
+					},
+				},
+			},
+			{
+				Name: "conv_default_multi",
+				ConfigBlock: model.ConfigBlock{
+					Integration: model.IntegrationConfig{
+						DataSource: "default-multi-ds",
+						RuleGroup:  "Default Multi Alerts",
+						TimeWindow: "5m",
+					},
+					// No GrafanaInstance override; falls back to both default instances.
+				},
+			},
+		},
+	}
+
+	outputFile, err := os.CreateTemp("", "github-output")
+	assert.NoError(t, err)
+	defer os.Remove(outputFile.Name())
+	os.Setenv("GITHUB_OUTPUT", outputFile.Name())
+	defer os.Unsetenv("GITHUB_OUTPUT")
+
+	os.Setenv("INTEGRATOR_GRAFANA_SA_TOKEN", "test-api-token")
+	defer os.Unsetenv("INTEGRATOR_GRAFANA_SA_TOKEN")
+
+	mock := newTrackingDatasourceQuery()
+	originalDatasourceQuery := integrate.DefaultDatasourceQuery
+	integrate.DefaultDatasourceQuery = mock
+	defer func() { integrate.DefaultDatasourceQuery = originalDatasourceQuery }()
+
+	queryTester := NewQueryTester(config, []string{convMultiFile, convDefaultFile}, 5*time.Second)
+	err = queryTester.Run()
+	assert.NoError(t, err)
+
+	defaultTimeout := 5 * time.Second
+
+	// conv_multi: one query × two per-cfg instances = two calls
+	assert.Contains(t, mock.calls, trackingCall{
+		datasource:      "multi-ds",
+		from:            "now-1h",
+		grafanaInstance: "https://instance1.grafana.com",
+		timeout:         defaultTimeout,
+	})
+	assert.Contains(t, mock.calls, trackingCall{
+		datasource:      "multi-ds",
+		from:            "now-1h",
+		grafanaInstance: "https://instance2.grafana.com",
+		timeout:         defaultTimeout,
+	})
+
+	// conv_default_multi: one query × two default instances = two calls
+	assert.Contains(t, mock.calls, trackingCall{
+		datasource:      "default-multi-ds",
+		from:            "now-1h",
+		grafanaInstance: "https://default1.grafana.com",
+		timeout:         defaultTimeout,
+	})
+	assert.Contains(t, mock.calls, trackingCall{
+		datasource:      "default-multi-ds",
+		from:            "now-1h",
+		grafanaInstance: "https://default2.grafana.com",
+		timeout:         defaultTimeout,
+	})
+
+	// 4 total calls: 2 per conversion × 2 instances each
+	assert.Len(t, mock.calls, 4)
 }

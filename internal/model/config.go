@@ -1,5 +1,50 @@
 package model
 
+import (
+	"fmt"
+
+	"gopkg.in/yaml.v3"
+)
+
+// GrafanaInstances holds one or more Grafana instance URLs.
+// In YAML it can be specified as either a single string or a list of strings:
+//
+//	grafana_instance: "https://example.com"
+//	# or
+//	grafana_instance:
+//	  - "https://example1.com"
+//	  - "https://example2.com"
+type GrafanaInstances []string
+
+// UnmarshalYAML allows GrafanaInstances to be decoded from either a scalar or a sequence node.
+func (g *GrafanaInstances) UnmarshalYAML(value *yaml.Node) error {
+	switch value.Kind {
+	case yaml.ScalarNode:
+		if value.Value == "" {
+			*g = nil
+			return nil
+		}
+		*g = GrafanaInstances{value.Value}
+	case yaml.SequenceNode:
+		var ss []string
+		if err := value.Decode(&ss); err != nil {
+			return err
+		}
+		*g = ss
+	default:
+		return fmt.Errorf("grafana_instance must be a string or list of strings")
+	}
+	return nil
+}
+
+// WithDefault returns g if non-empty, otherwise def.
+func (g GrafanaInstances) WithDefault(def GrafanaInstances) GrafanaInstances {
+	if len(g) > 0 {
+		return g
+	}
+	return def
+}
+
 // FoldersConfig contains folder path configuration
 type FoldersConfig struct {
 	ConversionPath string `yaml:"conversion_path"`
@@ -8,8 +53,8 @@ type FoldersConfig struct {
 
 // DeploymentConfig contains deployment configuration
 type DeploymentConfig struct {
-	GrafanaInstance string `yaml:"grafana_instance"`
-	Timeout         string `yaml:"timeout"`
+	GrafanaInstance GrafanaInstances `yaml:"grafana_instance"`
+	Timeout         string           `yaml:"timeout"`
 }
 
 // ConversionConfig contains only conversion configuration
