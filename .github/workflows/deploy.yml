@@ -36,7 +36,7 @@ jobs:
     steps:
       - name: Get service account token for instance from Vault
         if: ${{ inputs.vault_path != '' }}
-        uses: grafana/shared-workflows/actions/get-vault-secrets@d84db42bd50249775496f814bd875a476849028e # main
+        uses: grafana/shared-workflows/actions/get-vault-secrets@9cdee92954d9fd3c870c382f3e98f6e93d6da880 # main
         with:
           repo_secrets: ${{ format('GRAFANA_SA_TOKEN={0}', inputs.vault_path) }}
 
