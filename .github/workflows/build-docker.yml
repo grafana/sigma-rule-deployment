@@ -38,7 +38,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: "Build and Push (PR)"
-        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7.0.0
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
         if: github.event_name == 'pull_request'
         with:
           context: .
@@ -47,7 +47,7 @@ jobs:
             ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${{ github.event.pull_request.head.sha }}
           push: true
       - name: "Build and Push (Push)"
-        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7.0.0
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
         if: github.event_name == 'push'
         with:
           context: .
@@ -57,7 +57,7 @@ jobs:
             ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:main
           push: true
       - name: "Build and Push (Release)"
-        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7.0.0
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
         if: github.event_name == 'release'
         with:
           context: .
@@ -86,7 +86,7 @@ jobs:
             GITHUB_APP_PRIVATE_KEY=github-app:client-pem
       - name: Generate Token
         id: generate-token
-        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3
+        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3
         with:
           app-id: ${{ env.GITHUB_APP_ID }}
           private-key: ${{ env.GITHUB_APP_PRIVATE_KEY }}
