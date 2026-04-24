@@ -192,13 +192,18 @@ jobs:
           git commit -m "update main branch to relevant hash" --allow-empty
 
           git push origin "integration-test-main-update-${GITHUB_PR_NUMBER}" --force
-          gh pr create \
-            --title "Integration Test Main Update ${GITHUB_PR_NUMBER}" \
-            --body "This PR updates the main branch to the relevant hash for grafana/sigma-rule-deployment#${GITHUB_PR_NUMBER}" \
-            --head "integration-test-main-update-${GITHUB_PR_NUMBER}" \
-            --base main \
-            --label "automated" \
-            --draft
+
+          RESULT=$(gh pr list --json id,title -H "integration-test-main-update-${GITHUB_PR_NUMBER}" | jq -r '. | length')
+
+          if [ "$RESULT" -eq 0 ]; then
+            gh pr create \
+              --title "Integration Test Main Update ${GITHUB_PR_NUMBER}" \
+              --body "This PR updates the main branch to the relevant hash for grafana/sigma-rule-deployment#${GITHUB_PR_NUMBER}" \
+              --head "integration-test-main-update-${GITHUB_PR_NUMBER}" \
+              --base main \
+              --label "automated" \
+              --draft
+          fi
           sleep 10 # wait for the PR checks to start...
 
           # wait for the required PR checks to complete
