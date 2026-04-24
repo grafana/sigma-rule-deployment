@@ -69,14 +69,14 @@ jobs:
     steps:
       - name: Get service account token for instance from Vault
         if: ${{ inputs.vault_path != '' }}
-        uses: grafana/shared-workflows/actions/get-vault-secrets@9563075d6c28464fc7327845d7dac5d42f122077 # main
+        uses: grafana/shared-workflows/actions/get-vault-secrets@f1614b210386ac420af6807a997ac7f6d96e477a # get-vault-secrets/v1.3.1
         with:
           repo_secrets: ${{ format('GRAFANA_SA_TOKEN={0}', inputs.vault_path) }}
 
       - name: Get PR branch for comments
         if: github.event_name == 'issue_comment'
         id: get-pr-branch
-        uses: actions/github-script@450193c5abd4cdb17ba9f3ffcfe8f635c4bb6c2a
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const { data: pullRequest } = await github.rest.pulls.get({
@@ -90,7 +90,7 @@ jobs:
 
       - name: Check whether to convert all rules and react
         id: convert_all
-        uses: actions/github-script@450193c5abd4cdb17ba9f3ffcfe8f635c4bb6c2a
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           ALL_RULES: ${{ inputs.all_rules }}
         with:
