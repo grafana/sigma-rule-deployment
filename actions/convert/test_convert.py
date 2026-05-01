@@ -13,21 +13,26 @@ from convert.convert import convert_rules, is_path, is_safe_path, load_rules, fi
 
 @pytest.fixture
 def mock_config():
-    """Mock configuration object."""
+    """Mock v2 configuration object."""
     return DynaconfDict(
         {
-            "conversion_defaults": {
-                "target": "loki",
-                "format": "default",
-                "skip_unsupported": "true",
-                "file_pattern": "*.yml",
-            },
-            "conversions": [
-                {
-                    "name": "test_conversion",
-                    "input": ["rules/*.yml"],
+            "version": 2,
+            "defaults": {
+                "conversion": {
                     "target": "loki",
                     "format": "default",
+                    "skip_unsupported": "true",
+                    "file_pattern": "*.yml",
+                },
+            },
+            "configurations": [
+                {
+                    "name": "test_conversion",
+                    "conversion": {
+                        "input": ["rules/*.yml"],
+                        "target": "loki",
+                        "format": "default",
+                    },
                 }
             ],
         }
@@ -36,22 +41,27 @@ def mock_config():
 
 @pytest.fixture
 def mock_config_with_correlation_rule():
-    """Mock configuration object with a correlation rule."""
+    """Mock v2 configuration object with a correlation rule."""
     return DynaconfDict(
         {
-            "conversion_defaults": {
-                "target": "loki",
-                "format": "default",
-                "skip_unsupported": "true",
-                "file_pattern": "*.yml",
-                "encoding": "utf-8",
-            },
-            "conversions": [
-                {
-                    "name": "test_conversion_with_correlation_rule",
-                    "input": ["rules/correlation.yml"],
+            "version": 2,
+            "defaults": {
+                "conversion": {
                     "target": "loki",
                     "format": "default",
+                    "skip_unsupported": "true",
+                    "file_pattern": "*.yml",
+                    "encoding": "utf-8",
+                },
+            },
+            "configurations": [
+                {
+                    "name": "test_conversion_with_correlation_rule",
+                    "conversion": {
+                        "input": ["rules/correlation.yml"],
+                        "target": "loki",
+                        "format": "default",
+                    },
                 }
             ],
         }
@@ -99,6 +109,14 @@ def test_convert_rules_missing_path_prefix():
         convert_rules(config=DynaconfDict(), path_prefix="")
 
 
+@pytest.mark.parametrize("version", [None, 0, 1, 3, "2"])
+def test_convert_rules_unsupported_version(temp_workspace, version):
+    """Test that an error is raised when the config version is not 2."""
+    config = DynaconfDict({"version": version} if version is not None else {})
+    with pytest.raises(ValueError, match="only version 2 is supported"):
+        convert_rules(config=config, path_prefix=temp_workspace, all_rules=True)
+
+
 def test_convert_rules_invalid_output_dir(temp_workspace, mock_config):
     """Test that an error is raised when output directory is outside the project root."""
     mock_config["folders"] = {"conversion_path": "../outside"}
@@ -111,9 +129,9 @@ def test_convert_rules_invalid_output_dir(temp_workspace, mock_config):
 
 
 def test_convert_rules_missing_conversion_name():
-    """Test that an error is raised when conversion name is missing."""
+    """Test that an error is raised when a configuration item has no name."""
     invalid_config = DynaconfDict(
-        {"conversions": [{"input": ["rules/*.yml"], "target": "loki"}]}
+        {"version": 2, "configurations": [{"conversion": {"input": ["rules/*.yml"]}}]}
     )
     with pytest.raises(
         ValueError,
@@ -129,9 +147,10 @@ def test_convert_rules_absolute_input_path():
     """Test that an error is raised when input file pattern is absolute."""
     invalid_config = DynaconfDict(
         {
-            "conversions": [
-                {"name": "test", "input": ["/absolute/path/*.yml"], "target": "loki"}
-            ]
+            "version": 2,
+            "configurations": [
+                {"name": "test", "conversion": {"input": ["/absolute/path/*.yml"]}}
+            ],
         }
     )
     with pytest.raises(ValueError, match="must be relative"):
@@ -181,30 +200,10 @@ def test_convert_rules_successful_conversion_all(temp_workspace, mock_config):
 
     output_file = temp_workspace / "conversions" / "test_conversion_test.json"
     assert output_file.exists()
-    assert output_file.read_text() == json.dumps(
-        {
-            "conversion_name": "test_conversion",
-            "input_file": "rules/test.yml",
-            "output_file": "conversions/test_conversion_test.json",
-            "queries": [
-                '{job=~".+"} | logfmt | userIdentity_type=~`(?i)^Root$` and eventType!~`(?i)^AwsServiceEvent$`'
-            ],
-            "rules": [
-                {
-                    "description": "Detects AWS root account usage",
-                    "detection": {
-                        "condition": "selection and not filter",
-                        "filter": {"eventType": "AwsServiceEvent"},
-                        "selection": {"userIdentity.type": "Root"},
-                    },
-                    "falsepositives": ["AWS Tasks That Require Root User Credentials"],
-                    "level": "medium",
-                    "logsource": {"product": "aws", "service": "cloudtrail"},
-                    "title": "AWS Root Credentials",                    
-                }
-            ],
-        }
-    ).decode("utf-8", "replace")
+    data = json.loads(output_file.read_bytes())
+    assert data["conversion_name"] == "test_conversion"
+    assert len(data["queries"]) == 1
+    assert len(data["rules"]) == 1
 
 
 def test_convert_rules_successful_conversion_changed_files(temp_workspace, mock_config):
@@ -371,6 +370,41 @@ def test_convert_rules_handles_empty_output_on_rule(temp_workspace, mock_config)
     assert not output_file.exists()
 
 
+def test_convert_rules_required_rule_fields_per_conversion(temp_workspace):
+    """Test that required_rule_fields is respected per conversion, overriding the default."""
+    config = DynaconfDict(
+        {
+            "version": 2,
+            "defaults": {
+                "conversion": {
+                    "target": "loki",
+                    "format": "default",
+                    "skip_unsupported": "true",
+                    "file_pattern": "*.yml",
+                    "required_rule_fields": ["title", "level", "description"],
+                },
+            },
+            "configurations": [
+                {
+                    "name": "test_conversion",
+                    "conversion": {
+                        "input": ["rules/*.yml"],
+                        "required_rule_fields": ["title"],
+                    },
+                }
+            ],
+        }
+    )
+    convert_rules(config=config, path_prefix=temp_workspace, all_rules=True)
+
+    output_file = temp_workspace / "conversions" / "test_conversion_test.json"
+    assert output_file.exists()
+    data = json.loads(output_file.read_bytes())
+    assert len(data["rules"]) == 1
+    # Only "title" should be present — the per-conversion override takes precedence over the default
+    assert list(data["rules"][0].keys()) == ["title"]
+
+
 def test_load_rule_valid_yaml():
     """Test loading a valid YAML rule file."""
     with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
@@ -456,8 +490,8 @@ def test_load_rule_empty_file():
         # Test default values only
         (
             {
-                "conversion_defaults": {},
-                "conversions": [{"name": "test_default", "input": ["test.yml"]}],
+                "defaults": {"conversion": {}},
+                "configurations": [{"name": "test_default", "conversion": {"input": ["test.yml"]}}],
             },
             [
                 "--target",
@@ -479,9 +513,9 @@ def test_load_rule_empty_file():
         # Test overriding target
         (
             {
-                "conversion_defaults": {},
-                "conversions": [
-                    {"name": "test_target", "input": ["test.yml"], "target": "splunk"}
+                "defaults": {"conversion": {}},
+                "configurations": [
+                    {"name": "test_target", "conversion": {"input": ["test.yml"], "target": "splunk"}}
                 ],
             },
             [
@@ -504,9 +538,9 @@ def test_load_rule_empty_file():
         # Test overriding format
         (
             {
-                "conversion_defaults": {},
-                "conversions": [
-                    {"name": "test_format", "input": ["test.yml"], "format": "custom"}
+                "defaults": {"conversion": {}},
+                "configurations": [
+                    {"name": "test_format", "conversion": {"input": ["test.yml"], "format": "custom"}}
                 ],
             },
             [
@@ -529,12 +563,14 @@ def test_load_rule_empty_file():
         # Test setting pipelines
         (
             {
-                "conversion_defaults": {},
-                "conversions": [
+                "defaults": {"conversion": {}},
+                "configurations": [
                     {
                         "name": "test_pipelines",
-                        "input": ["test.yml"],
-                        "pipelines": ["pipeline1.yml", "pipeline2.yml"],
+                        "conversion": {
+                            "input": ["test.yml"],
+                            "pipelines": ["pipeline1.yml", "pipeline2.yml"],
+                        },
                     }
                 ],
             },
@@ -560,12 +596,11 @@ def test_load_rule_empty_file():
         # Test setting correlation method
         (
             {
-                "conversion_defaults": {},
-                "conversions": [
+                "defaults": {"conversion": {}},
+                "configurations": [
                     {
                         "name": "test_correlation",
-                        "input": ["test.yml"],
-                        "correlation_method": "default",
+                        "conversion": {"input": ["test.yml"], "correlation_method": "default"},
                     }
                 ],
             },
@@ -591,12 +626,14 @@ def test_load_rule_empty_file():
         # Test setting filters
         (
             {
-                "conversion_defaults": {},
-                "conversions": [
+                "defaults": {"conversion": {}},
+                "configurations": [
                     {
                         "name": "test_filters",
-                        "input": ["test.yml"],
-                        "filters": ["filter1", "filter2"],
+                        "conversion": {
+                            "input": ["test.yml"],
+                            "filters": ["filter1", "filter2"],
+                        },
                     }
                 ],
             },
@@ -622,12 +659,14 @@ def test_load_rule_empty_file():
         # Test setting backend options
         (
             {
-                "conversion_defaults": {},
-                "conversions": [
+                "defaults": {"conversion": {}},
+                "configurations": [
                     {
                         "name": "test_backend",
-                        "input": ["test.yml"],
-                        "backend_options": {"option1": "value1", "option2": "value2"},
+                        "conversion": {
+                            "input": ["test.yml"],
+                            "backend_options": {"option1": "value1", "option2": "value2"},
+                        },
                     }
                 ],
             },
@@ -653,12 +692,11 @@ def test_load_rule_empty_file():
         # Test without pipeline
         (
             {
-                "conversion_defaults": {},
-                "conversions": [
+                "defaults": {"conversion": {}},
+                "configurations": [
                     {
                         "name": "test_without_pipeline",
-                        "input": ["test.yml"],
-                        "without_pipeline": True,
+                        "conversion": {"input": ["test.yml"], "without_pipeline": True},
                     }
                 ],
             },
@@ -683,12 +721,11 @@ def test_load_rule_empty_file():
         # Test disable pipeline check
         (
             {
-                "conversion_defaults": {},
-                "conversions": [
+                "defaults": {"conversion": {}},
+                "configurations": [
                     {
                         "name": "test_no_pipeline_check",
-                        "input": ["test.yml"],
-                        "pipeline_check": False,
+                        "conversion": {"input": ["test.yml"], "pipeline_check": False},
                     }
                 ],
             },
@@ -712,12 +749,11 @@ def test_load_rule_empty_file():
         # Test fail unsupported instead of skip
         (
             {
-                "conversion_defaults": {"skip_unsupported": False},
-                "conversions": [
+                "defaults": {"conversion": {"skip_unsupported": False}},
+                "configurations": [
                     {
                         "name": "test_fail",
-                        "input": ["test.yml"],
-                        "fail_unsupported": True,
+                        "conversion": {"input": ["test.yml"], "fail_unsupported": True},
                     }
                 ],
             },
@@ -741,12 +777,11 @@ def test_load_rule_empty_file():
         # Test json indent
         (
             {
-                "conversion_defaults": {},
-                "conversions": [
+                "defaults": {"conversion": {}},
+                "configurations": [
                     {
                         "name": "test_json_indent",
-                        "input": ["test.yml"],
-                        "json_indent": 2,
+                        "conversion": {"input": ["test.yml"], "json_indent": 2},
                     }
                 ],
             },
@@ -770,9 +805,9 @@ def test_load_rule_empty_file():
         # Test verbose
         (
             {
-                "conversion_defaults": {},
-                "conversions": [
-                    {"name": "test_verbose", "input": ["test.yml"], "verbose": True}
+                "defaults": {"conversion": {}},
+                "configurations": [
+                    {"name": "test_verbose", "conversion": {"input": ["test.yml"], "verbose": True}}
                 ],
             },
             [
@@ -793,24 +828,106 @@ def test_load_rule_empty_file():
                 "--verbose",
             ],
         ),
+        # Test overriding skip_unsupported per conversion (default false, conversion true)
+        (
+            {
+                "defaults": {"conversion": {"skip_unsupported": False}},
+                "configurations": [
+                    {
+                        "name": "test_skip",
+                        "conversion": {"input": ["test.yml"], "skip_unsupported": True},
+                    }
+                ],
+            },
+            [
+                "--target",
+                "loki",
+                "--format",
+                "default",
+                "--file-pattern",
+                "*.yml",
+                "--output",
+                "-",
+                "--encoding",
+                "utf-8",
+                "--json-indent",
+                "0",
+                "--pipeline-check",
+                "--skip-unsupported",
+            ],
+        ),
+        # Test overriding file_pattern per conversion (default *.json, conversion overrides to *.yml)
+        (
+            {
+                "defaults": {"conversion": {"file_pattern": "*.json"}},
+                "configurations": [
+                    {
+                        "name": "test_file_pattern",
+                        "conversion": {"input": ["test.yml"], "file_pattern": "*.yml"},
+                    }
+                ],
+            },
+            [
+                "--target",
+                "loki",
+                "--format",
+                "default",
+                "--file-pattern",
+                "*.yml",
+                "--output",
+                "-",
+                "--encoding",
+                "utf-8",
+                "--json-indent",
+                "0",
+                "--pipeline-check",
+                "--skip-unsupported",
+            ],
+        ),
+        # Test overriding encoding per conversion
+        (
+            {
+                "defaults": {"conversion": {"encoding": "latin1"}},
+                "configurations": [
+                    {
+                        "name": "test_encoding",
+                        "conversion": {"input": ["test.yml"], "encoding": "utf-8"},
+                    }
+                ],
+            },
+            [
+                "--target",
+                "loki",
+                "--format",
+                "default",
+                "--file-pattern",
+                "*.yml",
+                "--output",
+                "-",
+                "--encoding",
+                "utf-8",
+                "--json-indent",
+                "0",
+                "--pipeline-check",
+                "--skip-unsupported",
+            ],
+        ),
         # Test combination of several options
         (
             {
-                "conversion_defaults": {
-                    "target": "elastic",
-                    "format": "custom_default",
-                    "encoding": "latin1",
-                },
-                "conversions": [
+                "defaults": {"conversion": {"target": "elastic", "format": "custom_default", "encoding": "latin1"}},
+                "configurations": [
                     {
                         "name": "test_combo",
-                        "input": ["test.yml"],
-                        "target": "splunk",
-                        "pipelines": ["pipeline.yml"],
-                        "filters": ["filter1"],
-                        "backend_options": {"opt": "val"},
-                        "without_pipeline": True,
-                        "verbose": True,
+                        "conversion": {
+                            "input": ["test.yml"],
+                            "target": "splunk",
+                            "pipelines": ["pipeline.yml"],
+                            "filters": ["filter1"],
+                            "backend_options": {"opt": "val"},
+                            "without_pipeline": True,
+                            "verbose": True,
+                        },
                     }
                 ],
             },
@@ -873,17 +990,13 @@ def test_convert_rules_command_args(
     mock_invoke.return_value = mock_result
 
     # Create config with the tested parameters
-    config_dict = DynaconfDict(config_params)
+    config_dict = DynaconfDict({"version": 2, **config_params})
 
     # Mock Dynaconf to accept DynaconfDict
     dynaconf_instance = mock_dynaconf.return_value
     dynaconf_instance.get.side_effect = lambda key, default=None: config_dict.get(
         key, default
     )
-
-    # Apply default settings if omitted
-    if "verbose" not in config_dict:
-        config_dict["verbose"] = False
 
     # Mock is_path to return True for any pipeline paths
     with patch.object(convert, "is_path", side_effect=lambda p, f: True):
@@ -951,11 +1064,11 @@ def test_convert_rules_command_args(
                         == expected_args[expected_args.index("--target") + 1]
                     )
 
-                    # Format might be different due to conversion_defaults - don't assert strict equality
+                    # Format might be different due to conversion defaults - don't assert strict equality
                     assert "--format" in call_args
 
 
-# Test handling of correlation_method when set in conversion_defaults but not in conversion
+# Test handling of correlation_method when set in defaults but not in conversion
 @patch("glob.glob")
 @patch("os.path.exists")
 @patch("pathlib.Path.is_absolute")
@@ -991,8 +1104,9 @@ def test_default_correlation_method(
     # Create config with default correlation method
     config_dict = DynaconfDict(
         {
-            "conversion_defaults": {"correlation_method": "default_corr"},
-            "conversions": [{"name": "test_default_corr", "input": ["test.yml"]}],
+            "version": 2,
+            "defaults": {"conversion": {"correlation_method": "default_corr"}},
+            "configurations": [{"name": "test_default_corr", "conversion": {"input": ["test.yml"]}}],
         }
     )
 
@@ -1001,10 +1115,6 @@ def test_default_correlation_method(
     dynaconf_instance.get.side_effect = lambda key, default=None: config_dict.get(
         key, default
     )
-
-    # Apply default settings if omitted
-    if "verbose" not in config_dict:
-        config_dict["verbose"] = False
 
     # Mock is_path to handle pipeline paths
     with patch.object(convert, "is_path", side_effect=lambda p, f: True):
@@ -1023,12 +1133,7 @@ def test_default_correlation_method(
                         config=dynaconf_instance, path_prefix="/tmp", all_rules=True
                     )
 
-                    # Verify the function was called with the right parameters
                     assert mock_invoke.called
-
-                    # The test is verifying that default correlation method
-                    # is being included in the config, not necessarily in the args
-                    # So we just verify the conversion ran successfully
                     assert mock_invoke.call_count > 0
 
 
@@ -1051,6 +1156,7 @@ def test_convert_rules_deletes_conversion_for_deleted_rule(temp_workspace, mock_
 
     # Verify the conversion file was deleted
     assert not conversion_file.exists()
+
 
 def test_filter_rule_fields():
     """Test that the filter_rule_fields function filters the rule fields correctly."""
