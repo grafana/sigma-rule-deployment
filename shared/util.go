@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 const (
@@ -78,4 +79,23 @@ func GetConfigValue(config, defaultConf, def string) string {
 		return defaultConf
 	}
 	return def
+}
+
+// GetConfigValueInt64 returns config if non-zero, otherwise defaultVal.
+func GetConfigValueInt64(config, defaultVal int64) int64 {
+	if config != 0 {
+		return config
+	}
+	return defaultVal
+}
+
+// ParseDurationOrDefault parses s as a duration, returning defaultVal if s is empty or invalid.
+func ParseDurationOrDefault(s string, defaultVal time.Duration) time.Duration {
+	if s == "" {
+		return defaultVal
+	}
+	if d, err := time.ParseDuration(s); err == nil {
+		return d
+	}
+	return defaultVal
 }

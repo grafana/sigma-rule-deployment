@@ -3,12 +3,15 @@ package deploy
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/grafana/sigma-rule-deployment/internal/model"
 	"github.com/grafana/sigma-rule-deployment/shared"
@@ -173,8 +176,8 @@ func TestUpdateAlert(t *testing.T) {
 
 	d := Deployer{
 		config: deploymentConfig{
-			endpoint: server.URL + "/",
-			saToken:  "my-test-token",
+			endpoints: []string{server.URL + "/"},
+			saToken:   "my-test-token",
 		},
 		client:         shared.NewGrafanaClient(server.URL+"/", "my-test-token", "sigma-rule-deployment/deployer", defaultRequestTimeout),
 		groupsToUpdate: map[string]bool{},
@@ -275,8 +278,8 @@ func TestCreateAlert(t *testing.T) {
 
 	d := Deployer{
 		config: deploymentConfig{
-			endpoint: server.URL + "/",
-			saToken:  "my-test-token",
+			endpoints: []string{server.URL + "/"},
+			saToken:   "my-test-token",
 		},
 		client:         shared.NewGrafanaClient(server.URL+"/", "my-test-token", "sigma-rule-deployment/deployer", defaultRequestTimeout),
 		groupsToUpdate: map[string]bool{},
@@ -434,8 +437,8 @@ func TestDeleteAlert(t *testing.T) {
 
 	d := Deployer{
 		config: deploymentConfig{
-			endpoint: server.URL + "/",
-			saToken:  "my-test-token",
+			endpoints: []string{server.URL + "/"},
+			saToken:   "my-test-token",
 		},
 		client: shared.NewGrafanaClient(server.URL+"/", "my-test-token", "sigma-rule-deployment/deployer", defaultRequestTimeout),
 	}
@@ -507,7 +510,7 @@ func TestListAlerts(t *testing.T) {
 
 	d := Deployer{
 		config: deploymentConfig{
-			endpoint:  server.URL + "/",
+			endpoints: []string{server.URL + "/"},
 			saToken:   "my-test-token",
 			folderUID: "efgh456",
 			orgID:     23,
@@ -548,7 +551,7 @@ func TestLoadConfig(t *testing.T) {
 
 	// Test basic config values
 	assert.Equal(t, "my-test-token", d.config.saToken)
-	assert.Equal(t, "https://myinstance.grafana.com/", d.config.endpoint)
+	assert.Equal(t, []string{"https://myinstance.grafana.com"}, d.config.endpoints)
 	assert.Equal(t, "deployments", d.config.alertPath)
 	assert.Equal(t, "abcdef123", d.config.folderUID)
 	assert.Equal(t, int64(23), d.config.orgID)
@@ -602,6 +605,99 @@ func TestListAlertsInDeploymentFolder(t *testing.T) {
 	alerts, err := d.listAlertsInDeploymentFolder()
 	assert.NoError(t, err)
 	assert.Equal(t, []string{"testdata/alert_rule_conversion_test_file_1_u123abc.json", "testdata/alert_rule_conversion_test_file_2_u456def.json", "testdata/alert_rule_conversion_test_file_3_u789ghi.json"}, alerts)
+}
+
+func TestDeployToMultipleGrafanaInstances(t *testing.T) {
+	ctx := context.Background()
+
+	// Track which alert UIDs each server received.
+	server1UIDs := []string{}
+	server2UIDs := []string{}
+
+	// makeAlertServer returns a mock server that records created alert UIDs and responds to rule-group requests.
+	// The provided uids slice is appended to on each POST (alert creation).
+	makeAlertServer := func(receivedUIDs *[]string) *httptest.Server {
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			defer r.Body.Close()
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				t.Errorf("failed to read request body: %v", err)
+				return
+			}
+
+			switch {
+			case strings.HasPrefix(r.URL.Path, "/api/v1/provisioning/alert-rules") && r.Method == http.MethodPost:
+				alert, err := parseAlert(string(body))
+				if err != nil {
+					t.Errorf("failed to parse alert: %v", err)
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+				*receivedUIDs = append(*receivedUIDs, alert.UID)
+				w.WriteHeader(http.StatusCreated)
+				_, _ = w.Write(body)
+
+			case strings.HasPrefix(r.URL.Path, "/api/v1/provisioning/folder/") && r.Method == http.MethodGet:
+				// Return a rule group with interval matching what the deployer expects, so no PUT is needed
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte(`{"folderUID":"folder1","interval":300,"rules":[],"title":"group1"}`))
+
+			default:
+				t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+				w.WriteHeader(http.StatusNotFound)
+			}
+		}))
+	}
+
+	server1 := makeAlertServer(&server1UIDs)
+	defer server1.Close()
+	server2 := makeAlertServer(&server2UIDs)
+	defer server2.Close()
+
+	// Write alert files to a relative temp directory (ReadLocalFile requires a local/relative path)
+	tmpDir, err := os.MkdirTemp(".", "test-multi-grafana-*")
+	assert.NoError(t, err)
+	defer os.RemoveAll(tmpDir)
+
+	conv1Alert := `{"uid":"conv1uid1","title":"Conv1 Alert","folderUID":"folder1","orgID":1,"ruleGroup":"group1"}`
+	conv2Alert := `{"uid":"conv2uid1","title":"Conv2 Alert","folderUID":"folder1","orgID":1,"ruleGroup":"group1"}`
+
+	conv1File := filepath.Join(tmpDir, "alert_rule_conv1_myrule_conv1uid1.json")
+	conv2File := filepath.Join(tmpDir, "alert_rule_conv2_myrule_conv2uid1.json")
+	assert.NoError(t, os.WriteFile(conv1File, []byte(conv1Alert), 0o600))
+	assert.NoError(t, os.WriteFile(conv2File, []byte(conv2Alert), 0o600))
+
+	d := Deployer{
+		config: deploymentConfig{
+			endpoints:       []string{server1.URL + "/"},
+			saToken:         "my-test-token",
+			alertPath:       tmpDir,
+			folderUID:       "folder1",
+			alertsToAdd:     []string{conv1File, conv2File},
+			groupsIntervals: map[string]int64{"group1": 300},
+		},
+		clients: []*shared.GrafanaClient{
+			shared.NewGrafanaClient(server1.URL+"/", "my-test-token", "sigma-rule-deployment/deployer", defaultRequestTimeout),
+		},
+		perConversionClients: map[string][]*shared.GrafanaClient{
+			"conv1": {shared.NewGrafanaClient(server1.URL+"/", "my-test-token", "sigma-rule-deployment/deployer", 5*time.Second)},
+			"conv2": {shared.NewGrafanaClient(server2.URL+"/", "my-test-token", "sigma-rule-deployment/deployer", 30*time.Second)},
+		},
+		groupsToUpdate: map[string]bool{},
+	}
+
+	created, updated, deleted, err := d.Deploy(ctx)
+	assert.NoError(t, err)
+	assert.Contains(t, created, "conv1uid1")
+	assert.Contains(t, created, "conv2uid1")
+	assert.Empty(t, updated)
+	assert.Empty(t, deleted)
+
+	// conv1 alert should have gone to server1, conv2 alert to server2
+	assert.Contains(t, server1UIDs, "conv1uid1")
+	assert.NotContains(t, server1UIDs, "conv2uid1")
+	assert.Contains(t, server2UIDs, "conv2uid1")
+	assert.NotContains(t, server2UIDs, "conv1uid1")
 }
 
 func TestUpdateAlertGroupInterval(t *testing.T) {
@@ -730,8 +826,8 @@ func TestUpdateAlertGroupInterval(t *testing.T) {
 			// Create a deployer with mocked client and config
 			d := Deployer{
 				config: deploymentConfig{
-					endpoint: server.URL + "/",
-					saToken:  "my-test-token",
+					endpoints: []string{server.URL + "/"},
+					saToken:   "my-test-token",
 				},
 				client: shared.NewGrafanaClient(server.URL+"/", "my-test-token", "sigma-rule-deployment/deployer", defaultRequestTimeout),
 			}
@@ -751,4 +847,239 @@ func TestUpdateAlertGroupInterval(t *testing.T) {
 				"Expected PUT request to be %v but was %v", tc.expectPutRequest, putRequestMade)
 		})
 	}
+}
+
+// TestLoadConfigPerConversionInstancesAndTimeout verifies that LoadConfig correctly reads
+// per-configuration GrafanaInstance and Timeout values and creates per-conversion clients
+// that route requests to the right Grafana endpoint, and that conv_c (no override) falls
+// back to the default client.
+func TestLoadConfigPerConversionInstancesAndTimeout(t *testing.T) {
+	ctx := context.Background()
+
+	serverAUIDs := []string{}
+	serverBUIDs := []string{}
+	defaultUIDs := []string{}
+
+	makeServer := func(receivedUIDs *[]string) *httptest.Server {
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			defer r.Body.Close()
+			body, _ := io.ReadAll(r.Body)
+			switch {
+			case strings.HasPrefix(r.URL.Path, "/api/v1/provisioning/alert-rules") && r.Method == http.MethodPost:
+				alert, err := parseAlert(string(body))
+				if err != nil {
+					t.Errorf("failed to parse alert: %v", err)
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+				*receivedUIDs = append(*receivedUIDs, alert.UID)
+				w.WriteHeader(http.StatusCreated)
+				_, _ = w.Write(body)
+			case strings.HasPrefix(r.URL.Path, "/api/v1/provisioning/folder/") && r.Method == http.MethodGet:
+				// Return the correct interval for each group so no PUT is triggered.
+				intervalByGroup := map[string]int{
+					"group_a": 300,
+					"group_b": 600,
+					"group_c": 900,
+				}
+				parts := strings.Split(r.URL.Path, "/")
+				group := parts[len(parts)-1]
+				interval := intervalByGroup[group]
+				w.WriteHeader(http.StatusOK)
+				body := fmt.Sprintf(`{"folderUID":"default-folder","interval":%d,"rules":[],"title":"%s"}`, interval, group)
+				_, _ = w.Write([]byte(body)) //nolint:gosec // G705: group comes from the URL path in a test-only mock handler
+			default:
+				t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+				w.WriteHeader(http.StatusNotFound)
+			}
+		}))
+	}
+
+	serverA := makeServer(&serverAUIDs)
+	defer serverA.Close()
+	serverB := makeServer(&serverBUIDs)
+	defer serverB.Close()
+	serverDefault := makeServer(&defaultUIDs)
+	defer serverDefault.Close()
+
+	// Write a config YAML that points conv_a and conv_b at their own servers, and conv_c at the default.
+	configContent := "version: 2\n" +
+		"folders:\n  deployment_path: \"./deployments\"\n" +
+		"defaults:\n" +
+		"  integration:\n    folder_id: default-folder\n    org_id: 1\n" +
+		"  deployment:\n    grafana_instance: " + serverDefault.URL + "\n    timeout: 10s\n" +
+		"configurations:\n" +
+		"  - name: conv_a\n    integration:\n      rule_group: \"group_a\"\n      time_window: \"5m\"\n" +
+		"    deployment:\n      grafana_instance: " + serverA.URL + "\n      timeout: 5s\n" +
+		"  - name: conv_b\n    integration:\n      rule_group: \"group_b\"\n      time_window: \"10m\"\n" +
+		"    deployment:\n      grafana_instance: " + serverB.URL + "\n      timeout: 30s\n" +
+		"  - name: conv_c\n    integration:\n      rule_group: \"group_c\"\n      time_window: \"15m\"\n"
+
+	configFile, err := os.CreateTemp(".", "test_per_instance_config_*.yml")
+	assert.NoError(t, err)
+	t.Cleanup(func() { os.Remove(configFile.Name()) })
+	_, err = configFile.WriteString(configContent)
+	assert.NoError(t, err)
+	assert.NoError(t, configFile.Close())
+
+	// Write alert files for each conversion in a temp dir.
+	tmpDir, err := os.MkdirTemp(".", "test-per-instance-*")
+	assert.NoError(t, err)
+	t.Cleanup(func() { os.RemoveAll(tmpDir) })
+
+	convAAlert := `{"uid":"conv-a-uid","title":"Conv A Alert","folderUID":"default-folder","orgID":1,"ruleGroup":"group_a"}`
+	convBAlert := `{"uid":"conv-b-uid","title":"Conv B Alert","folderUID":"default-folder","orgID":1,"ruleGroup":"group_b"}`
+	convCAlert := `{"uid":"conv-c-uid","title":"Conv C Alert","folderUID":"default-folder","orgID":1,"ruleGroup":"group_c"}`
+
+	convAFile := filepath.Join(tmpDir, "alert_rule_conv_a_rule_conv-a-uid.json")
+	convBFile := filepath.Join(tmpDir, "alert_rule_conv_b_rule_conv-b-uid.json")
+	convCFile := filepath.Join(tmpDir, "alert_rule_conv_c_rule_conv-c-uid.json")
+	assert.NoError(t, os.WriteFile(convAFile, []byte(convAAlert), 0o600))
+	assert.NoError(t, os.WriteFile(convBFile, []byte(convBAlert), 0o600))
+	assert.NoError(t, os.WriteFile(convCFile, []byte(convCAlert), 0o600))
+
+	os.Setenv("CONFIG_PATH", configFile.Name())
+	defer os.Unsetenv("CONFIG_PATH")
+	os.Setenv("DEPLOYER_GRAFANA_SA_TOKEN", "my-test-token")
+	defer os.Unsetenv("DEPLOYER_GRAFANA_SA_TOKEN")
+
+	d := NewDeployer()
+	assert.NoError(t, d.LoadConfig(ctx))
+
+	// Verify per-conversion clients were built for conv_a and conv_b but not conv_c.
+	assert.Len(t, d.perConversionClients, 2, "expected clients for conv_a and conv_b only")
+	assert.Contains(t, d.perConversionClients, "conv_a")
+	assert.Contains(t, d.perConversionClients, "conv_b")
+	assert.NotContains(t, d.perConversionClients, "conv_c")
+
+	// Verify per-config TimeWindow values were recorded correctly.
+	assert.Equal(t, map[string]int64{
+		"group_a": 300, // 5m
+		"group_b": 600, // 10m
+		"group_c": 900, // 15m
+	}, d.config.groupsIntervals)
+
+	// Deploy all three alert files and verify routing: conv_a → serverA, conv_b → serverB, conv_c → default.
+	d.config.alertsToAdd = []string{convAFile, convBFile, convCFile}
+	d.SetClient()
+
+	_, _, _, err = d.Deploy(ctx) //nolint:dogsled
+	assert.NoError(t, err)
+
+	assert.Contains(t, serverAUIDs, "conv-a-uid", "conv_a alert should route to serverA")
+	assert.NotContains(t, serverAUIDs, "conv-b-uid")
+	assert.NotContains(t, serverAUIDs, "conv-c-uid")
+
+	assert.Contains(t, serverBUIDs, "conv-b-uid", "conv_b alert should route to serverB")
+	assert.NotContains(t, serverBUIDs, "conv-a-uid")
+	assert.NotContains(t, serverBUIDs, "conv-c-uid")
+
+	assert.Contains(t, defaultUIDs, "conv-c-uid", "conv_c alert should route to the default server")
+	assert.NotContains(t, defaultUIDs, "conv-a-uid")
+	assert.NotContains(t, defaultUIDs, "conv-b-uid")
+}
+
+// TestDeployWithMultipleInstanceListInConfig verifies that grafana_instance can be specified
+// as a YAML list in both the defaults and per-conversion sections. Alerts without a
+// per-conversion override are deployed to all default instances; alerts with a
+// per-conversion list are deployed to each instance in that list.
+func TestDeployWithMultipleInstanceListInConfig(t *testing.T) {
+	ctx := context.Background()
+
+	server1UIDs := []string{}
+	server2UIDs := []string{}
+	overrideUIDs := []string{}
+
+	makeServer := func(receivedUIDs *[]string) *httptest.Server {
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			defer r.Body.Close()
+			body, _ := io.ReadAll(r.Body)
+			switch {
+			case strings.HasPrefix(r.URL.Path, "/api/v1/provisioning/alert-rules") && r.Method == http.MethodPost:
+				alert, err := parseAlert(string(body))
+				if err != nil {
+					t.Errorf("failed to parse alert: %v", err)
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+				*receivedUIDs = append(*receivedUIDs, alert.UID)
+				w.WriteHeader(http.StatusCreated)
+				_, _ = w.Write(body)
+			case strings.HasPrefix(r.URL.Path, "/api/v1/provisioning/folder/") && r.Method == http.MethodGet:
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte(`{"folderUID":"folder1","interval":300,"rules":[],"title":"group1"}`))
+			default:
+				t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+				w.WriteHeader(http.StatusNotFound)
+			}
+		}))
+	}
+
+	server1 := makeServer(&server1UIDs)
+	defer server1.Close()
+	server2 := makeServer(&server2UIDs)
+	defer server2.Close()
+	overrideServer := makeServer(&overrideUIDs)
+	defer overrideServer.Close()
+
+	// defaults has two instances (server1 and server2) as a YAML list.
+	// conv_multi overrides with its own list [overrideServer, server1].
+	// conv_default has no override and falls back to both default instances.
+	configContent := "version: 2\n" +
+		"folders:\n  deployment_path: \"./deployments\"\n" +
+		"defaults:\n" +
+		"  integration:\n    folder_id: folder1\n    org_id: 1\n" +
+		"  deployment:\n    grafana_instance:\n      - " + server1.URL + "\n      - " + server2.URL + "\n    timeout: 10s\n" +
+		"configurations:\n" +
+		"  - name: conv_multi\n    integration:\n      rule_group: \"group1\"\n      time_window: \"5m\"\n" +
+		"    deployment:\n      grafana_instance:\n        - " + overrideServer.URL + "\n        - " + server1.URL + "\n" +
+		"  - name: conv_default\n    integration:\n      rule_group: \"group1\"\n      time_window: \"5m\"\n"
+
+	configFile, err := os.CreateTemp(".", "test_multi_instance_list_*.yml")
+	assert.NoError(t, err)
+	t.Cleanup(func() { os.Remove(configFile.Name()) })
+	_, err = configFile.WriteString(configContent)
+	assert.NoError(t, err)
+	assert.NoError(t, configFile.Close())
+
+	tmpDir, err := os.MkdirTemp(".", "test-multi-instance-list-*")
+	assert.NoError(t, err)
+	t.Cleanup(func() { os.RemoveAll(tmpDir) })
+
+	convMultiAlert := `{"uid":"conv-multi-uid","title":"Conv Multi Alert","folderUID":"folder1","orgID":1,"ruleGroup":"group1"}`
+	convDefaultAlert := `{"uid":"conv-default-uid","title":"Conv Default Alert","folderUID":"folder1","orgID":1,"ruleGroup":"group1"}`
+
+	convMultiFile := filepath.Join(tmpDir, "alert_rule_conv_multi_rule_conv-multi-uid.json")
+	convDefaultFile := filepath.Join(tmpDir, "alert_rule_conv_default_rule_conv-default-uid.json")
+	assert.NoError(t, os.WriteFile(convMultiFile, []byte(convMultiAlert), 0o600))
+	assert.NoError(t, os.WriteFile(convDefaultFile, []byte(convDefaultAlert), 0o600))
+
+	os.Setenv("CONFIG_PATH", configFile.Name())
+	defer os.Unsetenv("CONFIG_PATH")
+	os.Setenv("DEPLOYER_GRAFANA_SA_TOKEN", "my-test-token")
+	defer os.Unsetenv("DEPLOYER_GRAFANA_SA_TOKEN")
+
+	d := NewDeployer()
+	assert.NoError(t, d.LoadConfig(ctx))
+
+	assert.Len(t, d.perConversionClients, 1, "only conv_multi should have a per-conversion override")
+	assert.Len(t, d.perConversionClients["conv_multi"], 2, "conv_multi should have 2 clients")
+
+	d.SetClient()
+	assert.Len(t, d.clients, 2, "two default clients from the list")
+
+	d.config.alertsToAdd = []string{convMultiFile, convDefaultFile}
+
+	_, _, _, err = d.Deploy(ctx) //nolint:dogsled
+	assert.NoError(t, err)
+
+	// conv_multi alert deployed to overrideServer and server1 (its list), not server2
+	assert.Contains(t, overrideUIDs, "conv-multi-uid")
+	assert.Contains(t, server1UIDs, "conv-multi-uid")
+	assert.NotContains(t, server2UIDs, "conv-multi-uid")
+
+	// conv_default alert deployed to both default instances (server1 and server2), not overrideServer
+	assert.Contains(t, server1UIDs, "conv-default-uid")
+	assert.Contains(t, server2UIDs, "conv-default-uid")
+	assert.NotContains(t, overrideUIDs, "conv-default-uid")
 }

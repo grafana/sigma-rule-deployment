@@ -12,9 +12,14 @@ defaults:
     data_source: grafanacloud-logs
     folder_id: XXXX
     org_id: 1
-    test_queries: true
+    test_queries: false
 configurations:
-  - name: conv
+  - name: tested
+    integration:
+      rule_group: Every 5 Minutes
+      time_window: 5m
+      test_queries: true
+  - name: untested
     integration:
       rule_group: Every 5 Minutes
       time_window: 5m

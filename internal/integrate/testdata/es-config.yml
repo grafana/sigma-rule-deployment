@@ -1,27 +1,33 @@
+version: 2
 folders:
   conversion_path: "./testdata"
   deployment_path: "./testdata"
-conversion_defaults:
-  target: esql
-  format: default
-  skip_unsupported: true
-  file_pattern: "*.yml"
-  data_source: grafanacloud-es-logs
-  data_source_type: elasticsearch
-conversions:
+defaults:
+  conversion:
+    target: esql
+    format: default
+    skip_unsupported: "true"
+    file_pattern: "*.yml"
+  integration:
+    data_source: grafanacloud-es-logs
+    data_source_type: elasticsearch
+    folder_id: XXXX
+    org_id: 1
+    test_queries: true
+configurations:
   - name: conv1
-    rule_group: Every 5 Minutes
-    time_window: 5m
+    integration:
+      rule_group: Every 5 Minutes
+      time_window: 5m
   - name: conv2
-    rule_group: Every 10 Minutes
-    time_window: 10m
+    integration:
+      rule_group: Every 10 Minutes
+      time_window: 10m
   - name: conv3
-    rule_group: Every 30 Minutes
-    time_window: 30m
+    integration:
+      rule_group: Every 30 Minutes
+      time_window: 30m
   - name: conv4
-    rule_group: Every 20 Minutes
-    time_window: 20m
-integration:
-  folder_id: XXXX
-  org_id: 1
-  test_queries: true
+    integration:
+      rule_group: Every 20 Minutes
+      time_window: 20m
