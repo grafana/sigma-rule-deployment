@@ -2,6 +2,7 @@ package integrate
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,31 +19,17 @@ func TestIsLokiMetricQuery(t *testing.T) {
 		query string
 		want  bool
 	}{
-		{
-			name:  "log query stream selector",
-			query: `{name="gh-audit-logs"} | json`,
-			want:  false,
-		},
-		{
-			name:  "event_count correlation",
-			query: `sum by (event_actor) (count_over_time({name="gh-audit-logs"} | json [5m])) > 3`,
-			want:  true,
-		},
-		{
-			name:  "value_count correlation",
-			query: `count without (event_repo) (sum by (event_actor, event_repo) (count_over_time({name="gh-audit-logs"} | json [5m]))) > 3`,
-			want:  true,
-		},
-		{
-			name:  "leading whitespace metric query",
-			query: `  count without (event_repo) (sum by (event_actor) (count_over_time({name="x"} [5m]))) > 1`,
-			want:  true,
-		},
-		{
-			name:  "avg aggregation",
-			query: `avg by (host) (rate({job="app"}[5m]))`,
-			want:  true,
-		},
+		{name: "log query stream selector", query: `{name="gh-audit-logs"} | json`, want: false},
+		{name: "log query with line filters", query: `{job=~".+"} |~ "error" | json | level="error"`, want: false},
+		{name: "log query with label filter", query: `{name="okta-logs",eventType="user.session.start"} | json | event_outcome="success"`, want: false},
+
+		{name: "sum by event_count correlation", query: `sum by (event_actor) (count_over_time({name="gh-audit-logs"} | json [5m])) > 3`, want: true},
+		{name: "sum without aggregation", query: `sum without (instance) (count_over_time({job="app"} | json [1h]))`, want: true},
+		{name: "value_count correlation", query: `count without (event_repo) (sum by (event_actor, event_repo) (count_over_time({name="gh-audit-logs"} | json [5m]))) > 3`, want: true},
+		{name: "count with leading whitespace", query: `  count without (event_repo) (sum by (event_actor) (count_over_time({name="x"} [5m]))) > 1`, want: true},
+		{name: "avg by host", query: `avg by (host) (rate({job="app"} | json [5m]))`, want: true},
+		{name: "min over time", query: `min by (pod) (min_over_time({namespace="prod"} | json | unwrap bytes [5m]))`, want: true},
+		{name: "max over time", query: `max by (pod) (max_over_time({namespace="prod"} | json | unwrap bytes [5m]))`, want: true},
 	}
 
 	for _, tt := range tests {
@@ -53,24 +40,84 @@ func TestIsLokiMetricQuery(t *testing.T) {
 	}
 }
 
-func TestCreateAlertQuery_LokiValueCountCorrelation(t *testing.T) {
-	correlationQuery := `count without (event_repo) (sum by (event_actor, event_repo) (count_over_time({name=` + "`gh-audit-logs`" + `,action=` + "`repo.download_zip`" + `} | json [5m]))) > 3`
+func TestCreateAlertQuery_LokiWrapping(t *testing.T) {
+	t.Parallel()
 
-	alertQuery, err := createAlertQuery(
-		correlationQuery,
-		"A0",
-		"grafanacloud-logs",
-		model.RelativeTimeRange{From: model.Duration(5 * time.Minute), To: 0},
-		model.ConversionConfig{Target: "loki", DataSource: "grafanacloud-logs"},
-		model.ConversionConfig{Target: "loki", DataSource: "grafanacloud-logs"},
-	)
-	require.NoError(t, err)
+	lokiConfig := model.ConversionConfig{Target: "loki", DataSource: "grafanacloud-logs"}
+	timerange := model.RelativeTimeRange{From: model.Duration(5 * time.Minute), To: 0}
 
-	var modelFields map[string]any
-	require.NoError(t, json.Unmarshal(alertQuery.Model, &modelFields))
+	tests := []struct {
+		name      string
+		input     string
+		wantWrap  bool
+		wantExact string
+	}{
+		{
+			name:      "wraps standard log query",
+			input:     `{job=~".+"} | json | test="true"`,
+			wantWrap:  true,
+			wantExact: `sum(count_over_time({job=~".+"} | json | test="true"[$__auto]))`,
+		},
+		{
+			name:     "wraps github audit log query",
+			input:    "{name=`gh-audit-logs`,action=`repo.download_zip`} | json | event_action=~`(?i)^repo\\.download_zip$`",
+			wantWrap: true,
+			wantExact: "sum(count_over_time({name=`gh-audit-logs`,action=`repo.download_zip`} | json | event_action=~`(?i)^repo\\.download_zip$`[$__auto]))",
+		},
+		{
+			name:      "preserves event_count correlation metric query",
+			input:     `sum by (event_actor) (count_over_time({name="gh-audit-logs"} | json [5m])) > 3`,
+			wantWrap:  false,
+			wantExact: `sum by (event_actor) (count_over_time({name="gh-audit-logs"} | json [5m])) > 3`,
+		},
+		{
+			name:      "preserves value_count correlation metric query",
+			input:     `count without (event_repo) (sum by (event_actor, event_repo) (count_over_time({name="gh-audit-logs"} | json [5m]))) > 3`,
+			wantWrap:  false,
+			wantExact: `count without (event_repo) (sum by (event_actor, event_repo) (count_over_time({name="gh-audit-logs"} | json [5m]))) > 3`,
+		},
+		{
+			name:      "preserves avg metric query",
+			input:     `avg by (host) (rate({job="app"} | json [5m])) > 0.5`,
+			wantWrap:  false,
+			wantExact: `avg by (host) (rate({job="app"} | json [5m])) > 0.5`,
+		},
+		{
+			name:      "preserves min metric query",
+			input:     `min by (pod) (min_over_time({namespace="prod"} | json [5m]))`,
+			wantWrap:  false,
+			wantExact: `min by (pod) (min_over_time({namespace="prod"} | json [5m]))`,
+		},
+		{
+			name:      "preserves max metric query",
+			input:     `max by (pod) (max_over_time({namespace="prod"} | json [5m]))`,
+			wantWrap:  false,
+			wantExact: `max by (pod) (max_over_time({namespace="prod"} | json [5m]))`,
+		},
+	}
 
-	expr, ok := modelFields["expr"].(string)
-	require.True(t, ok)
-	assert.Equal(t, correlationQuery, expr)
-	assert.NotContains(t, expr, "sum(count_over_time(count without")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			alertQuery, err := createAlertQuery(tt.input, "A0", "grafanacloud-logs", timerange, lokiConfig, lokiConfig)
+			require.NoError(t, err)
+
+			var modelFields map[string]any
+			require.NoError(t, json.Unmarshal(alertQuery.Model, &modelFields))
+
+			expr, ok := modelFields["expr"].(string)
+			require.True(t, ok)
+			assert.Equal(t, tt.wantExact, expr)
+
+			if tt.wantWrap {
+				assert.True(t, strings.HasPrefix(expr, "sum(count_over_time("))
+				assert.Contains(t, expr, "[$__auto]")
+				assert.False(t, isLokiMetricQuery(tt.input))
+			} else {
+				assert.True(t, isLokiMetricQuery(tt.input))
+				assert.NotContains(t, expr, "[$__auto]")
+			}
+		})
+	}
 }
