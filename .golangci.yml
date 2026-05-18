@@ -36,6 +36,8 @@ linters:
       - builtin$
       - examples$
   settings:
+    goconst:
+      ignore-tests: true
     gosec:
       excludes:
         - G117

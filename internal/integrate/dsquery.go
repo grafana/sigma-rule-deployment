@@ -11,6 +11,8 @@ import (
 	"github.com/grafana/sigma-rule-deployment/shared"
 )
 
+const elasticsearchMetricTypeCount = "count"
+
 // DatasourceQuery is an interface for executing Grafana datasource queries
 type DatasourceQuery interface {
 	GetDatasource(dsName, baseURL, apiKey string, timeout time.Duration) (*GrafanaDatasource, error)
@@ -136,7 +138,7 @@ func (h *HTTPDatasourceQuery) ExecuteQuery(
 			},
 			Metrics: []Metric{
 				{
-					Type: "count",
+					Type: elasticsearchMetricTypeCount,
 					ID:   "1",
 				},
 			},
