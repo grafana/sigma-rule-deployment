@@ -23,9 +23,9 @@ func TestIsLokiMetricQuery(t *testing.T) {
 		{name: "log query with line filters", query: `{job=~".+"} |~ "error" | json | level="error"`, want: false},
 		{name: "log query with label filter", query: `{name="okta-logs",eventType="user.session.start"} | json | event_outcome="success"`, want: false},
 
-		{name: "sum by event_count correlation", query: `sum by (event_actor) (count_over_time({name="gh-audit-logs"} | json [5m])) > 3`, want: true},
+		{name: "sum by event_count correlation", query: testEventCountMetricQuery, want: true},
 		{name: "sum without aggregation", query: `sum without (instance) (count_over_time({job="app"} | json [1h]))`, want: true},
-		{name: "value_count correlation", query: `count without (event_repo) (sum by (event_actor, event_repo) (count_over_time({name="gh-audit-logs"} | json [5m]))) > 3`, want: true},
+		{name: "value_count correlation", query: testValueCountMetricQuery, want: true},
 		{name: "count with leading whitespace", query: `  count without (event_repo) (sum by (event_actor) (count_over_time({name="x"} [5m]))) > 1`, want: true},
 		{name: "avg by host", query: `avg by (host) (rate({job="app"} | json [5m]))`, want: true},
 		{name: "min over time", query: `min by (pod) (min_over_time({namespace="prod"} | json | unwrap bytes [5m]))`, want: true},
@@ -43,7 +43,7 @@ func TestIsLokiMetricQuery(t *testing.T) {
 func TestCreateAlertQuery_LokiWrapping(t *testing.T) {
 	t.Parallel()
 
-	lokiConfig := model.ConversionConfig{Target: "loki", DataSource: "grafanacloud-logs"}
+	lokiConfig := model.ConversionConfig{Target: testLokiTarget, DataSource: testGrafanaCloudLogsDS}
 	timerange := model.RelativeTimeRange{From: model.Duration(5 * time.Minute), To: 0}
 
 	tests := []struct {
@@ -54,27 +54,27 @@ func TestCreateAlertQuery_LokiWrapping(t *testing.T) {
 	}{
 		{
 			name:      "wraps standard log query",
-			input:     `{job=~".+"} | json | test="true"`,
+			input:     testWrappedLogQuery,
 			wantWrap:  true,
-			wantExact: `sum(count_over_time({job=~".+"} | json | test="true"[$__auto]))`,
+			wantExact: testWrappedLogQueryExpr,
 		},
 		{
-			name:     "wraps github audit log query",
-			input:    "{name=`gh-audit-logs`,action=`repo.download_zip`} | json | event_action=~`(?i)^repo\\.download_zip$`",
-			wantWrap: true,
-			wantExact: "sum(count_over_time({name=`gh-audit-logs`,action=`repo.download_zip`} | json | event_action=~`(?i)^repo\\.download_zip$`[$__auto]))",
+			name:      "wraps github audit log query",
+			input:     testGhAuditLogQuery,
+			wantWrap:  true,
+			wantExact: testGhAuditLogQueryExpr,
 		},
 		{
 			name:      "preserves event_count correlation metric query",
-			input:     `sum by (event_actor) (count_over_time({name="gh-audit-logs"} | json [5m])) > 3`,
+			input:     testEventCountMetricQuery,
 			wantWrap:  false,
-			wantExact: `sum by (event_actor) (count_over_time({name="gh-audit-logs"} | json [5m])) > 3`,
+			wantExact: testEventCountMetricQuery,
 		},
 		{
 			name:      "preserves value_count correlation metric query",
-			input:     `count without (event_repo) (sum by (event_actor, event_repo) (count_over_time({name="gh-audit-logs"} | json [5m]))) > 3`,
+			input:     testValueCountMetricQuery,
 			wantWrap:  false,
-			wantExact: `count without (event_repo) (sum by (event_actor, event_repo) (count_over_time({name="gh-audit-logs"} | json [5m]))) > 3`,
+			wantExact: testValueCountMetricQuery,
 		},
 		{
 			name:      "preserves avg metric query",
@@ -100,7 +100,7 @@ func TestCreateAlertQuery_LokiWrapping(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			alertQuery, err := createAlertQuery(tt.input, "A0", "grafanacloud-logs", timerange, lokiConfig, lokiConfig)
+			alertQuery, err := createAlertQuery(tt.input, "A0", testGrafanaCloudLogsDS, timerange, lokiConfig, lokiConfig)
 			require.NoError(t, err)
 
 			var modelFields map[string]any
