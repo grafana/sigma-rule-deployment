@@ -34,6 +34,26 @@ func TestConvertToAlert(t *testing.T) {
 		wantCombinerExpression string
 	}{
 		{
+			name: "value_count correlation metric query is not wrapped",
+			queries: []string{
+				`count without (event_repo) (sum by (event_actor, event_repo) (count_over_time({name=` + "`gh-audit-logs`" + `} | json [5m]))) > 3`,
+			},
+			titles: "GitHub Repository Zip Download Threshold by Actor",
+			rule: &model.ProvisionedAlertRule{
+				UID: "9e2532c1",
+			},
+			convConfig: model.ConversionConfig{
+				Name:       "github_audits_5m",
+				Target:     "loki",
+				DataSource: "grafanacloud-logs",
+				RuleGroup:  "github-audits-5m",
+				TimeWindow: "5m",
+			},
+			wantQueryText: `count without (event_repo) (sum by (event_actor, event_repo) (count_over_time({name=` + "`gh-audit-logs`" + `} | json [5m])))`,
+			wantDuration:  model.Duration(300 * time.Second),
+			wantError:     false,
+		},
+		{
 			name:    "valid new loki query",
 			queries: []string{"{job=`.+`} | json | test=`true`"},
 			titles:  "Alert Rule 1",

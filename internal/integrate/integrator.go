@@ -628,6 +628,28 @@ func getRuleUID(conversionName string, conversionID uuid.UUID) string {
 	return fmt.Sprintf("%x", hash)
 }
 
+// lokiMetricQueryPrefixes are PromQL/LogQL aggregation prefixes emitted by Sigma correlation
+// converters and other metric query generators. Log queries (stream selectors) start with "{".
+var lokiMetricQueryPrefixes = []string{
+	"sum",
+	"count",
+	"avg",
+	"min",
+	"max",
+}
+
+// isLokiMetricQuery reports whether query is already a Loki metric query and should not be
+// wrapped in sum(count_over_time(...)).
+func isLokiMetricQuery(query string) bool {
+	trimmed := strings.TrimSpace(query)
+	for _, prefix := range lokiMetricQueryPrefixes {
+		if strings.HasPrefix(trimmed, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
 // createAlertQuery creates an AlertQuery based on the target data source and configuration
 func createAlertQuery(query string, refID string, datasource string, timerange model.RelativeTimeRange, config model.ConversionConfig, defaultConf model.ConversionConfig) (model.AlertQuery, error) {
 	datasourceType := shared.GetConfigValue(config.DataSourceType, defaultConf.DataSourceType, shared.GetConfigValue(config.Target, defaultConf.Target, shared.Loki))
@@ -635,8 +657,9 @@ func createAlertQuery(query string, refID string, datasource string, timerange m
 
 	// Modify query based on target data source
 	if datasourceType == shared.Loki {
-		// if the query is not a metric query, we need to add a sum aggregation to it
-		if !strings.HasPrefix(query, "sum") {
+		// Log queries must be converted to metric queries for Grafana alerting. Correlation rules
+		// and other converters already emit metric queries (e.g. sum by (...), count without (...)).
+		if !isLokiMetricQuery(query) {
 			query = fmt.Sprintf("sum(count_over_time(%s[$__auto]))", query)
 		}
 	}
