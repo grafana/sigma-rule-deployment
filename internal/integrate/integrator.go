@@ -628,15 +628,25 @@ func getRuleUID(conversionName string, conversionID uuid.UUID) string {
 	return fmt.Sprintf("%x", hash)
 }
 
+var lokiMetricQueryPrefixes = []string{"sum", "count", "avg", "min", "max"}
+
+func isLokiMetricQuery(query string) bool {
+	trimmed := strings.TrimSpace(query)
+	for _, prefix := range lokiMetricQueryPrefixes {
+		if strings.HasPrefix(trimmed, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
 // createAlertQuery creates an AlertQuery based on the target data source and configuration
 func createAlertQuery(query string, refID string, datasource string, timerange model.RelativeTimeRange, config model.ConversionConfig, defaultConf model.ConversionConfig) (model.AlertQuery, error) {
 	datasourceType := shared.GetConfigValue(config.DataSourceType, defaultConf.DataSourceType, shared.GetConfigValue(config.Target, defaultConf.Target, shared.Loki))
 	customModel := shared.GetConfigValue(config.QueryModel, defaultConf.QueryModel, "")
 
-	// Modify query based on target data source
 	if datasourceType == shared.Loki {
-		// if the query is not a metric query, we need to add a sum aggregation to it
-		if !strings.HasPrefix(query, "sum") {
+		if !isLokiMetricQuery(query) {
 			query = fmt.Sprintf("sum(count_over_time(%s[$__auto]))", query)
 		}
 	}
@@ -665,7 +675,7 @@ func createAlertQuery(query string, refID string, datasource string, timerange m
 	case datasourceType == shared.Elasticsearch:
 		// Based on the Elasticsearch data source plugin
 		// https://github.com/grafana/grafana/blob/main/public/app/plugins/datasource/elasticsearch/dataquery.gen.ts
-		alertQuery.Model = json.RawMessage(fmt.Sprintf(`{"refId":"%s","datasource":{"type":"elasticsearch","uid":"%s"},"query":"%s","alias":"","metrics":[{"type":"count","id":"1"}],"bucketAggs":[{"type":"date_histogram","id":"2","settings":{"interval":"auto"}}],"intervalMs":2000,"maxDataPoints":1354,"timeField":"@timestamp"}`, refID, datasource, escapedQuery))
+		alertQuery.Model = json.RawMessage(fmt.Sprintf(`{"refId":"%s","datasource":{"type":"elasticsearch","uid":"%s"},"query":"%s","alias":"","metrics":[{"type":"%s","id":"1"}],"bucketAggs":[{"type":"date_histogram","id":"2","settings":{"interval":"auto"}}],"intervalMs":2000,"maxDataPoints":1354,"timeField":"@timestamp"}`, refID, datasource, escapedQuery, elasticsearchMetricTypeCount))
 	default:
 		// try a basic query
 		fmt.Printf("WARNING: Using generic query model for the data source type %s; if these queries don't work, try configuring a custom query_model\n", datasourceType)
