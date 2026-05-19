@@ -12,27 +12,14 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - name: Setup Token
-        uses: grafana/shared-workflows/actions/get-vault-secrets@a37de51f3d713a30a9e4b21bcdfbd38170020593 # get-vault-secrets/v1.3.0
+      - name: Get GitHub App Token
+        id: get-github-app-token
+        uses: grafana/shared-workflows/actions/create-github-app-token@580590a644e82e79bb2598bdaba0be245a14dda0 # create-github-app-token/v0.2.2
         with:
-          repo_secrets: |
-            GITHUB_APP_ID=github-app:app-id
-            GITHUB_CLIENT_ID=github-app:client-id
-            GITHUB_CLIENT_SECRET=github-app:client-secret
-            GITHUB_APP_PRIVATE_KEY=github-app:client-pem
-      - name: Generate Token
-        id: generate-token
-        uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2
-        with:
-          app-id: ${{ env.GITHUB_APP_ID }}
-          private-key: ${{ env.GITHUB_APP_PRIVATE_KEY }}
-          owner: grafana
-          repositories: |
-            sigma-rule-deployment-integration-test
-
+          github_app: sigma-rule-deployment-app
       - name: Close PR
         env:
-          GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
+          GITHUB_TOKEN: ${{ steps.get-github-app-token.outputs.token }}
           GITHUB_PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           gh pr close --repo grafana/sigma-rule-deployment-integration-test "integration-test-pr-${GITHUB_PR_NUMBER}" -c "Closed by GitHub Actions, tests completed" -d || true
