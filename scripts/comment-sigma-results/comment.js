@@ -23,17 +23,26 @@ import * as github from '@actions/github';
 import fs from 'fs';
 import path from 'path';
 
+// Get the root of the repository - this is used to resolve the absolute path to the file when the scripts runs from a different repo
+const repoRoot = process.env.RULE_DIRECTORY_PATH || process.cwd();
+
 /**
  * Extract title from JSON file
  */
+
+
 function extractTitle(filePath) {
   try {
-    if (!fs.existsSync(filePath)) {
-      console.log(`File does not exist: ${filePath}`);
+    const absolutePath = path.isAbsolute(filePath)
+      ? filePath
+      : path.join(repoRoot, filePath);
+
+    if (!fs.existsSync(absolutePath)) {
+      console.log(`File does not exist: ${absolutePath}`);
       return path.basename(filePath);
     }
 
-    const content = fs.readFileSync(filePath, 'utf8');
+    const content = fs.readFileSync(absolutePath, 'utf8');
     
     // Try JSON parsing first
     try {
@@ -80,12 +89,18 @@ function buildTestResultsTable(testResults) {
     return '';
   }
 
-  let resultTable = `### Test Results\n\n| File name | Link | Result count | Errors |\n| --- | --- | --- | --- |\n`;
+  let resultTable = `### Test Results\n\n| File name | Link | Result count | Execution time | Bytes processed | Errors |\n| --- | --- | --- | --- | --- | --- |\n`;
 
   for (const [filePath, results] of Object.entries(testResults)) {
     const title = extractTitle(filePath);
     for (const result of results) {
-      resultTable += `| ${title} | [See in Explore](${result.link}) | ${result.stats.count} | ${result.stats.errors.length} |\n`;
+      const executionTime = result.stats.executionTime?.unit
+        ? `${result.stats.executionTime.value} ${result.stats.executionTime.unit}`.trim()
+        : '-';
+      const bytesProcessed = result.stats.bytesProcessed?.unit
+        ? `${result.stats.bytesProcessed.value.toLocaleString()} ${result.stats.bytesProcessed.unit}`.trim()
+        : '-';
+      resultTable += `| ${title} | [See in Explore](${result.link}) | ${result.stats.count} | ${executionTime} | ${bytesProcessed} | ${result.stats.errors.length} |\n`;
     }
   }
 

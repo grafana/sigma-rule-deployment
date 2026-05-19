@@ -3,6 +3,7 @@ package integrate
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -32,6 +33,16 @@ func TestConvertToAlert(t *testing.T) {
 		wantAnnotations        map[string]string
 		wantCombinerExpression string
 	}{
+		{
+			name:          "value_count correlation metric query is not wrapped",
+			queries:       []string{testValueCountMetricQuery},
+			titles:        "GitHub Repository Zip Download Threshold by Actor",
+			rule:          &model.ProvisionedAlertRule{UID: "9e2532c1"},
+			convConfig:    model.ConversionConfig{Name: "github_audits_5m", Target: testLokiTarget, DataSource: testGrafanaCloudLogsDS, RuleGroup: "github-audits-5m", TimeWindow: "5m"},
+			wantQueryText: "count without (event_repo) (sum by (event_actor, event_repo)",
+			wantDuration:  model.Duration(300 * time.Second),
+			wantError:     false,
+		},
 		{
 			name:    "valid new loki query",
 			queries: []string{"{job=`.+`} | json | test=`true`"},
@@ -230,6 +241,7 @@ func TestConvertToAlert(t *testing.T) {
 			convObject: model.ConversionOutput{
 				Rules: []model.SigmaRule{
 					{
+						Title:     "A non-title case title",
 						Level:     "high",
 						Logsource: model.SigmaLogsource{Product: "okta", Service: "okta"},
 						Author:    "John Doe",
@@ -250,7 +262,9 @@ func TestConvertToAlert(t *testing.T) {
 					"Service": "{{.Logsource.Service}}",
 				},
 				TemplateAnnotations: map[string]string{
-					"Author": "{{.Author}}",
+					"Author":      "{{.Author}}",
+					"summary":     "{{title .Title }}",
+					"runbook_url": "https://my.runbook.url/{{ replaceAll .Title ` ` `_` }}",
 				},
 			},
 			wantQueryText: "sum(count_over_time({job=`.+`} | json | test=`true`[$__auto]))",
@@ -269,6 +283,8 @@ func TestConvertToAlert(t *testing.T) {
 				"Lookback":       "0s",
 				"Query":          "{job=`.+`} | json | test=`true`",
 				"TimeWindow":     "5m",
+				"summary":        "A Non-Title Case Title",
+				"runbook_url":    "https://my.runbook.url/A_non-title_case_title",
 			},
 		},
 	}
@@ -774,14 +790,14 @@ func TestDoConversions(t *testing.T) {
 			}
 
 			// Create conversion output files
-			var convFiles []string
-			for _, fileName := range tt.addedFiles {
+			convFiles := make([]string, len(tt.addedFiles))
+			for i, fileName := range tt.addedFiles {
 				convBytes, err := json.Marshal(tt.convOutput)
 				assert.NoError(t, err)
 				convFile := filepath.Join(convPath, fileName)
 				err = os.WriteFile(convFile, convBytes, 0o600)
 				assert.NoError(t, err)
-				convFiles = append(convFiles, convFile)
+				convFiles[i] = convFile
 			}
 
 			// Set up integrator
@@ -895,8 +911,8 @@ func TestDoCleanup(t *testing.T) {
 			}
 
 			// Create files to be removed
-			var removedFilePaths []string
-			for _, fileName := range tt.removedFiles {
+			removedFilePaths := make([]string, len(tt.removedFiles))
+			for i, fileName := range tt.removedFiles {
 				// Create dummy deployment file that should be removed
 				deployFile := filepath.Join(deployPath, fmt.Sprintf("alert_rule_%s_test_123abc.json", strings.TrimSuffix(fileName, ".json")))
 				dummyRule := &model.ProvisionedAlertRule{
@@ -906,7 +922,7 @@ func TestDoCleanup(t *testing.T) {
 				}
 				err = writeRuleToFile(dummyRule, deployFile, false)
 				assert.NoError(t, err)
-				removedFilePaths = append(removedFilePaths, filepath.Join(convPath, fileName))
+				removedFilePaths[i] = filepath.Join(convPath, fileName)
 			}
 
 			// Create orphaned conversion file
@@ -1165,7 +1181,9 @@ func TestRun(t *testing.T) {
 			assert.Equal(t, tt.expectConversionFiles, len(files))
 
 			// Verify rules_integrated output was set
-			outputBytes, err := os.ReadFile(outputFile.Name())
+			_, err = outputFile.Seek(0, 0)
+			assert.NoError(t, err)
+			outputBytes, err := io.ReadAll(outputFile)
 			assert.NoError(t, err)
 			outputContent := string(outputBytes)
 			assert.Contains(t, outputContent, "rules_integrated=")

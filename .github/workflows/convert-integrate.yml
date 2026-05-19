@@ -69,14 +69,14 @@ jobs:
     steps:
       - name: Get service account token for instance from Vault
         if: ${{ inputs.vault_path != '' }}
-        uses: grafana/shared-workflows/actions/get-vault-secrets@main
+        uses: grafana/shared-workflows/actions/get-vault-secrets@f1614b210386ac420af6807a997ac7f6d96e477a # get-vault-secrets/v1.3.1
         with:
           repo_secrets: ${{ format('GRAFANA_SA_TOKEN={0}', inputs.vault_path) }}
 
       - name: Get PR branch for comments
         if: github.event_name == 'issue_comment'
         id: get-pr-branch
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const { data: pullRequest } = await github.rest.pulls.get({
@@ -90,7 +90,7 @@ jobs:
 
       - name: Check whether to convert all rules and react
         id: convert_all
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           ALL_RULES: ${{ inputs.all_rules }}
         with:
@@ -125,7 +125,7 @@ jobs:
             console.log(`convert_all set to: ${convertAll}`);
 
       - name: Checkout repository
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ref: ${{ github.event_name == 'issue_comment' && steps.get-pr-branch.outputs.result || github.head_ref }}
           fetch-depth: 0
@@ -153,7 +153,7 @@ jobs:
           changed_files_from_base: ${{ inputs.changed_files_from_base }}
 
       - name: Commit queries and alert rules
-        uses: stefanzweifel/git-auto-commit-action@28e16e81777b558cc906c8750092100bbb34c5e3 # v7.0.0
+        uses: stefanzweifel/git-auto-commit-action@04702edda442b2e678b25b537cec683a1493fcb9 # v7.1.0
         with:
           commit_message: "Sigma Rules Deployment"
           branch: ${{ github.event_name == 'issue_comment' && steps.get-pr-branch.outputs.result || github.head_ref }}

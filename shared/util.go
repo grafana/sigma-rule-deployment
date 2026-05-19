@@ -31,8 +31,12 @@ func SetOutput(output, value string) error {
 	if outputFile == "" {
 		return errors.New("only output with a github output file supported. See https://github.blog/changelog/2022-10-11-github-actions-deprecating-save-state-and-set-output-commands/ for further details")
 	}
+	cleaned := filepath.Clean(outputFile)
+	if cleaned != outputFile || strings.HasPrefix(cleaned, "..") {
+		return errors.New("GITHUB_OUTPUT path is invalid")
+	}
 
-	f, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644) //nolint:gosec // G703: outputFile validated to reject path traversal above
 	if err != nil {
 		return fmt.Errorf("unable to open output file, due %w", err)
 	}

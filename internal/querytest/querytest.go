@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/grafana/sigma-rule-deployment/internal/integrate"
@@ -105,11 +106,24 @@ func (qt *QueryTester) Run() error {
 		if len(queryResults) > 0 {
 			fmt.Printf("Query testing completed successfully for file %s\n", inputFile)
 			if len(queryResults) == 1 {
-				fmt.Printf("Query returned results: %d\n", queryResults[0].Stats.Count)
+				result := queryResults[0]
+				fmt.Printf("Query returned results: %d\n", result.Stats.Count)
+				if result.Stats.ExecutionTime.Unit != "" {
+					fmt.Printf("Execution time: %g %s\n", result.Stats.ExecutionTime.Value, result.Stats.ExecutionTime.Unit)
+				}
+				if result.Stats.BytesProcessed.Unit != "" {
+					fmt.Printf("Bytes processed: %g %s\n", result.Stats.BytesProcessed.Value, result.Stats.BytesProcessed.Unit)
+				}
 			} else {
 				fmt.Printf("Queries returned results:\n")
 				for i, result := range queryResults {
 					fmt.Printf("Query %d: %d\n", i, result.Stats.Count)
+					if result.Stats.ExecutionTime.Unit != "" {
+						fmt.Printf("  Execution time: %g %s\n", result.Stats.ExecutionTime.Value, result.Stats.ExecutionTime.Unit)
+					}
+					if result.Stats.BytesProcessed.Unit != "" {
+						fmt.Printf("  Bytes processed: %g %s\n", result.Stats.BytesProcessed.Value, result.Stats.BytesProcessed.Unit)
+					}
 				}
 			}
 		} else if err == nil {
@@ -231,8 +245,29 @@ func (qt *QueryTester) TestQueries(queries map[string]string, config, defaultCon
 	return queryResults, nil
 }
 
+var (
+	bytesProcessedStatKey = "Summary: total bytes processed"
+	executionTimeStatKey  = "Summary: exec time"
+)
+
 // ProcessFrame processes a single frame from the query response and updates the result stats
 func ProcessFrame(frame model.Frame, result *model.QueryTestResult, showSampleValues, showLogLines bool) error {
+	// Get metrics from frame metadata (Stats are nested within Schema.Meta)
+	for _, stat := range frame.Schema.Meta.Stats {
+		switch {
+		case strings.Contains(stat.DisplayName, bytesProcessedStatKey):
+			result.Stats.BytesProcessed = model.MetricValue{
+				Value: stat.Value,
+				Unit:  stat.Unit,
+			}
+		case strings.Contains(stat.DisplayName, executionTimeStatKey):
+			result.Stats.ExecutionTime = model.MetricValue{
+				Value: stat.Value,
+				Unit:  stat.Unit,
+			}
+		}
+	}
+
 	// Map field names to their indices
 	fieldIndices := make(map[string]int)
 	for i, field := range frame.Schema.Fields {

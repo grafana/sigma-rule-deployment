@@ -1,4 +1,4 @@
-FROM golang:1.25-alpine@sha256:26111811bc967321e7b6f852e914d14bede324cd1accb7f81811929a6a57fea9 AS builder
+FROM golang:1.26-alpine@sha256:2389ebfa5b7f43eeafbd6be0c3700cc46690ef842ad962f6c5bd6be49ed82039 AS builder
 
 WORKDIR /src
 
@@ -14,7 +14,7 @@ COPY shared/ ./shared/
 # Build the unified sigma-deployer binary
 RUN go build -ldflags="-s -w" -o /build/sigma-deployer ./cmd/sigma-deployer
 
-FROM python:3.12-alpine@sha256:f47255bb0de452ac59afc49eaabe992720fe282126bb6a4f62de9dd3db1742dc
+FROM python:3.14-alpine@sha256:dd4d2bd5b53d9b25a51da13addf2be586beebd5387e289e798e4083d94ca837a
 
 WORKDIR /app
 

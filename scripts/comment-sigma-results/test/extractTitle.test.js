@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import fs from 'fs';
+import path from 'path';
 import { extractTitle } from '../comment.js';
 
 test('extractTitle - top-level title in JSON', (t) => {
@@ -108,5 +109,100 @@ test('extractTitle - rules array with no title field falls back to filename', (t
   
   const result = extractTitle(filePath);
   assert.strictEqual(result, 'test7.json');
+});
+
+test('extractTitle - relative path resolved with process.cwd() when RULE_DIRECTORY_PATH not set', (t) => {
+  const relativePath = 'rules/test-rule.json';
+  const expectedAbsolutePath = path.join(process.cwd(), relativePath);
+  const content = JSON.stringify({ title: 'Test Rule from CWD' });
+
+  let actualPath = null;
+  t.mock.method(fs, 'existsSync', (filePath) => {
+    actualPath = filePath;
+    return true;
+  });
+  t.mock.method(fs, 'readFileSync', () => content);
+
+  const result = extractTitle(relativePath);
+  assert.strictEqual(result, 'Test Rule from CWD');
+  assert.strictEqual(actualPath, expectedAbsolutePath);
+});
+
+test('extractTitle - absolute path used as-is', (t) => {
+  const absolutePath = '/absolute/path/to/test-rule.json';
+  const content = JSON.stringify({ title: 'Test Rule with Absolute Path' });
+
+  let actualPath = null;
+  t.mock.method(fs, 'existsSync', (filePath) => {
+    actualPath = filePath;
+    return true;
+  });
+  t.mock.method(fs, 'readFileSync', () => content);
+
+  const result = extractTitle(absolutePath);
+  assert.strictEqual(result, 'Test Rule with Absolute Path');
+  assert.strictEqual(actualPath, absolutePath);
+});
+
+test('extractTitle - relative path with nested directory structure', (t) => {
+  // Test that relative paths with subdirectories are resolved correctly
+  const relativePath = 'subdir/nested/rule.json';
+  const expectedAbsolutePath = path.join(process.cwd(), relativePath);
+  const content = JSON.stringify({ title: 'Nested Relative Path Rule' });
+
+  let actualPath = null;
+  t.mock.method(fs, 'existsSync', (filePath) => {
+    actualPath = filePath;
+    return true;
+  });
+  t.mock.method(fs, 'readFileSync', () => content);
+
+  const result = extractTitle(relativePath);
+
+  assert.strictEqual(result, 'Nested Relative Path Rule');
+  // Verify the path was resolved to an absolute path
+  assert(path.isAbsolute(actualPath), 'Relative path should be resolved to absolute path');
+  assert.strictEqual(actualPath, expectedAbsolutePath);
+});
+
+test('extractTitle - relative path resolved with RULE_DIRECTORY_PATH when set', async (t) => {
+  // Save original environment variable
+  const originalRuleDir = process.env.RULE_DIRECTORY_PATH;
+
+  try {
+    // Set a custom RULE_DIRECTORY_PATH
+    const customRoot = '/custom/repo/root';
+    process.env.RULE_DIRECTORY_PATH = customRoot;
+
+    // Dynamically import the module to get a fresh instance with the new env var
+    // Use a cache-busting query parameter to force reload
+    const modulePath = new URL('../comment.js', import.meta.url).href;
+    const commentModule = await import(modulePath + '?t=' + Date.now());
+    const { extractTitle: extractTitleWithCustomRoot } = commentModule;
+
+    const relativePath = 'rules/custom-rule.json';
+    const expectedAbsolutePath = path.join(customRoot, relativePath);
+    const content = JSON.stringify({ title: 'Test Rule from Custom Root' });
+
+    let actualPath = null;
+    t.mock.method(fs, 'existsSync', (filePath) => {
+      actualPath = filePath;
+      return true;
+    });
+    t.mock.method(fs, 'readFileSync', () => content);
+
+    const result = extractTitleWithCustomRoot(relativePath);
+
+    assert.strictEqual(result, 'Test Rule from Custom Root');
+    assert.strictEqual(actualPath, expectedAbsolutePath,
+      'Relative path should be resolved using RULE_DIRECTORY_PATH');
+  } finally {
+    // Restore original environment variable
+    if (originalRuleDir !== undefined) {
+      process.env.RULE_DIRECTORY_PATH = originalRuleDir;
+    } else {
+      delete process.env.RULE_DIRECTORY_PATH;
+    }
+  }
 });
 

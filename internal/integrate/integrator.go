@@ -16,9 +16,58 @@ import (
 	"github.com/grafana/sigma-rule-deployment/internal/model"
 	"github.com/grafana/sigma-rule-deployment/shared"
 	"github.com/spaolacci/murmur3"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 const TRUE = "true"
+
+var FuncMap = template.FuncMap{
+	// Case conversion
+	"toUpper": strings.ToUpper,
+	"toLower": strings.ToLower,
+	"title":   cases.Title(language.AmericanEnglish).String, // use as strings.Title is deprecated
+
+	// Trimming
+	"trim":       strings.Trim,
+	"trimSpace":  strings.TrimSpace,
+	"trimPrefix": strings.TrimPrefix,
+	"trimSuffix": strings.TrimSuffix,
+	"trimLeft":   strings.TrimLeft,
+	"trimRight":  strings.TrimRight,
+
+	// Prefix/Suffix checking
+	"hasPrefix":   strings.HasPrefix,
+	"hasSuffix":   strings.HasSuffix,
+	"contains":    strings.Contains,
+	"containsAny": strings.ContainsAny,
+
+	// Replacement
+	"replace":    strings.Replace,
+	"replaceAll": strings.ReplaceAll,
+
+	// Splitting and joining
+	"split":       strings.Split,
+	"splitAfter":  strings.SplitAfter,
+	"splitAfterN": strings.SplitAfterN,
+	"splitN":      strings.SplitN,
+	"join":        strings.Join,
+	"fields":      strings.Fields,
+
+	// Searching
+	"index":        strings.Index,
+	"lastIndex":    strings.LastIndex,
+	"indexAny":     strings.IndexAny,
+	"lastIndexAny": strings.LastIndexAny,
+	"count":        strings.Count,
+
+	// Repeating
+	"repeat": strings.Repeat,
+
+	// Comparison
+	"compare":   strings.Compare,
+	"equalFold": strings.EqualFold,
+}
 
 type Integrator struct {
 	config      model.Configuration
@@ -456,7 +505,7 @@ func (i *Integrator) ConvertToAlert(rule *model.ProvisionedAlertRule, queries []
 
 	if i.config.IntegratorConfig.TemplateAnnotations != nil {
 		for key, value := range i.config.IntegratorConfig.TemplateAnnotations {
-			tmpl, err := template.New("annotation_" + key).Parse(value)
+			tmpl, err := template.New("annotation_" + key).Funcs(FuncMap).Parse(value)
 			if err != nil {
 				return fmt.Errorf("error parsing template %s: %v", key, err)
 			}
@@ -579,15 +628,25 @@ func getRuleUID(conversionName string, conversionID uuid.UUID) string {
 	return fmt.Sprintf("%x", hash)
 }
 
+var lokiMetricQueryPrefixes = []string{"sum", "count", "avg", "min", "max"}
+
+func isLokiMetricQuery(query string) bool {
+	trimmed := strings.TrimSpace(query)
+	for _, prefix := range lokiMetricQueryPrefixes {
+		if strings.HasPrefix(trimmed, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
 // createAlertQuery creates an AlertQuery based on the target data source and configuration
 func createAlertQuery(query string, refID string, datasource string, timerange model.RelativeTimeRange, config model.ConversionConfig, defaultConf model.ConversionConfig) (model.AlertQuery, error) {
 	datasourceType := shared.GetConfigValue(config.DataSourceType, defaultConf.DataSourceType, shared.GetConfigValue(config.Target, defaultConf.Target, shared.Loki))
 	customModel := shared.GetConfigValue(config.QueryModel, defaultConf.QueryModel, "")
 
-	// Modify query based on target data source
 	if datasourceType == shared.Loki {
-		// if the query is not a metric query, we need to add a sum aggregation to it
-		if !strings.HasPrefix(query, "sum") {
+		if !isLokiMetricQuery(query) {
 			query = fmt.Sprintf("sum(count_over_time(%s[$__auto]))", query)
 		}
 	}
@@ -616,7 +675,7 @@ func createAlertQuery(query string, refID string, datasource string, timerange m
 	case datasourceType == shared.Elasticsearch:
 		// Based on the Elasticsearch data source plugin
 		// https://github.com/grafana/grafana/blob/main/public/app/plugins/datasource/elasticsearch/dataquery.gen.ts
-		alertQuery.Model = json.RawMessage(fmt.Sprintf(`{"refId":"%s","datasource":{"type":"elasticsearch","uid":"%s"},"query":"%s","alias":"","metrics":[{"type":"count","id":"1"}],"bucketAggs":[{"type":"date_histogram","id":"2","settings":{"interval":"auto"}}],"intervalMs":2000,"maxDataPoints":1354,"timeField":"@timestamp"}`, refID, datasource, escapedQuery))
+		alertQuery.Model = json.RawMessage(fmt.Sprintf(`{"refId":"%s","datasource":{"type":"elasticsearch","uid":"%s"},"query":"%s","alias":"","metrics":[{"type":"%s","id":"1"}],"bucketAggs":[{"type":"date_histogram","id":"2","settings":{"interval":"auto"}}],"intervalMs":2000,"maxDataPoints":1354,"timeField":"@timestamp"}`, refID, datasource, escapedQuery, elasticsearchMetricTypeCount))
 	default:
 		// try a basic query
 		fmt.Printf("WARNING: Using generic query model for the data source type %s; if these queries don't work, try configuring a custom query_model\n", datasourceType)

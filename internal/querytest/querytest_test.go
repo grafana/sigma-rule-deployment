@@ -3,6 +3,7 @@ package querytest
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -137,14 +138,14 @@ func TestRun(t *testing.T) {
 			}
 
 			// Create conversion output files
-			var testFiles []string
-			for _, fileName := range tt.testFiles {
+			testFiles := make([]string, len(tt.testFiles))
+			for i, fileName := range tt.testFiles {
 				convBytes, err := json.Marshal(tt.convOutput)
 				assert.NoError(t, err)
 				convFile := filepath.Join(convPath, fileName)
 				err = os.WriteFile(convFile, convBytes, 0o600)
 				assert.NoError(t, err)
-				testFiles = append(testFiles, convFile)
+				testFiles[i] = convFile
 			}
 
 			// Create a temporary output file for capturing outputs
@@ -190,7 +191,9 @@ func TestRun(t *testing.T) {
 
 			// Verify test_query_results output was set if testing was performed
 			if tt.expectTestResults && len(tt.convOutput.Queries) > 0 {
-				outputBytes, err := os.ReadFile(outputFile.Name())
+				_, err = outputFile.Seek(0, 0)
+				assert.NoError(t, err)
+				outputBytes, err := io.ReadAll(outputFile)
 				assert.NoError(t, err)
 				outputContent := string(outputBytes)
 				assert.Contains(t, outputContent, "test_query_results=")

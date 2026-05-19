@@ -44,7 +44,7 @@ runs:
         CONVERSION_PATH=$(yq -r '.folders.conversion_path' "${CONFIG_PATH}")
         echo "conversion_path=${CONVERSION_PATH}" >> $GITHUB_OUTPUT
     - name: Login to GitHub Container Registry
-      uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+      uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
       with:
         registry: ghcr.io
         username: ${{ github.actor }}
@@ -136,6 +136,7 @@ runs:
         GITHUB_TOKEN: ${{ github.token }}
         GITHUB_REPOSITORY: ${{ github.repository }}
         GITHUB_ACTIONS: 'true'
+        RULE_DIRECTORY_PATH: ${{ github.workspace }}
       run: |
         # Generate comment data (git operations)
         git add "$CONVERSION_PATH"
@@ -156,4 +157,5 @@ runs:
         if [ ! -d "node_modules" ]; then
           npm ci
         fi
+
         node comment.js

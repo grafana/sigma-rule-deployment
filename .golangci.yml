@@ -35,6 +35,12 @@ linters:
       - third_party$
       - builtin$
       - examples$
+  settings:
+    goconst:
+      ignore-tests: true
+    gosec:
+      excludes:
+        - G117
 formatters:
   enable:
     - gofmt

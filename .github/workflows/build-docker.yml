@@ -28,17 +28,17 @@ jobs:
       packages: write
     steps:
       - name: "Checkout"
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
       - name: "Login to GitHub Container Registry"
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: "Build and Push (PR)"
-        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
         if: github.event_name == 'pull_request'
         with:
           context: .
@@ -47,7 +47,7 @@ jobs:
             ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${{ github.event.pull_request.head.sha }}
           push: true
       - name: "Build and Push (Push)"
-        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
         if: github.event_name == 'push'
         with:
           context: .
@@ -57,7 +57,7 @@ jobs:
             ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:main
           push: true
       - name: "Build and Push (Release)"
-        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
         if: github.event_name == 'release'
         with:
           context: .
@@ -82,13 +82,13 @@ jobs:
         with:
           github_app: sigma-rule-deployment-app
       - name: Checkout Code
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           token: ${{ steps.get-github-app-token.outputs.token }}
           persist-credentials: false
           path: ./sigma-rule-deployment
       - name: Checkout Integration Test
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           token: ${{ steps.get-github-app-token.outputs.token }}
           persist-credentials: true
@@ -179,13 +179,18 @@ jobs:
           git commit -m "update main branch to relevant hash" --allow-empty
 
           git push origin "integration-test-main-update-${GITHUB_PR_NUMBER}" --force
-          gh pr create \
-            --title "Integration Test Main Update ${GITHUB_PR_NUMBER}" \
-            --body "This PR updates the main branch to the relevant hash for grafana/sigma-rule-deployment#${GITHUB_PR_NUMBER}" \
-            --head "integration-test-main-update-${GITHUB_PR_NUMBER}" \
-            --base main \
-            --label "automated" \
-            --draft
+
+          RESULT=$(gh pr list --json id,title -H "integration-test-main-update-${GITHUB_PR_NUMBER}" | jq -r '. | length')
+
+          if [ "$RESULT" -eq 0 ]; then
+            gh pr create \
+              --title "Integration Test Main Update ${GITHUB_PR_NUMBER}" \
+              --body "This PR updates the main branch to the relevant hash for grafana/sigma-rule-deployment#${GITHUB_PR_NUMBER}" \
+              --head "integration-test-main-update-${GITHUB_PR_NUMBER}" \
+              --base main \
+              --label "automated" \
+              --draft
+          fi
           sleep 10 # wait for the PR checks to start...
 
           # wait for the required PR checks to complete
