@@ -112,6 +112,29 @@ test('buildTestResultsTable - multiple files with results', () => {
   assert(result.includes('2')); // error count for file2
 });
 
+test('buildTestResultsTable - renders dash when link is empty', () => {
+  const testResults = {
+    '/path/to/file1.json': [
+      {
+        datasource: 'loki',
+        link: '',
+        stats: {
+          count: 0,
+          errors: ['401 unauthorized'],
+          fields: {}
+        }
+      }
+    ]
+  };
+
+  const result = commentModule.buildTestResultsTable(testResults);
+
+  assert(result.includes('file1.json'));
+  assert(!result.includes('[See in Explore]()'), 'should not render empty markdown link');
+  const dataLine = result.split('\n').find(line => line.includes('file1.json'));
+  assert(dataLine.includes('| - |'), 'should render dash in link cell');
+});
+
 test('buildTestResultsTable - handles errors array correctly', () => {
   const testResults = {
     '/path/to/file1.json': [

@@ -100,7 +100,8 @@ function buildTestResultsTable(testResults) {
       const bytesProcessed = result.stats.bytesProcessed?.unit
         ? `${result.stats.bytesProcessed.value.toLocaleString()} ${result.stats.bytesProcessed.unit}`.trim()
         : '-';
-      resultTable += `| ${title} | [See in Explore](${result.link}) | ${result.stats.count} | ${executionTime} | ${bytesProcessed} | ${result.stats.errors.length} |\n`;
+      const linkCell = result.link ? `[See in Explore](${result.link})` : '-';
+      resultTable += `| ${title} | ${linkCell} | ${result.stats.count} | ${executionTime} | ${bytesProcessed} | ${result.stats.errors.length} |\n`;
     }
   }
 
