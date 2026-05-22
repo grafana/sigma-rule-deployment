@@ -167,6 +167,21 @@ func (qt *QueryTester) TestQueries(queries map[string]string, config, defaultCon
 
 	for _, refID := range refIDs {
 		query := queries[refID]
+
+		// Generate explore link first so it's available even if query testing fails
+		// (e.g., auth failure) — the link is a pure deeplink and doesn't depend on
+		// the test response.
+		exploreLink, err := GenerateExploreLink(
+			query, datasource, datasourceType, config, defaultConf,
+			qt.config.DeployerConfig.GrafanaInstance,
+			qt.config.IntegratorConfig.From,
+			qt.config.IntegratorConfig.To,
+			qt.config.IntegratorConfig.OrgID,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("error generating explore link: %v", err)
+		}
+
 		resp, err := integrate.TestQuery(
 			query,
 			datasource,
@@ -182,25 +197,13 @@ func (qt *QueryTester) TestQueries(queries map[string]string, config, defaultCon
 			return []model.QueryTestResult{
 				{
 					Datasource: datasource,
-					Link:       "",
+					Link:       exploreLink,
 					Stats: model.Stats{
 						Fields: make(map[string]string),
 						Errors: []string{err.Error()},
 					},
 				},
 			}, fmt.Errorf("error testing query %s: %v", query, err)
-		}
-
-		// Generate explore link based on datasource type
-		exploreLink, err := GenerateExploreLink(
-			query, datasource, datasourceType, config, defaultConf,
-			qt.config.DeployerConfig.GrafanaInstance,
-			qt.config.IntegratorConfig.From,
-			qt.config.IntegratorConfig.To,
-			qt.config.IntegratorConfig.OrgID,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("error generating explore link: %v", err)
 		}
 		// Parse the response to extract statistics
 		result := model.QueryTestResult{

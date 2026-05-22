@@ -202,6 +202,48 @@ func TestRun(t *testing.T) {
 	}
 }
 
+func TestTestQueriesPreservesExploreLinkOnError(t *testing.T) {
+	// When the underlying datasource query fails (e.g., Grafana auth failure),
+	// the returned QueryTestResult should still carry a usable explore link so
+	// the PR comment links to a real Grafana URL instead of `[See in Explore]()`.
+	config := model.Configuration{
+		ConversionDefaults: model.ConversionConfig{
+			Target:     "loki",
+			DataSource: "test-datasource",
+		},
+		IntegratorConfig: model.IntegrationConfig{
+			OrgID: 1,
+			From:  "now-1h",
+			To:    "now",
+		},
+		DeployerConfig: model.DeploymentConfig{
+			GrafanaInstance: "https://test.grafana.com",
+		},
+	}
+
+	mock := newTestDatasourceQueryWithErrors()
+	mock.AddMockError(`{job="test"}`, fmt.Errorf("401 unauthorized"))
+
+	originalDatasourceQuery := integrate.DefaultDatasourceQuery
+	integrate.DefaultDatasourceQuery = mock
+	defer func() {
+		integrate.DefaultDatasourceQuery = originalDatasourceQuery
+	}()
+
+	queryTester := NewQueryTester(config, nil, 5*time.Second)
+	results, err := queryTester.TestQueries(
+		map[string]string{"A0": `{job="test"}`},
+		model.ConversionConfig{Name: "test_conv"},
+		config.ConversionDefaults,
+	)
+
+	assert.Error(t, err)
+	assert.Len(t, results, 1)
+	assert.NotEmpty(t, results[0].Link, "explore link should be populated even on test error")
+	assert.Contains(t, results[0].Link, "https://test.grafana.com/explore")
+	assert.Len(t, results[0].Stats.Errors, 1)
+}
+
 // testDatasourceQuery is a mock implementation for testing
 type testDatasourceQuery struct {
 	queryLog      []string
