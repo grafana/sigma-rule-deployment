@@ -29,7 +29,7 @@ var defaultRequestTimeout = 10 * time.Second
 
 // Structure to store the deployment config
 type deploymentConfig struct {
-	endpoint        string
+	endpoints       []string
 	alertPath       string
 	saToken         string
 	freshDeploy     bool
@@ -45,24 +45,67 @@ type deploymentConfig struct {
 // Structures to unmarshal the YAML config file
 
 type Deployer struct {
-	config         deploymentConfig
-	client         *shared.GrafanaClient
-	groupsToUpdate map[string]bool
+	config               deploymentConfig
+	client               *shared.GrafanaClient              // current-operation client, set per-operation in Deploy
+	clients              []*shared.GrafanaClient            // all default Grafana clients
+	perConversionClients map[string][]*shared.GrafanaClient // per-conversion Grafana clients
+	groupsToUpdate       map[string]bool
 }
 
 func NewDeployer() *Deployer {
 	return &Deployer{
-		groupsToUpdate: map[string]bool{},
+		groupsToUpdate:       map[string]bool{},
+		perConversionClients: map[string][]*shared.GrafanaClient{},
 	}
 }
 
+// clientsForAlertFile returns the appropriate GrafanaClients for the given alert file,
+// based on the conversion name prefix in the filename. Falls back to d.clients.
+func (d *Deployer) clientsForAlertFile(filename string) []*shared.GrafanaClient {
+	base := filepath.Base(filename)
+	name := strings.TrimPrefix(base, "alert_rule_")
+	for convName, clients := range d.perConversionClients {
+		if strings.HasPrefix(name, convName+"_") {
+			return clients
+		}
+	}
+	return d.clients
+}
+
+// allClients returns all unique clients across default and per-conversion clients.
+func (d *Deployer) allClients() []*shared.GrafanaClient {
+	seen := make(map[*shared.GrafanaClient]bool)
+	result := make([]*shared.GrafanaClient, 0)
+	for _, c := range d.clients {
+		if !seen[c] {
+			seen[c] = true
+			result = append(result, c)
+		}
+	}
+	for _, cs := range d.perConversionClients {
+		for _, c := range cs {
+			if !seen[c] {
+				seen[c] = true
+				result = append(result, c)
+			}
+		}
+	}
+	return result
+}
+
 func (d *Deployer) SetClient() {
-	d.client = shared.NewGrafanaClient(
-		d.config.endpoint,
-		d.config.saToken,
-		"sigma-rule-deployment/deployer",
-		d.config.timeout,
-	)
+	d.clients = make([]*shared.GrafanaClient, 0, len(d.config.endpoints))
+	for _, ep := range d.config.endpoints {
+		d.clients = append(d.clients, shared.NewGrafanaClient(
+			ep,
+			d.config.saToken,
+			"sigma-rule-deployment/deployer",
+			d.config.timeout,
+		))
+	}
+	if len(d.clients) > 0 {
+		d.client = d.clients[0]
+	}
 }
 
 func (d *Deployer) IsFreshDeploy() bool {
@@ -88,16 +131,20 @@ func (d *Deployer) Deploy(ctx context.Context) ([]string, []string, []string, er
 			err := fmt.Errorf("invalid alert filename: %s", alertFile)
 			return alertsCreated, alertsUpdated, alertsDeleted, err
 		}
-		uid, err := d.deleteAlert(ctx, alertUID)
-		if err != nil {
-			return alertsCreated, alertsUpdated, alertsDeleted, err
-		}
-		// UID could be empty if the alert was not found
-		// In this case, we don't want to add it to the list of deleted alerts
-		if uid != "" {
-			alertsDeleted = append(alertsDeleted, uid)
+		for _, client := range d.clientsForAlertFile(alertFile) {
+			d.client = client
+			uid, err := d.deleteAlert(ctx, alertUID)
+			if err != nil {
+				return alertsCreated, alertsUpdated, alertsDeleted, err
+			}
+			// UID could be empty if the alert was not found
+			// In this case, we don't want to add it to the list of deleted alerts
+			if uid != "" {
+				alertsDeleted = append(alertsDeleted, uid)
+			}
 		}
 	}
+
 	// Process alert CREATIONS
 	for _, alertFile := range d.config.alertsToAdd {
 		content, err := shared.ReadLocalFile(alertFile)
@@ -105,18 +152,22 @@ func (d *Deployer) Deploy(ctx context.Context) ([]string, []string, []string, er
 			log.Printf("Can't read file %s: %v", alertFile, err)
 			return alertsCreated, alertsUpdated, alertsDeleted, err
 		}
-		uid, updated, err := d.createAlert(ctx, content, true)
-		if err != nil {
-			return alertsCreated, alertsUpdated, alertsDeleted, err
-		}
-		if updated {
-			// If the alert was updated, we need to add it to the list of updated alerts
-			alertsUpdated = append(alertsUpdated, uid)
-		} else {
-			// If the alert was created, we need to add it to the list of created alerts
-			alertsCreated = append(alertsCreated, uid)
+		for _, client := range d.clientsForAlertFile(alertFile) {
+			d.client = client
+			uid, updated, err := d.createAlert(ctx, content, true)
+			if err != nil {
+				return alertsCreated, alertsUpdated, alertsDeleted, err
+			}
+			if updated {
+				// If the alert was updated, we need to add it to the list of updated alerts
+				alertsUpdated = append(alertsUpdated, uid)
+			} else {
+				// If the alert was created, we need to add it to the list of created alerts
+				alertsCreated = append(alertsCreated, uid)
+			}
 		}
 	}
+
 	// Process alert UPDATES
 	for _, alertFile := range d.config.alertsToUpdate {
 		content, err := shared.ReadLocalFile(alertFile)
@@ -124,27 +175,34 @@ func (d *Deployer) Deploy(ctx context.Context) ([]string, []string, []string, er
 			log.Printf("Can't read file %s: %v", alertFile, err)
 			return alertsCreated, alertsUpdated, alertsDeleted, err
 		}
-		uid, created, err := d.updateAlert(ctx, content, true)
-		if err != nil {
-			return alertsCreated, alertsUpdated, alertsDeleted, err
-		}
-		// Sometimes the alert to update doesn't exist anymore (e.g. it was deleted manually)
-		// In this case, we re-create it instead of updating it
-		// So we take this into account for the reporting
-		if created {
-			// If the alert was created, we need to add it to the list of created alerts
-			alertsCreated = append(alertsCreated, uid)
-		} else {
-			// If the alert was updated, we need to add it to the list of updated alerts
-			alertsUpdated = append(alertsUpdated, uid)
+		for _, client := range d.clientsForAlertFile(alertFile) {
+			d.client = client
+			uid, created, err := d.updateAlert(ctx, content, true)
+			if err != nil {
+				return alertsCreated, alertsUpdated, alertsDeleted, err
+			}
+			// Sometimes the alert to update doesn't exist anymore (e.g. it was deleted manually)
+			// In this case, we re-create it instead of updating it
+			// So we take this into account for the reporting
+			if created {
+				// If the alert was created, we need to add it to the list of created alerts
+				alertsCreated = append(alertsCreated, uid)
+			} else {
+				// If the alert was updated, we need to add it to the list of updated alerts
+				alertsUpdated = append(alertsUpdated, uid)
+			}
 		}
 	}
 
-	// Process alert group interval updates
+	// Process alert group interval updates across all Grafana instances
 	if len(d.groupsToUpdate) > 0 {
+		allClients := d.allClients()
 		for group := range d.groupsToUpdate {
-			if err := d.updateAlertGroupInterval(ctx, d.config.folderUID, group, d.config.groupsIntervals[group]); err != nil {
-				return alertsCreated, alertsUpdated, alertsDeleted, err
+			for _, client := range allClients {
+				d.client = client
+				if err := d.updateAlertGroupInterval(ctx, d.config.folderUID, group, d.config.groupsIntervals[group]); err != nil {
+					return alertsCreated, alertsUpdated, alertsDeleted, err
+				}
 			}
 		}
 	}
@@ -181,27 +239,22 @@ func (d *Deployer) LoadConfig(_ context.Context) error {
 		return err
 	}
 	d.config = deploymentConfig{
-		endpoint:        configYAML.DeployerConfig.GrafanaInstance,
+		endpoints:       []string(configYAML.Defaults.Deployment.GrafanaInstance),
 		alertPath:       filepath.Clean(configYAML.Folders.DeploymentPath),
-		orgID:           configYAML.IntegratorConfig.OrgID,
-		folderUID:       configYAML.IntegratorConfig.FolderID,
+		orgID:           configYAML.Defaults.Integration.OrgID,
+		folderUID:       configYAML.Defaults.Integration.FolderID,
 		groupsIntervals: make(map[string]int64),
 		timeout:         defaultRequestTimeout,
 	}
 
 	// Parse timeout if provided
-	if configYAML.DeployerConfig.Timeout != "" {
-		parsedTimeout, err := time.ParseDuration(configYAML.DeployerConfig.Timeout)
+	if configYAML.Defaults.Deployment.Timeout != "" {
+		parsedTimeout, err := time.ParseDuration(configYAML.Defaults.Deployment.Timeout)
 		if err != nil {
 			log.Printf("Warning: Invalid timeout format in config, using default: %v\n", err)
 		} else {
 			d.config.timeout = parsedTimeout
 		}
-	}
-
-	// Makes sure the endpoint URL ends with a slash
-	if !strings.HasSuffix(d.config.endpoint, "/") {
-		d.config.endpoint += "/"
 	}
 
 	// Get the rest of the config from the environment variables
@@ -210,26 +263,44 @@ func (d *Deployer) LoadConfig(_ context.Context) error {
 		return fmt.Errorf("the Grafana SA token is not set or empty")
 	}
 
+	// Build per-conversion clients for configurations that override the grafana_instance
+	d.perConversionClients = make(map[string][]*shared.GrafanaClient)
+	for _, cfg := range configYAML.Configurations {
+		if len(cfg.Deployment.GrafanaInstance) > 0 {
+			timeout := shared.ParseDurationOrDefault(cfg.Deployment.Timeout, d.config.timeout)
+			clients := make([]*shared.GrafanaClient, 0, len(cfg.Deployment.GrafanaInstance))
+			for _, ep := range cfg.Deployment.GrafanaInstance {
+				clients = append(clients, shared.NewGrafanaClient(
+					ep,
+					d.config.saToken,
+					"sigma-rule-deployment/deployer",
+					timeout,
+				))
+			}
+			d.perConversionClients[cfg.Name] = clients
+		}
+	}
+
 	// Extract the groups intervals from the conversion config
 	defaultInterval := "5m"
-	if configYAML.ConversionDefaults.TimeWindow != "" {
-		defaultInterval = configYAML.ConversionDefaults.TimeWindow
+	if configYAML.Defaults.Integration.TimeWindow != "" {
+		defaultInterval = configYAML.Defaults.Integration.TimeWindow
 	}
-	for _, config := range configYAML.Conversions {
+	for _, config := range configYAML.Configurations {
 		interval := defaultInterval
-		if config.TimeWindow != "" {
-			interval = config.TimeWindow
+		if config.Integration.TimeWindow != "" {
+			interval = config.Integration.TimeWindow
 		}
 		intervalDuration, err := time.ParseDuration(interval)
 		log.Printf("Interval duration from %s: %d", sanitizeForLog(interval), int64(intervalDuration.Seconds())) //nolint:gosec // G706: interval sanitized with sanitizeForLog before logging
 		if err != nil || int64(intervalDuration.Seconds()) <= 0 {
 			return fmt.Errorf("error parsing time window %s: %v", interval, err)
 		}
-		if _, ok := d.config.groupsIntervals[config.RuleGroup]; !ok {
-			d.config.groupsIntervals[config.RuleGroup] = int64(intervalDuration.Seconds())
-			log.Printf("Setting interval for rule group %s to %d", sanitizeForLog(config.RuleGroup), d.config.groupsIntervals[config.RuleGroup]) //nolint:gosec // G706: config.RuleGroup sanitized with sanitizeForLog before logging
-		} else if d.config.groupsIntervals[config.RuleGroup] != int64(intervalDuration.Seconds()) {
-			return fmt.Errorf("time window for rule group %s is different between conversion configs", config.RuleGroup)
+		if _, ok := d.config.groupsIntervals[config.Integration.RuleGroup]; !ok {
+			d.config.groupsIntervals[config.Integration.RuleGroup] = int64(intervalDuration.Seconds())
+			log.Printf("Setting interval for rule group %s to %d", sanitizeForLog(config.Integration.RuleGroup), d.config.groupsIntervals[config.Integration.RuleGroup]) //nolint:gosec // G706: config.RuleGroup sanitized with sanitizeForLog before logging
+		} else if d.config.groupsIntervals[config.Integration.RuleGroup] != int64(intervalDuration.Seconds()) {
+			return fmt.Errorf("time window for rule group %s is different between conversion configs", config.Integration.RuleGroup)
 		}
 	}
 
@@ -288,14 +359,23 @@ func (d *Deployer) ConfigFreshDeployment(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("error listing alerts in deployment folder: %v", err)
 	}
-	// List the current alerts in the Grafana folder so that they can be deleted first
-	alertsToRemove, err := d.listAlerts(ctx)
-	if err != nil {
-		return fmt.Errorf("error listing alerts: %v", err)
-	}
-	for i, alert := range alertsToRemove {
-		// We give a fake alert filename so that we can delete it later
-		alertsToRemove[i] = d.fakeAlertFilename(alert)
+	// List the current alerts from all Grafana instances so they can be deleted first.
+	// We union the UIDs across all instances so that every instance is cleaned up.
+	seenUIDs := make(map[string]bool)
+	alertsToRemove := []string{}
+	for _, client := range d.clients {
+		d.client = client
+		alerts, err := d.listAlerts(ctx)
+		if err != nil {
+			return fmt.Errorf("error listing alerts: %v", err)
+		}
+		for _, uid := range alerts {
+			if !seenUIDs[uid] {
+				seenUIDs[uid] = true
+				// We give a fake alert filename so that we can delete it later
+				alertsToRemove = append(alertsToRemove, d.fakeAlertFilename(uid))
+			}
+		}
 	}
 	d.config.alertsToAdd = alertsToAdd
 	d.config.alertsToRemove = alertsToRemove
