@@ -5,6 +5,8 @@ on:
     types:
       - closed
 
+permissions: {}
+
 jobs:
   close-integration-test:
     runs-on: ubuntu-latest
