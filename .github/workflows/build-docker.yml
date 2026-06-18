@@ -28,17 +28,17 @@ jobs:
       packages: write
     steps:
       - name: "Checkout"
-        uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0 # v6.0.3
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
       - name: "Login to GitHub Container Registry"
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: "Build and Push (PR)"
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         if: github.event_name == 'pull_request'
         with:
           context: .
@@ -47,7 +47,7 @@ jobs:
             ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${{ github.event.pull_request.head.sha }}
           push: true
       - name: "Build and Push (Push)"
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         if: github.event_name == 'push'
         with:
           context: .
@@ -57,7 +57,7 @@ jobs:
             ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:main
           push: true
       - name: "Build and Push (Release)"
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         if: github.event_name == 'release'
         with:
           context: .
@@ -82,13 +82,13 @@ jobs:
         with:
           github_app: sigma-rule-deployment-app
       - name: Checkout Code
-        uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0 # v6.0.3
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           token: ${{ steps.get-github-app-token.outputs.token }}
           persist-credentials: false
           path: ./sigma-rule-deployment
       - name: Checkout Integration Test
-        uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0 # v6.0.3
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           token: ${{ steps.get-github-app-token.outputs.token }}
           persist-credentials: true
