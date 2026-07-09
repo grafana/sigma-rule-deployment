@@ -67,6 +67,16 @@ jobs:
       packages: read # to pull the Action docker image
       pull-requests: write # to update the relevant pull request
     steps:
+      - name: Validate vault_path input
+        if: ${{ inputs.vault_path != '' }}
+        env:
+          VAULT_PATH: ${{ inputs.vault_path }}
+        run: |
+          if printf '%s' "$VAULT_PATH" | grep -qP '[\r\n]'; then
+            echo "vault_path must not contain newlines"
+            exit 1
+          fi
+
       - name: Get service account token for instance from Vault
         if: ${{ inputs.vault_path != '' }}
         uses: grafana/shared-workflows/actions/get-vault-secrets@f1614b210386ac420af6807a997ac7f6d96e477a # get-vault-secrets/v1.3.1
@@ -100,11 +110,19 @@ jobs:
             
             // Check comment body if this is an issue_comment event
             if (context.eventName === 'issue_comment' && context.payload.comment) {
+              const trustedAssociations = ['OWNER', 'MEMBER', 'COLLABORATOR'];
+              const authorAssociation = context.payload.comment.author_association;
+              if (!trustedAssociations.includes(authorAssociation)) {
+                console.log(`Ignoring comment from ${context.payload.comment.user.login} (association: ${authorAssociation})`);
+                core.setOutput('convert_all', 'false');
+                return;
+              }
+
               const commentBody = context.payload.comment.body.toLowerCase();
-              
+
               if (commentBody.startsWith('sigma') && commentBody.includes('convert all')) {
                 convertAll = true;
-                
+
                 // React with eyes emoji
                 try {
                   await github.rest.reactions.createForIssueComment({
@@ -125,7 +143,7 @@ jobs:
             console.log(`convert_all set to: ${convertAll}`);
 
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ github.event_name == 'issue_comment' && steps.get-pr-branch.outputs.result || github.head_ref }}
           fetch-depth: 0
@@ -153,7 +171,7 @@ jobs:
           changed_files_from_base: ${{ inputs.changed_files_from_base }}
 
       - name: Commit queries and alert rules
-        uses: stefanzweifel/git-auto-commit-action@04702edda442b2e678b25b537cec683a1493fcb9 # v7.1.0
+        uses: stefanzweifel/git-auto-commit-action@4a55954c782fc1ea30b9056cd3e7a2b40ca8887d # v7.2.0
         with:
           commit_message: "Sigma Rules Deployment"
           branch: ${{ github.event_name == 'issue_comment' && steps.get-pr-branch.outputs.result || github.head_ref }}

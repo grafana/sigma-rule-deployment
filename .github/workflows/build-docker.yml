@@ -28,17 +28,17 @@ jobs:
       packages: write
     steps:
       - name: "Checkout"
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
       - name: "Login to GitHub Container Registry"
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: "Build and Push (PR)"
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         if: github.event_name == 'pull_request'
         with:
           context: .
@@ -47,7 +47,7 @@ jobs:
             ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${{ github.event.pull_request.head.sha }}
           push: true
       - name: "Build and Push (Push)"
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         if: github.event_name == 'push'
         with:
           context: .
@@ -57,7 +57,7 @@ jobs:
             ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:main
           push: true
       - name: "Build and Push (Release)"
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         if: github.event_name == 'release'
         with:
           context: .
@@ -78,17 +78,17 @@ jobs:
     steps:
       - name: Get GitHub App Token
         id: get-github-app-token
-        uses: grafana/shared-workflows/actions/create-github-app-token@580590a644e82e79bb2598bdaba0be245a14dda0 # create-github-app-token/v0.2.2
+        uses: grafana/shared-workflows/actions/create-github-app-token@46f48da11e78ebdba7a8747ae456b11062fac83e # create-github-app-token/v0.3.1
         with:
           github_app: sigma-rule-deployment-app
       - name: Checkout Code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           token: ${{ steps.get-github-app-token.outputs.token }}
           persist-credentials: false
           path: ./sigma-rule-deployment
       - name: Checkout Integration Test
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           token: ${{ steps.get-github-app-token.outputs.token }}
           persist-credentials: true
@@ -104,15 +104,10 @@ jobs:
         run: |
           git fetch
 
-          STATUS=0
-          git rev-parse --verify "integration-test-pr-${GITHUB_PR_NUMBER}" 2>/dev/null || STATUS=$?
-
-          if [ $STATUS -eq 0 ]; then
-            git checkout "integration-test-pr-${GITHUB_PR_NUMBER}"
-            git pull
-          else
-            git checkout -b "integration-test-pr-${GITHUB_PR_NUMBER}"
-          fi
+          EXPECTED_HEAD_OID=$(../sigma-rule-deployment/.github/scripts/checkout-or-create-branch.sh \
+            grafana/sigma-rule-deployment-integration-test \
+            "integration-test-pr-${GITHUB_PR_NUMBER}" \
+            main)
 
           rm -r ./rules
           rm -r ./pipelines
@@ -129,12 +124,11 @@ jobs:
 
           git add -A
 
-          git config user.email "sigma-rule-deployment-app@grafana.com"
-          git config user.name "Sigma Rule Deployment App"
-
-          git commit -m "update integration test configuration" --allow-empty
-
-          git push origin "integration-test-pr-${GITHUB_PR_NUMBER}" --force
+          ../sigma-rule-deployment/.github/scripts/create-verified-commit.sh \
+            grafana/sigma-rule-deployment-integration-test \
+            "integration-test-pr-${GITHUB_PR_NUMBER}" \
+            "$EXPECTED_HEAD_OID" \
+            "update integration test configuration"
 
           RESULT=$(gh pr list --json id,title -H "integration-test-pr-${GITHUB_PR_NUMBER}" | jq -r '. | length')
 
@@ -158,15 +152,10 @@ jobs:
           git checkout main
           git pull
 
-          STATUS=0
-          git rev-parse --verify "integration-test-main-update-${GITHUB_PR_NUMBER}" 2>/dev/null || STATUS=$?
-
-          if [ $STATUS -eq 0 ]; then
-            git checkout "integration-test-main-update-${GITHUB_PR_NUMBER}"
-            git pull
-          else
-            git checkout -b "integration-test-main-update-${GITHUB_PR_NUMBER}"
-          fi
+          EXPECTED_HEAD_OID=$(../sigma-rule-deployment/.github/scripts/checkout-or-create-branch.sh \
+            grafana/sigma-rule-deployment-integration-test \
+            "integration-test-main-update-${GITHUB_PR_NUMBER}" \
+            main)
 
           sed -i "s/uses: grafana\/sigma-rule-deployment\/actions\/convert@.*/uses: grafana\/sigma-rule-deployment\/actions\/convert@$ACTION_SHA/g" ./.github/workflows/convert-integrate-comment-test.yml
           sed -i "s/uses: grafana\/sigma-rule-deployment\/actions\/integrate@.*/uses: grafana\/sigma-rule-deployment\/actions\/integrate@$ACTION_SHA/g" ./.github/workflows/convert-integrate-comment-test.yml
@@ -176,9 +165,12 @@ jobs:
           echo "$GITHUB_PR_NUMBER" > github_pr.txt
 
           git add -A
-          git commit -m "update main branch to relevant hash" --allow-empty
 
-          git push origin "integration-test-main-update-${GITHUB_PR_NUMBER}" --force
+          ../sigma-rule-deployment/.github/scripts/create-verified-commit.sh \
+            grafana/sigma-rule-deployment-integration-test \
+            "integration-test-main-update-${GITHUB_PR_NUMBER}" \
+            "$EXPECTED_HEAD_OID" \
+            "update main branch to relevant hash"
 
           RESULT=$(gh pr list --json id,title -H "integration-test-main-update-${GITHUB_PR_NUMBER}" | jq -r '. | length')
 
