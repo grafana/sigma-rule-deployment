@@ -21,11 +21,6 @@ jobs:
       contents: write # to upload the SBOM as a release asset
       id-token: write # to authenticate to Vault
     steps:
-      - name: "Checkout"
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-
       - name: "Get Socket API token from Vault"
         id: vault-secrets
         uses: grafana/shared-workflows/actions/get-vault-secrets@e46fe1e9a2bf9e618bcf8d8d32f3a7381b45c06d # get-vault-secrets/v2.0.0
