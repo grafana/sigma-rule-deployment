@@ -39,6 +39,7 @@ jobs:
       - name: "Upload SBOM to release"
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           TAG: ${{ github.event.release.tag_name || inputs.tag }}
           SBOM_PATH: ${{ steps.export-sbom.outputs.path }}
         run: gh release upload "$TAG" "$SBOM_PATH" --clobber
