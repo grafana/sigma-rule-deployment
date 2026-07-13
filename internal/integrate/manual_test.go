@@ -178,6 +178,84 @@ func TestDoCleanupPreservesManual(t *testing.T) {
 	})
 }
 
+// TestBackfillManualFlagsPreservesUnmodeledFields checks that backfilling the flag
+// does not drop JSON fields the ProvisionedAlertRule struct does not model.
+func TestBackfillManualFlagsPreservesUnmodeledFields(t *testing.T) {
+	_, deployDir := manualTestDirs(t, "backfill_preserve")
+	path := filepath.Join(deployDir, "alert_rule_conv_rule_zzz.json")
+	// Raw JSON carrying a field the struct does not model, and annotations without the flag.
+	raw := `{"uid":"zzz","title":"Keep me","customField":"keepme","annotations":{"Query":"q"}}`
+	assert.NoError(t, os.WriteFile(path, []byte(raw), 0o600))
+
+	i := &Integrator{
+		config:      model.Configuration{Folders: model.FoldersConfig{DeploymentPath: deployDir}},
+		manualFiles: []string{path},
+	}
+	assert.NoError(t, i.BackfillManualFlags())
+
+	content, err := os.ReadFile(path)
+	assert.NoError(t, err)
+	var doc map[string]any
+	assert.NoError(t, json.Unmarshal(content, &doc))
+
+	// The unmodeled field and existing content survive; the flag is added.
+	assert.Equal(t, "keepme", doc["customField"])
+	assert.Equal(t, "Keep me", doc["title"])
+	annotations, ok := doc["annotations"].(map[string]any)
+	assert.True(t, ok)
+	assert.Equal(t, TRUE, annotations[ManualAnnotation])
+	assert.Equal(t, "q", annotations["Query"])
+}
+
+// TestBackfillManualFlagsRespectsExplicitFalse checks that a deliberately-set
+// manual value is never overwritten by the backfill.
+func TestBackfillManualFlagsRespectsExplicitFalse(t *testing.T) {
+	_, deployDir := manualTestDirs(t, "backfill_false")
+	path := filepath.Join(deployDir, "alert_rule_conv_rule_fff.json")
+	assert.NoError(t, os.WriteFile(path, []byte(`{"uid":"fff","annotations":{"manual":"false"}}`), 0o600))
+	before, err := os.ReadFile(path)
+	assert.NoError(t, err)
+
+	i := &Integrator{
+		config:      model.Configuration{Folders: model.FoldersConfig{DeploymentPath: deployDir}},
+		manualFiles: []string{path},
+	}
+	assert.NoError(t, i.BackfillManualFlags())
+
+	after, err := os.ReadFile(path)
+	assert.NoError(t, err)
+	assert.Equal(t, before, after, "explicit manual:false must not be re-flagged")
+}
+
+// TestIsManualMalformedReturnsError checks that unparseable files surface an error
+// (so callers can fail closed) rather than being silently treated as non-manual.
+func TestIsManualMalformedReturnsError(t *testing.T) {
+	_, dir := manualTestDirs(t, "is_manual_malformed")
+	path := filepath.Join(dir, "broken.json")
+	assert.NoError(t, os.WriteFile(path, []byte(`{"uid":"x", broken`), 0o600))
+
+	_, err := isManual(path)
+	assert.Error(t, err)
+}
+
+// TestDoCleanupKeepsUnparseableFile checks that cleanup fails closed: a file it
+// cannot classify is kept, not deleted.
+func TestDoCleanupKeepsUnparseableFile(t *testing.T) {
+	convPath, deployPath := manualTestDirs(t, "cleanup_malformed")
+	deployFile := filepath.Join(deployPath, "alert_rule_test_conv_test_999zzz.json")
+	assert.NoError(t, os.WriteFile(deployFile, []byte(`{ broken json`), 0o600))
+
+	config := model.Configuration{
+		Folders:     model.FoldersConfig{ConversionPath: convPath, DeploymentPath: deployPath},
+		Conversions: []model.ConversionConfig{{Name: "test_conv"}},
+	}
+	i := &Integrator{config: config, removedFiles: []string{filepath.Join(convPath, "test_conv.json")}}
+	assert.NoError(t, i.DoCleanup())
+
+	_, err := os.Stat(deployFile)
+	assert.NoError(t, err, "unparseable file must be kept (fail closed), not deleted")
+}
+
 // TestIsManual checks that the shared manual-detection helper recognises the flag
 // on both deployment files (annotation) and conversion files (top-level boolean).
 func TestIsManual(t *testing.T) {
@@ -195,8 +273,10 @@ func TestIsManual(t *testing.T) {
 		want bool
 	}{
 		{"manual deployment", write("manual_deploy.json", `{"uid":"x","annotations":{"manual":"true"}}`), true},
+		{"false deployment", write("false_deploy.json", `{"uid":"x","annotations":{"manual":"false"}}`), false},
 		{"plain deployment", write("plain_deploy.json", `{"uid":"x","annotations":{"Query":"q"}}`), false},
-		{"manual conversion", write("manual_conv.json", `{"conversion_name":"c","manual":true}`), true},
+		{"manual conversion (bool)", write("manual_conv.json", `{"conversion_name":"c","manual":true}`), true},
+		{"manual conversion (string)", write("manual_conv_str.json", `{"conversion_name":"c","manual":"true"}`), true},
 		{"plain conversion", write("plain_conv.json", `{"conversion_name":"c","queries":["q"]}`), false},
 	}
 	for _, tc := range cases {

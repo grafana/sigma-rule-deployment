@@ -139,11 +139,12 @@ func (i *Integrator) LoadConfig() error {
 	changedFiles := strings.Split(os.Getenv("CHANGED_FILES"), " ")
 	deletedFiles := strings.Split(os.Getenv("DELETED_FILES"), " ")
 	testFiles := strings.Split(os.Getenv("TEST_FILES"), " ")
+	// Deployment files a human modified since the last automation commit. These are
+	// candidates for backfilling the manual annotation before integration runs.
+	manualFiles := strings.Split(os.Getenv("MANUAL_FILES"), " ")
 
-	newUpdatedFiles := make([]string, 0, len(changedFiles))
-	removedFiles := make([]string, 0, len(deletedFiles))
-	filesToBeTested := make([]string, 0, len(testFiles))
-
+	newUpdatedFiles := []string{}
+	filesToBeTested := []string{}
 	if i.allRules {
 		if err = filepath.Walk(i.config.Folders.ConversionPath, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
@@ -162,54 +163,23 @@ func (i *Integrator) LoadConfig() error {
 			return fmt.Errorf("failed to walk directory: %w", err)
 		}
 	} else {
-		for _, path := range changedFiles {
-			// Ensure paths appear within specified conversion path
-			relpath, err := filepath.Rel(i.config.Folders.ConversionPath, path)
-			if err != nil {
-				return fmt.Errorf("error checking file path %s: %v", path, err)
-			}
-			if relpath == filepath.Base(path) {
-				newUpdatedFiles = append(newUpdatedFiles, path)
-			}
+		if newUpdatedFiles, err = filterFilesInDir(changedFiles, i.config.Folders.ConversionPath); err != nil {
+			return err
 		}
 		if i.config.IntegratorConfig.TestQueries {
-			for _, path := range testFiles {
-				relpath, err := filepath.Rel(i.config.Folders.ConversionPath, path)
-				if err != nil {
-					return fmt.Errorf("error checking file path %s: %v", path, err)
-				}
-				if relpath == filepath.Base(path) {
-					filesToBeTested = append(filesToBeTested, path)
-				}
+			if filesToBeTested, err = filterFilesInDir(testFiles, i.config.Folders.ConversionPath); err != nil {
+				return err
 			}
 		}
 	}
 
-	for _, path := range deletedFiles {
-		relpath, err := filepath.Rel(i.config.Folders.ConversionPath, path)
-		if err != nil {
-			return fmt.Errorf("error checking file path %s: %v", path, err)
-		}
-		if relpath == filepath.Base(path) {
-			removedFiles = append(removedFiles, path)
-		}
+	removedFiles, err := filterFilesInDir(deletedFiles, i.config.Folders.ConversionPath)
+	if err != nil {
+		return err
 	}
-
-	// Deployment files a human modified since the last automation commit. These are
-	// candidates for backfilling the manual annotation before integration runs.
-	manualFiles := strings.Split(os.Getenv("MANUAL_FILES"), " ")
-	humanModifiedFiles := make([]string, 0, len(manualFiles))
-	for _, path := range manualFiles {
-		if path == "" {
-			continue
-		}
-		relpath, err := filepath.Rel(i.config.Folders.DeploymentPath, path)
-		if err != nil {
-			return fmt.Errorf("error checking file path %s: %v", path, err)
-		}
-		if relpath == filepath.Base(path) {
-			humanModifiedFiles = append(humanModifiedFiles, path)
-		}
+	humanModifiedFiles, err := filterFilesInDir(manualFiles, i.config.Folders.DeploymentPath)
+	if err != nil {
+		return err
 	}
 
 	fmt.Printf("Changed files: %d\nRemoved files: %d\nTest files: %d\nManual files: %d\n", len(newUpdatedFiles), len(removedFiles), len(filesToBeTested), len(humanModifiedFiles))
@@ -219,6 +189,26 @@ func (i *Integrator) LoadConfig() error {
 	i.manualFiles = humanModifiedFiles
 
 	return nil
+}
+
+// filterFilesInDir keeps only the paths that sit directly inside dir, matching a
+// diff-derived file list to a known output directory. Empty entries (e.g. from
+// splitting an unset env var) are skipped.
+func filterFilesInDir(paths []string, dir string) ([]string, error) {
+	filtered := make([]string, 0, len(paths))
+	for _, path := range paths {
+		if path == "" {
+			continue
+		}
+		relpath, err := filepath.Rel(dir, path)
+		if err != nil {
+			return nil, fmt.Errorf("error checking file path %s: %v", path, err)
+		}
+		if relpath == filepath.Base(path) {
+			filtered = append(filtered, path)
+		}
+	}
+	return filtered, nil
 }
 
 // cleanupOrphanedFilesInPath removes orphaned files in the specified path
@@ -247,10 +237,7 @@ func (i *Integrator) cleanupOrphanedFilesInPath(searchPath string, isOrphaned fu
 		}
 
 		if orphaned {
-			if manual, mErr := isManual(file); mErr != nil {
-				fmt.Printf("Warning: could not check manual flag for %s: %v\n", file, mErr)
-			} else if manual {
-				fmt.Printf("Keeping manually-maintained orphaned file (not deleting): %s\n", file)
+			if keepAsManual(file, "orphaned") {
 				continue
 			}
 			fmt.Printf("Removing orphaned file: %s\n", file)
@@ -307,62 +294,116 @@ func (i *Integrator) isDeploymentFileOrphaned(file string) (bool, error) {
 	return false, nil
 }
 
+// manualValueSet reports whether a decoded JSON value marks a file as manual.
+// It accepts both the boolean `true` used by conversion files and the string
+// "true" used by deployment annotations, so the converter (Python) and the
+// integrator agree on what counts as manual.
+func manualValueSet(v any) bool {
+	switch val := v.(type) {
+	case bool:
+		return val
+	case string:
+		return val == TRUE
+	default:
+		return false
+	}
+}
+
 // isManual reports whether a generated file is marked as manually maintained.
 // Deployment files carry the marker as annotations["manual"] == "true"; conversion
 // files carry a top-level "manual" boolean. A single helper covers both output
 // directories so cleanup never destroys a file a human has taken ownership of.
+//
+// The file is decoded as a generic JSON document so a type mismatch on an
+// unrelated field never masks the flag, and so an unparseable file surfaces as an
+// error (callers treat that as "keep the file", never as "safe to delete").
 func isManual(file string) (bool, error) {
 	content, err := shared.ReadLocalFile(file)
 	if err != nil {
 		return false, err
 	}
 
+	var doc map[string]any
+	if err := json.Unmarshal([]byte(content), &doc); err != nil {
+		return false, fmt.Errorf("could not parse %s as JSON: %w", file, err)
+	}
+
 	// Deployment file: manual annotation.
-	var rule model.ProvisionedAlertRule
-	if err := json.Unmarshal([]byte(content), &rule); err == nil {
-		if rule.Annotations[ManualAnnotation] == TRUE {
+	if annotations, ok := doc["annotations"].(map[string]any); ok {
+		if manualValueSet(annotations[ManualAnnotation]) {
 			return true, nil
 		}
 	}
 
-	// Conversion file: top-level manual boolean.
-	var conversion model.ConversionOutput
-	if err := json.Unmarshal([]byte(content), &conversion); err == nil {
-		if conversion.Manual {
-			return true, nil
-		}
+	// Conversion file: top-level manual flag.
+	if manualValueSet(doc[ManualAnnotation]) {
+		return true, nil
 	}
 
 	return false, nil
 }
 
+// keepAsManual reports whether a file slated for deletion must be preserved. It
+// fails closed: if the manual flag cannot be determined (unreadable/unparseable
+// file), the file is kept rather than deleted. kind labels the file in the log.
+func keepAsManual(file, kind string) bool {
+	manual, err := isManual(file)
+	if err != nil {
+		fmt.Printf("Warning: could not check manual flag for %s, keeping it: %v\n", file, err)
+		return true
+	}
+	if manual {
+		fmt.Printf("Keeping manually-maintained %s file (not deleting): %s\n", kind, file)
+		return true
+	}
+	return false
+}
+
 // BackfillManualFlags adds the manual annotation to any human-modified deployment
 // files that do not already carry it. Running before DoConversions guarantees the
 // freshly-added flag is honoured (and the file preserved) on this same run.
+//
+// The file is edited as a generic JSON document rather than round-tripped through
+// ProvisionedAlertRule, so fields the struct does not model are preserved. Any file
+// that cannot be read, parsed, or written is logged and skipped — one bad file must
+// not abort the whole integration.
 func (i *Integrator) BackfillManualFlags() error {
 	for _, file := range i.manualFiles {
-		if _, err := os.Stat(file); err != nil {
-			// The list comes from an ACMR diff so this should not happen, but never
-			// write a near-empty rule for a file that is not present.
-			fmt.Printf("Skipping manual backfill for missing file: %s\n", file)
+		content, err := shared.ReadLocalFile(file)
+		if err != nil {
+			fmt.Printf("Warning: could not read %s for manual backfill, leaving unchanged: %v\n", file, err)
 			continue
 		}
 
-		rule := &model.ProvisionedAlertRule{}
-		if err := readRuleFromFile(rule, file); err != nil {
-			return err
-		}
-		if rule.Annotations[ManualAnnotation] == TRUE {
+		var doc map[string]any
+		if err := json.Unmarshal([]byte(content), &doc); err != nil {
+			fmt.Printf("Warning: could not parse %s for manual backfill, leaving unchanged: %v\n", file, err)
 			continue
 		}
 
-		if rule.Annotations == nil {
-			rule.Annotations = make(map[string]string)
+		annotations, _ := doc["annotations"].(map[string]any)
+		// A manual key that is already present (any value) reflects a deliberate
+		// human choice; do not overwrite it.
+		if annotations != nil {
+			if _, present := annotations[ManualAnnotation]; present {
+				continue
+			}
+		} else {
+			annotations = map[string]any{}
+			doc["annotations"] = annotations
 		}
-		rule.Annotations[ManualAnnotation] = TRUE
+		annotations[ManualAnnotation] = TRUE
+
+		out, err := marshalJSON(doc, i.prettyPrint)
+		if err != nil {
+			fmt.Printf("Warning: could not marshal manual backfill for %s, leaving unchanged: %v\n", file, err)
+			continue
+		}
+
 		fmt.Printf("Marking manually-modified deployment file as manual: %s\n", file)
-		if err := writeRuleToFile(rule, file, i.prettyPrint); err != nil {
-			return err
+		if err := os.WriteFile(file, out, 0o600); err != nil {
+			fmt.Printf("Warning: could not write manual backfill for %s, leaving unchanged: %v\n", file, err)
+			continue
 		}
 	}
 	return nil
@@ -467,10 +508,7 @@ func (i *Integrator) DoCleanup() error {
 		}
 		for _, file := range deploymentFiles {
 			fullPath := i.config.Folders.DeploymentPath + string(filepath.Separator) + file
-			if manual, mErr := isManual(fullPath); mErr != nil {
-				fmt.Printf("Warning: could not check manual flag for %s: %v\n", fullPath, mErr)
-			} else if manual {
-				fmt.Printf("Keeping manually-maintained deployment file (not deleting): %s\n", fullPath)
+			if keepAsManual(fullPath, "deployment") {
 				continue
 			}
 			err = os.Remove(fullPath)
@@ -673,14 +711,17 @@ func readRuleFromFile(rule *model.ProvisionedAlertRule, inputPath string) error 
 	return nil
 }
 
-func writeRuleToFile(rule *model.ProvisionedAlertRule, outputFile string, prettyPrint bool) error {
-	var ruleBytes []byte
-	var err error
+// marshalJSON serialises v as JSON, honouring the pretty-print flag used across the
+// integrator's file writes so output formatting stays consistent in one place.
+func marshalJSON(v any, prettyPrint bool) ([]byte, error) {
 	if prettyPrint {
-		ruleBytes, err = json.MarshalIndent(rule, "", "  ")
-	} else {
-		ruleBytes, err = json.Marshal(rule)
+		return json.MarshalIndent(v, "", "  ")
 	}
+	return json.Marshal(v)
+}
+
+func writeRuleToFile(rule *model.ProvisionedAlertRule, outputFile string, prettyPrint bool) error {
+	ruleBytes, err := marshalJSON(rule, prettyPrint)
 	if err != nil {
 		return fmt.Errorf("error marshalling alert rule: %v", err)
 	}

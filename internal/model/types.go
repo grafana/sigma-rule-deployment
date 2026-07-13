@@ -43,9 +43,6 @@ type ConversionOutput struct {
 	InputFile      string      `json:"input_file"`
 	Rules          []SigmaRule `json:"rules"`
 	OutputFile     string      `json:"output_file"`
-	// Manual, when true, marks this conversion file as manually maintained.
-	// The converter will not overwrite or delete files carrying this flag.
-	Manual bool `json:"manual,omitempty"`
 }
 
 // MetricValue represents a value with its unit

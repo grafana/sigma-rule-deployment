@@ -1170,3 +1170,64 @@ def test_convert_rules_keeps_manual_conversion_on_delete(temp_workspace, mock_co
     )
 
     assert conversion_file.exists()
+
+
+def test_convert_rules_respects_explicit_manual_false(temp_workspace, mock_config):
+    """An explicit manual:false is not re-flagged to true by the backfill."""
+    conversion_dir = temp_workspace / "conversions"
+    conversion_dir.mkdir()
+    output_file = conversion_dir / "test_conversion_test.json"
+    output_file.write_text(
+        json.dumps({"manual": False, "queries": ["HUMAN EDIT"]}).decode("utf-8")
+    )
+
+    convert_rules(
+        config=mock_config,
+        path_prefix=temp_workspace,
+        manual_files="conversions/test_conversion_test.json",
+    )
+
+    data = json.loads(output_file.read_bytes())
+    assert data["manual"] is False
+
+
+def test_convert_rules_backfill_ignores_files_outside_conversion_dir(
+    temp_workspace, mock_config
+):
+    """The backfill only flags files inside the conversion output directory."""
+    conversion_dir = temp_workspace / "conversions"
+    conversion_dir.mkdir()
+    # A JSON file outside the conversions directory must be left untouched.
+    outside = temp_workspace / "elsewhere.json"
+    outside.write_text(json.dumps({"queries": ["x"]}).decode("utf-8"))
+
+    convert_rules(
+        config=mock_config,
+        path_prefix=temp_workspace,
+        manual_files="elsewhere.json",
+    )
+
+    data = json.loads(outside.read_bytes())
+    assert "manual" not in data
+
+
+@patch("click.testing.CliRunner.invoke")
+def test_convert_rules_skips_manual_before_conversion(
+    mock_invoke, temp_workspace, mock_config
+):
+    """A manual conversion file is skipped before the (expensive) sigma-cli invoke."""
+    conversion_dir = temp_workspace / "conversions"
+    conversion_dir.mkdir()
+    output_file = conversion_dir / "test_conversion_test.json"
+    output_file.write_text(
+        json.dumps({"manual": True, "queries": ["HAND EDITED"]}).decode("utf-8")
+    )
+
+    convert_rules(
+        config=mock_config,
+        path_prefix=temp_workspace,
+        changed_files="rules/test.yml",
+    )
+
+    # The skip happens before conversion, so sigma-cli is never invoked.
+    mock_invoke.assert_not_called()

@@ -15,12 +15,21 @@ from sigma.cli.convert import convert
 from yaml import FullLoader, load_all
 
 
-def _json_options(pretty_print: bool) -> int:
-    """Return the orjson options used to write conversion files canonically."""
+# The manual flag marks a generated file as manually maintained. Conversion files
+# carry it as a top-level boolean; deployment annotations use the string "true".
+MANUAL_KEY = "manual"
+MANUAL_VALUE = "true"
+
+
+def _write_output(
+    output_file: Path, data: dict[str, Any], pretty_print: bool, encoding: str
+) -> None:
+    """Write `data` to output_file as canonical JSON (sorted keys, optional indent)."""
     options = json.OPT_NAIVE_UTC | json.OPT_SORT_KEYS
     if pretty_print:
         options = options | json.OPT_INDENT_2
-    return options
+    with open(output_file, "w", encoding=encoding) as f:
+        f.write(json.dumps(data, option=options).decode(encoding, "backslashreplace"))
 
 
 def _read_existing_output(output_file: Path) -> dict[str, Any] | None:
@@ -37,10 +46,20 @@ def _read_existing_output(output_file: Path) -> dict[str, Any] | None:
         return None
 
 
+def _manual_is_set(value: Any) -> bool:
+    """Return True if a decoded `manual` value marks a file as manually maintained.
+
+    Accepts the boolean ``true`` used by conversion files and the string ``"true"``
+    used by deployment annotations, so the converter and the (Go) integrator agree
+    on what counts as manual and neither destroys what the other preserves.
+    """
+    return value is True or value == MANUAL_VALUE
+
+
 def _is_manual(output_file: Path) -> bool:
     """Return True if an existing conversion file is marked as manually maintained."""
     existing = _read_existing_output(output_file)
-    return bool(existing and existing.get("manual"))
+    return existing is not None and _manual_is_set(existing.get(MANUAL_KEY))
 
 
 def convert_rules(
@@ -165,16 +184,16 @@ def convert_rules(
     # automation commit. Doing this before the conversion loop means the freshly-added
     # flag is honoured (and the file preserved) on this same run.
     for manual_file in (path_prefix / Path(x) for x in manual_files.split(" ") if x):
-        existing = _read_existing_output(manual_file)
-        if existing is None or existing.get("manual"):
+        # Only touch files inside the conversion output directory.
+        if manual_file.parent != conversions_output_dir:
             continue
-        existing["manual"] = True
-        with open(manual_file, "w", encoding=default_encoding) as f:
-            f.write(
-                json.dumps(existing, option=_json_options(pretty_print)).decode(
-                    default_encoding, "blackslashreplace"
-                )
-            )
+        existing = _read_existing_output(manual_file)
+        # A manual key that is already present (any value) reflects a deliberate
+        # human choice; do not overwrite it.
+        if existing is None or MANUAL_KEY in existing:
+            continue
+        existing[MANUAL_KEY] = True
+        _write_output(manual_file, existing, pretty_print, default_encoding)
         print(f"Marking manually-modified conversion file as manual: {manual_file}")
 
     conversions_to_delete = []
@@ -286,6 +305,19 @@ def convert_rules(
                 )
                 continue
 
+            # Compute the output path up front so a manually-maintained file can be
+            # skipped before the (expensive) conversion runs.
+            rel_input_path = Path(input_file).relative_to(path_prefix)
+            output_filename = f"{name}_{rel_input_path.stem}.json".replace(os.sep, "_")
+            output_file = path_prefix / conversions_output_dir / output_filename
+
+            # Do not overwrite a manually-maintained conversion file.
+            if _is_manual(output_file):
+                print(
+                    f"Skipping manually-maintained conversion file (not overwriting): {output_file}"
+                )
+                continue
+
             args = [
                 "--target",
                 conversion.get("target", default_target),
@@ -373,20 +405,6 @@ def convert_rules(
                     print("No output generated, skipping writing to file")
                     continue
 
-                # Create output filename based on input file path
-                rel_input_path = Path(input_file).relative_to(path_prefix)
-                output_filename = f"{name}_{rel_input_path.stem}.json"
-                # Replace directory separators with underscores
-                output_filename = output_filename.replace(os.sep, "_")
-                output_file = path_prefix / conversions_output_dir / output_filename
-
-                # Do not overwrite a manually-maintained conversion file.
-                if _is_manual(output_file):
-                    print(
-                        f"Skipping manually-maintained conversion file (not overwriting): {output_file}"
-                    )
-                    continue
-
                 # Filter the rules to only include the required fields, if empty, return the full rule dictionaries
                 required_rule_fields = conversion.get("required_rule_fields", default_required_rule_fields)
 
@@ -400,13 +418,7 @@ def convert_rules(
                 }
 
                 # Write the output to a file
-                with open(output_file, "w", encoding=encoding) as f:
-                    f.write(
-                        json.dumps(
-                            output_data,
-                            option=_json_options(pretty_print),
-                        ).decode(encoding, "blackslashreplace")
-                    )
+                _write_output(output_file, output_data, pretty_print, encoding)
 
                 print(f"Output written to {output_file}")
                 print(f"Converting {name} completed with exit code {result.exit_code}")
