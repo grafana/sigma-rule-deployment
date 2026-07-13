@@ -17,6 +17,6 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/rogpeppe/go-internal v1.15.0 // indirect
-	golang.org/x/text v0.38.0
+	golang.org/x/text v0.40.0
 	google.golang.org/protobuf v1.36.11 // indirect
 )
