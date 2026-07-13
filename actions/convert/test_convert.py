@@ -1191,6 +1191,29 @@ def test_convert_rules_respects_explicit_manual_false(temp_workspace, mock_confi
     assert data["manual"] is False
 
 
+def test_convert_rules_regenerates_manual_false_conversion(temp_workspace, mock_config):
+    """The opt-out path: a conversion file set to manual:false is not re-flagged and
+    is regenerated (handed back) when its source rule changes."""
+    conversion_dir = temp_workspace / "conversions"
+    conversion_dir.mkdir()
+    output_file = conversion_dir / "test_conversion_test.json"
+    output_file.write_text(
+        json.dumps({"manual": False, "queries": ["STALE"]}).decode("utf-8")
+    )
+
+    convert_rules(
+        config=mock_config,
+        path_prefix=temp_workspace,
+        changed_files="rules/test.yml",
+        manual_files="conversions/test_conversion_test.json",
+    )
+
+    data = json.loads(output_file.read_bytes())
+    # Regenerated: fresh output carries no manual key and the real (not stale) query.
+    assert "manual" not in data
+    assert data["queries"] != ["STALE"]
+
+
 def test_convert_rules_backfill_ignores_files_outside_conversion_dir(
     temp_workspace, mock_config
 ):

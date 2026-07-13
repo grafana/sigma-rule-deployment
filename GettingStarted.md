@@ -219,8 +219,12 @@ automation commit) and adds the `manual` flag for you in the same "Sigma Rules D
 commit — so your edit is preserved from that point on. When a change is skipped this way, the
 run logs which file was kept.
 
-To hand control of a file back to automation, remove the flag (`manual: true` /
-`annotations.manual`); the next run will regenerate it as normal.
+To hand control of a file back to automation, set the flag to `false`
+(`"manual": false` for conversion files, `"manual": "false"` in a deployment file's
+annotations) rather than deleting it; the next run treats the file as automated again
+and regenerates it. Do **not** just delete the flag key — the auto-detection above
+can't tell a deleted flag from an ordinary human edit, so it would simply add the flag
+back on the next run.
 
 ## Next Steps
 

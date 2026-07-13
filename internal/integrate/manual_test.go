@@ -227,6 +227,67 @@ func TestBackfillManualFlagsRespectsExplicitFalse(t *testing.T) {
 	assert.Equal(t, before, after, "explicit manual:false must not be re-flagged")
 }
 
+// TestDoConversionsRegeneratesManualFalseDeployment checks the opt-out path: a
+// deployment file whose manual annotation is set to "false" is not re-flagged by
+// the backfill and is regenerated (not skipped) when its conversion changes.
+func TestDoConversionsRegeneratesManualFalseDeployment(t *testing.T) {
+	convPath, deployPath := manualTestDirs(t, "false_regen")
+
+	config := model.Configuration{
+		Folders:            model.FoldersConfig{ConversionPath: convPath, DeploymentPath: deployPath},
+		ConversionDefaults: model.ConversionConfig{Target: "loki", DataSource: "test-datasource"},
+		Conversions:        []model.ConversionConfig{{Name: "test_conv", RuleGroup: "Test Rules", TimeWindow: "5m"}},
+		IntegratorConfig:   model.IntegrationConfig{FolderID: "test-folder", OrgID: 1},
+	}
+
+	convOutput := model.ConversionOutput{
+		ConversionName: "test_conv",
+		Queries:        []string{"{job=`test`} | json"},
+		Rules:          []model.SigmaRule{{ID: "996f8884-9144-40e7-ac63-29090ccde9a0", Title: "Test Rule"}},
+	}
+	convFile := filepath.Join(convPath, "test_conv.json")
+	writeConversion := func(o model.ConversionOutput) {
+		b, mErr := json.Marshal(o)
+		assert.NoError(t, mErr)
+		assert.NoError(t, os.WriteFile(convFile, b, 0o600))
+	}
+	writeConversion(convOutput)
+
+	// First pass generates the deployment file.
+	i := &Integrator{config: config, addedFiles: []string{convFile}}
+	assert.NoError(t, i.DoConversions())
+
+	deployFiles, err := filepath.Glob(filepath.Join(deployPath, "alert_rule_*.json"))
+	assert.NoError(t, err)
+	assert.Len(t, deployFiles, 1)
+	deployFile := deployFiles[0]
+
+	// Human hands the file back: set the annotation to "false" and leave a stale title.
+	rule := &model.ProvisionedAlertRule{}
+	assert.NoError(t, readRuleFromFile(rule, deployFile))
+	if rule.Annotations == nil {
+		rule.Annotations = map[string]string{}
+	}
+	rule.Annotations[ManualAnnotation] = "false"
+	rule.Title = "STALE"
+	assert.NoError(t, writeRuleToFile(rule, deployFile, false))
+
+	// Change the conversion, and present the file as human-modified (as the diff would).
+	convOutput.Queries = []string{"{job=`changed`} | json"}
+	writeConversion(convOutput)
+
+	i = &Integrator{config: config, addedFiles: []string{convFile}, manualFiles: []string{deployFile}}
+	assert.NoError(t, i.BackfillManualFlags())
+	assert.NoError(t, i.DoConversions())
+
+	got := &model.ProvisionedAlertRule{}
+	assert.NoError(t, readRuleFromFile(got, deployFile))
+	// The backfill left the "false" flag alone (did not re-add "true")...
+	assert.Equal(t, "false", got.Annotations[ManualAnnotation])
+	// ...and the false flag did not block regeneration.
+	assert.NotEqual(t, "STALE", got.Title)
+}
+
 // TestIsManualMalformedReturnsError checks that unparseable files surface an error
 // (so callers can fail closed) rather than being silently treated as non-manual.
 func TestIsManualMalformedReturnsError(t *testing.T) {
