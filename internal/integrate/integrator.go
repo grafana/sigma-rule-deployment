@@ -22,6 +22,11 @@ import (
 
 const TRUE = "true"
 
+// ManualAnnotation is the annotation key that marks a deployment file as
+// manually maintained. Files carrying annotations["manual"] == "true" are
+// neither overwritten nor deleted by the integrator.
+const ManualAnnotation = "manual"
+
 var FuncMap = template.FuncMap{
 	// Case conversion
 	"toUpper": strings.ToUpper,
@@ -77,6 +82,10 @@ type Integrator struct {
 	addedFiles   []string
 	removedFiles []string
 	testFiles    []string
+	// manualFiles are deployment files a human modified since the last automation
+	// commit. Any that lack the manual annotation are flagged before integration so
+	// the change is preserved on this and every future run.
+	manualFiles []string
 }
 
 func NewIntegrator() *Integrator {
@@ -186,10 +195,28 @@ func (i *Integrator) LoadConfig() error {
 		}
 	}
 
-	fmt.Printf("Changed files: %d\nRemoved files: %d\nTest files: %d\n", len(newUpdatedFiles), len(removedFiles), len(filesToBeTested))
+	// Deployment files a human modified since the last automation commit. These are
+	// candidates for backfilling the manual annotation before integration runs.
+	manualFiles := strings.Split(os.Getenv("MANUAL_FILES"), " ")
+	humanModifiedFiles := make([]string, 0, len(manualFiles))
+	for _, path := range manualFiles {
+		if path == "" {
+			continue
+		}
+		relpath, err := filepath.Rel(i.config.Folders.DeploymentPath, path)
+		if err != nil {
+			return fmt.Errorf("error checking file path %s: %v", path, err)
+		}
+		if relpath == filepath.Base(path) {
+			humanModifiedFiles = append(humanModifiedFiles, path)
+		}
+	}
+
+	fmt.Printf("Changed files: %d\nRemoved files: %d\nTest files: %d\nManual files: %d\n", len(newUpdatedFiles), len(removedFiles), len(filesToBeTested), len(humanModifiedFiles))
 	i.addedFiles = newUpdatedFiles
 	i.removedFiles = removedFiles
 	i.testFiles = filesToBeTested
+	i.manualFiles = humanModifiedFiles
 
 	return nil
 }
@@ -220,6 +247,12 @@ func (i *Integrator) cleanupOrphanedFilesInPath(searchPath string, isOrphaned fu
 		}
 
 		if orphaned {
+			if manual, mErr := isManual(file); mErr != nil {
+				fmt.Printf("Warning: could not check manual flag for %s: %v\n", file, mErr)
+			} else if manual {
+				fmt.Printf("Keeping manually-maintained orphaned file (not deleting): %s\n", file)
+				continue
+			}
 			fmt.Printf("Removing orphaned file: %s\n", file)
 			if err := os.Remove(file); err != nil {
 				fmt.Printf("Warning: Could not remove orphaned file %s: %v\n", file, err)
@@ -274,7 +307,74 @@ func (i *Integrator) isDeploymentFileOrphaned(file string) (bool, error) {
 	return false, nil
 }
 
+// isManual reports whether a generated file is marked as manually maintained.
+// Deployment files carry the marker as annotations["manual"] == "true"; conversion
+// files carry a top-level "manual" boolean. A single helper covers both output
+// directories so cleanup never destroys a file a human has taken ownership of.
+func isManual(file string) (bool, error) {
+	content, err := shared.ReadLocalFile(file)
+	if err != nil {
+		return false, err
+	}
+
+	// Deployment file: manual annotation.
+	var rule model.ProvisionedAlertRule
+	if err := json.Unmarshal([]byte(content), &rule); err == nil {
+		if rule.Annotations[ManualAnnotation] == TRUE {
+			return true, nil
+		}
+	}
+
+	// Conversion file: top-level manual boolean.
+	var conversion model.ConversionOutput
+	if err := json.Unmarshal([]byte(content), &conversion); err == nil {
+		if conversion.Manual {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+// BackfillManualFlags adds the manual annotation to any human-modified deployment
+// files that do not already carry it. Running before DoConversions guarantees the
+// freshly-added flag is honoured (and the file preserved) on this same run.
+func (i *Integrator) BackfillManualFlags() error {
+	for _, file := range i.manualFiles {
+		if _, err := os.Stat(file); err != nil {
+			// The list comes from an ACMR diff so this should not happen, but never
+			// write a near-empty rule for a file that is not present.
+			fmt.Printf("Skipping manual backfill for missing file: %s\n", file)
+			continue
+		}
+
+		rule := &model.ProvisionedAlertRule{}
+		if err := readRuleFromFile(rule, file); err != nil {
+			return err
+		}
+		if rule.Annotations[ManualAnnotation] == TRUE {
+			continue
+		}
+
+		if rule.Annotations == nil {
+			rule.Annotations = make(map[string]string)
+		}
+		rule.Annotations[ManualAnnotation] = TRUE
+		fmt.Printf("Marking manually-modified deployment file as manual: %s\n", file)
+		if err := writeRuleToFile(rule, file, i.prettyPrint); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (i *Integrator) Run() error {
+	// Preserve any deployment files a human modified by flagging them as manual
+	// before we integrate, so their changes are not overwritten on this run.
+	if err := i.BackfillManualFlags(); err != nil {
+		return err
+	}
+
 	// Convert all files that have been updated from the last commit
 	if err := i.DoConversions(); err != nil {
 		return err
@@ -340,6 +440,10 @@ func (i *Integrator) DoConversions() error {
 		if err != nil {
 			return err
 		}
+		if rule.Annotations[ManualAnnotation] == TRUE {
+			fmt.Printf("Skipping manually-maintained deployment file (not overwriting): %s\n", file)
+			continue
+		}
 		err = i.ConvertToAlert(rule, queries, titles, config, inputFile, conversionObject)
 		if err != nil {
 			return err
@@ -362,7 +466,14 @@ func (i *Integrator) DoCleanup() error {
 			return fmt.Errorf("error when searching for deployment files for %s: %v", deletedFile, err)
 		}
 		for _, file := range deploymentFiles {
-			err = os.Remove(i.config.Folders.DeploymentPath + string(filepath.Separator) + file)
+			fullPath := i.config.Folders.DeploymentPath + string(filepath.Separator) + file
+			if manual, mErr := isManual(fullPath); mErr != nil {
+				fmt.Printf("Warning: could not check manual flag for %s: %v\n", fullPath, mErr)
+			} else if manual {
+				fmt.Printf("Keeping manually-maintained deployment file (not deleting): %s\n", fullPath)
+				continue
+			}
+			err = os.Remove(fullPath)
 			if err != nil {
 				return fmt.Errorf("error when deleting deployment file %s: %v", file, err)
 			}

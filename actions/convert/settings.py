@@ -68,6 +68,11 @@ def parse_args() -> argparse.Namespace:
         help="List of deleted files",
         default=os.environ.get("DELETED_FILES", ""),
     )
+    parser.add_argument(
+        "--manual-files",
+        help="List of conversion files a human modified since the last automation commit",
+        default=os.environ.get("MANUAL_FILES", ""),
+    )
 
     return parser.parse_args()
 

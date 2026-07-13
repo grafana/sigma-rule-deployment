@@ -1088,3 +1088,85 @@ def test_filter_rule_fields():
             "logsource": {"category": "Test Category 2", "product": "Test Product 2", "service": "Test Service 2", "definition": "Test Definition 2"}
         }
     ]
+
+
+def test_convert_rules_skips_manual_conversion(temp_workspace, mock_config):
+    """A conversion file marked manual is not overwritten when its rule changes."""
+    conversion_dir = temp_workspace / "conversions"
+    conversion_dir.mkdir()
+    output_file = conversion_dir / "test_conversion_test.json"
+    manual_content = json.dumps({"manual": True, "queries": ["HAND EDITED"]}).decode(
+        "utf-8"
+    )
+    output_file.write_text(manual_content)
+
+    convert_rules(
+        config=mock_config,
+        path_prefix=temp_workspace,
+        changed_files="rules/test.yml",
+    )
+
+    # The manual file must be left exactly as the human wrote it.
+    assert output_file.read_text() == manual_content
+
+
+def test_convert_rules_backfills_manual_flag(temp_workspace, mock_config):
+    """A human-modified conversion file listed in manual_files gains the manual flag."""
+    conversion_dir = temp_workspace / "conversions"
+    conversion_dir.mkdir()
+    output_file = conversion_dir / "test_conversion_test.json"
+    output_file.write_text(
+        json.dumps(
+            {"queries": ["HUMAN EDIT"], "conversion_name": "test_conversion"}
+        ).decode("utf-8")
+    )
+
+    convert_rules(
+        config=mock_config,
+        path_prefix=temp_workspace,
+        manual_files="conversions/test_conversion_test.json",
+    )
+
+    data = json.loads(output_file.read_bytes())
+    assert data["manual"] is True
+    assert data["queries"] == ["HUMAN EDIT"]
+
+
+def test_convert_rules_backfilled_file_not_overwritten(temp_workspace, mock_config):
+    """A human edit is flagged and preserved even when the source rule also changed."""
+    conversion_dir = temp_workspace / "conversions"
+    conversion_dir.mkdir()
+    output_file = conversion_dir / "test_conversion_test.json"
+    output_file.write_text(
+        json.dumps(
+            {"queries": ["HUMAN EDIT"], "conversion_name": "test_conversion"}
+        ).decode("utf-8")
+    )
+
+    convert_rules(
+        config=mock_config,
+        path_prefix=temp_workspace,
+        changed_files="rules/test.yml",
+        manual_files="conversions/test_conversion_test.json",
+    )
+
+    data = json.loads(output_file.read_bytes())
+    assert data["manual"] is True
+    # The query was not regenerated from the (changed) rule.
+    assert data["queries"] == ["HUMAN EDIT"]
+
+
+def test_convert_rules_keeps_manual_conversion_on_delete(temp_workspace, mock_config):
+    """A manual conversion file is not deleted when its source rule is deleted."""
+    conversion_dir = temp_workspace / "conversions"
+    conversion_dir.mkdir()
+    conversion_file = conversion_dir / "test_conversion_test.json"
+    conversion_file.write_text(json.dumps({"manual": True}).decode("utf-8"))
+
+    convert_rules(
+        config=mock_config,
+        path_prefix=temp_workspace,
+        deleted_files="rules/test.yml",
+    )
+
+    assert conversion_file.exists()

@@ -198,6 +198,30 @@ Don't forget to add a `.yamllint` configuration file to keep the YAML linting wo
 
 **Pro tip**: Copy the `.yamllint` file from this repository or create one with your team's preferred YAML style guidelines.
 
+## Preserving Manual Modifications
+
+The converter and integrator regenerate the files under your `conversion_path` (converted
+queries) and `deployment_path` (Grafana alert rules) on every run. If you hand-edit one of
+these generated files, the next automation run would normally overwrite your change.
+
+To keep a generated file under manual control, mark it with a `manual` flag:
+
+- **Conversion files** (JSON): add a top-level `"manual": true`.
+- **Deployment files** (alert rules): add a `"manual": "true"` entry to the rule's
+  `annotations` object (kept as an annotation so the alert-rule schema stays valid).
+
+A file carrying the flag is never overwritten **or** deleted by automation — including when
+its source rule is removed or the file would otherwise be cleaned up as orphaned.
+
+You usually don't need to add the flag by hand. If you edit a generated file and open/update
+a PR, the next automation run detects that a human changed it (by comparing against the last
+automation commit) and adds the `manual` flag for you in the same "Sigma Rules Deployment"
+commit — so your edit is preserved from that point on. When a change is skipped this way, the
+run logs which file was kept.
+
+To hand control of a file back to automation, remove the flag (`manual: true` /
+`annotations.manual`); the next run will regenerate it as normal.
+
 ## Next Steps
 
 Congratulations! 🎉 You've completed the basic setup. Here's what you should do next:
