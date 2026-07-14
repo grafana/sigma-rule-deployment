@@ -155,7 +155,11 @@ Sigma Rule Deployment automates this workflow: it provides GitHub Actions to con
 
 ## Releasing
 
-To release new versions of sigma-rule-deployment, we use Git tags to denote an officially released version, and automation to push the appropriately tagged Docker image. When the main branch is in state that is ready to release, the process is as follows:
+To release new versions of sigma-rule-deployment, we use Git tags to denote an officially released version, and automation to push the appropriately tagged Docker image and attach a Software Bill of Materials (SBOM) to the release.
+
+This repository has [immutable releases](https://docs.github.com/en/code-security/concepts/supply-chain-security/immutable-releases) enabled, which means a release's assets are locked once it is published and can no longer be added, modified, or deleted. The SBOM must therefore be attached while the release is still a **draft**, before it is published. Pushing the release tag automates this: it creates the draft release and attaches the SBOM for you to review before publishing.
+
+When the main branch is in a state that is ready to release, the process is as follows:
 
 1. Determine the correct version number using the [Semantic Versioning](https://semver.org/) methodology. All version numbers should be in the format `\d+\.\d+\.\d+(-[0-9A-Za-z-]+)?`
 2. Create a PR to update **all** the version tags used in the reusable workflows [convert-integrate.yml](.github/workflows/convert-integrate.yml) and [deploy.yml](.github/workflows/deploy.yml) to the new version, and merge it into `main` once it is approved, e.g.:
@@ -163,6 +167,7 @@ To release new versions of sigma-rule-deployment, we use Git tags to denote an o
         uses: grafana/sigma-rule-deployment/actions/convert@vX.X.X
 ```
 3. Checkout `main` and create a signed tag for the release, named the version number prefixed with a v, e.g., `git tag --sign --message="Release vX.X.X" vX.X.X`
-4. Push the tag to GitHub, e.g., `git push --tags`
-5. Create a release in GitHub against the appropriate tag. If the version number starts with `v0`, or ends with `-alpha/beta/rcX` etc., remember to mark it as a pre-release
-6. Validate that the "Build Consolidated Image" action, which pushes the tagged image to the GitHub Container Repository (GHCR), has completed successfully for the Release action
+4. Push the tag to GitHub, e.g., `git push --tags`. This triggers the ["SBOM on Release"](.github/workflows/sbom-release.yml) workflow, which exports the SPDX SBOM from Socket, creates a **draft** release with auto-generated notes, and attaches the SBOM as the `sigma-rule-deployment-vX.X.X.spdx.json` asset. The release is automatically marked as a pre-release when the tag starts with `v0.` or has a `-alpha/beta/rcX` suffix.
+5. Open the auto-created **draft** release in GitHub. Review and adjust the generated release notes, confirm the pre-release flag is correct, and check that the `.spdx.json` SBOM asset is attached. (The SBOM must be present now, because immutable releases prevent adding assets after publishing.)
+6. Publish the draft release.
+7. Validate that the ["Build & Integration Test Image"](.github/workflows/build-docker.yml) action, which pushes the tagged image to the GitHub Container Registry (GHCR) on publish, has completed successfully for the release.
