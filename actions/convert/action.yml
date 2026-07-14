@@ -85,8 +85,14 @@ runs:
         CHANGED_FILES=$(eval $ACMR_DIFF_COMMAND)
         DELETED_FILES=$(eval $D_DIFF_COMMAND)
 
+        # Conversion output files a human changed since the last automation commit. Unlike
+        # the diffs above (scoped to inputs), this is scoped to the conversion output dir so
+        # the converter can backfill their missing manual flag and preserve the edits.
+        MANUAL_FILES=$(git diff ${PREVIOUS_REF} --name-only --diff-filter=ACMR -- "${CONVERSION_PATH}")
+
         echo all_changed_files=${CHANGED_FILES//\\n/} >> "$GITHUB_OUTPUT"
         echo deleted_files=${DELETED_FILES//\\n/} >> "$GITHUB_OUTPUT"
+        echo manual_files=${MANUAL_FILES//\\n/} >> "$GITHUB_OUTPUT"
 
     - name: Determine Image Reference
       id: image-ref
@@ -108,6 +114,7 @@ runs:
         ALL_RULES: ${{ inputs.all_rules }}
         CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
         DELETED_FILES: ${{ steps.changed-files.outputs.deleted_files }}
+        MANUAL_FILES: ${{ steps.changed-files.outputs.manual_files }}
         IMAGE_REF: ${{ steps.image-ref.outputs.image_ref }}
       run: |
         docker run --rm \
@@ -121,6 +128,7 @@ runs:
             -e ALL_RULES="$ALL_RULES" \
             -e CHANGED_FILES="$CHANGED_FILES" \
             -e DELETED_FILES="$DELETED_FILES" \
+            -e MANUAL_FILES="$MANUAL_FILES" \
             "ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:$IMAGE_REF" \
             convert
 

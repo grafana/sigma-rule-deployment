@@ -67,4 +67,5 @@ if __name__ == "__main__":
         all_rules=args.all_rules,
         changed_files=args.changed_files,
         deleted_files=args.deleted_files,
+        manual_files=args.manual_files,
     )

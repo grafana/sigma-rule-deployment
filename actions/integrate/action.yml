@@ -94,6 +94,7 @@ runs:
       shell: bash
       env:
         CONVERSION_PATH: ${{ steps.config-paths.outputs.conversion_path }}
+        DEPLOYMENT_PATH: ${{ steps.config-paths.outputs.deployment_path }}
         PREVIOUS_REF: ${{ steps.commits.outputs.previous-ref }}
         BASE_REF: ${{ steps.commits.outputs.base-commit }}
       run: |
@@ -102,9 +103,13 @@ runs:
         CHANGED_FILES=$(git diff "$PREVIOUS_REF" --name-only --diff-filter=ACMR -- "$CONVERSION_PATH")
         DELETED_FILES=$(git diff "$PREVIOUS_REF" --name-only --diff-filter=D -- "$CONVERSION_PATH")
         TEST_FILES=$(git diff "$BASE_REF" --name-only --diff-filter=ACMR -- "$CONVERSION_PATH")
+        # Deployment files a human changed since the last automation commit, so the
+        # integrator can backfill their missing manual annotation and preserve the edits.
+        MANUAL_FILES=$(git diff "$PREVIOUS_REF" --name-only --diff-filter=ACMR -- "$DEPLOYMENT_PATH")
         echo all_changed_files=${CHANGED_FILES//\\n/} >> "$GITHUB_OUTPUT"
         echo deleted_files=${DELETED_FILES//\\n/} >> "$GITHUB_OUTPUT"
         echo test_files=${TEST_FILES//\\n/} >> "$GITHUB_OUTPUT"
+        echo manual_files=${MANUAL_FILES//\\n/} >> "$GITHUB_OUTPUT"
 
     - name: Run Sigma Rule Integrator
       id: integrate
@@ -116,6 +121,7 @@ runs:
         CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
         DELETED_FILES: ${{ steps.changed-files.outputs.deleted_files }}
         TEST_FILES: ${{ steps.changed-files.outputs.test_files }}
+        MANUAL_FILES: ${{ steps.changed-files.outputs.manual_files }}
         ALL_RULES: ${{ inputs.all_rules }}
         CONTINUE_ON_QUERY_TESTING_ERRORS: ${{ inputs.continue_on_query_testing_errors }}
         IMAGE_REF: ${{ steps.image-ref.outputs.image_ref }}
@@ -130,6 +136,7 @@ runs:
             -e CHANGED_FILES="$CHANGED_FILES" \
             -e DELETED_FILES="$DELETED_FILES" \
             -e TEST_FILES="$TEST_FILES" \
+            -e MANUAL_FILES="$MANUAL_FILES" \
             -e ALL_RULES="$ALL_RULES" \
             -e CONTINUE_ON_QUERY_TESTING_ERRORS="$CONTINUE_ON_QUERY_TESTING_ERRORS" \
             "ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:$IMAGE_REF" \

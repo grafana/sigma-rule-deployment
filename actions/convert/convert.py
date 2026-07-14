@@ -15,6 +15,53 @@ from sigma.cli.convert import convert
 from yaml import FullLoader, load_all
 
 
+# The manual flag marks a generated file as manually maintained. Conversion files
+# carry it as a top-level boolean; deployment annotations use the string "true".
+MANUAL_KEY = "manual"
+MANUAL_VALUE = "true"
+
+
+def _write_output(
+    output_file: Path, data: dict[str, Any], pretty_print: bool, encoding: str
+) -> None:
+    """Write `data` to output_file as canonical JSON (sorted keys, optional indent)."""
+    options = json.OPT_NAIVE_UTC | json.OPT_SORT_KEYS
+    if pretty_print:
+        options = options | json.OPT_INDENT_2
+    with open(output_file, "w", encoding=encoding) as f:
+        f.write(json.dumps(data, option=options).decode(encoding, "backslashreplace"))
+
+
+def _read_existing_output(output_file: Path) -> dict[str, Any] | None:
+    """Read and parse an existing conversion output file.
+
+    Returns the parsed dict, or None if the file is absent or cannot be parsed.
+    """
+    if not output_file.exists():
+        return None
+    try:
+        with open(output_file, "rb") as f:
+            return json.loads(f.read())
+    except (ValueError, OSError):
+        return None
+
+
+def _manual_is_set(value: Any) -> bool:
+    """Return True if a decoded `manual` value marks a file as manually maintained.
+
+    Accepts the boolean ``true`` used by conversion files and the string ``"true"``
+    used by deployment annotations, so the converter and the (Go) integrator agree
+    on what counts as manual and neither destroys what the other preserves.
+    """
+    return value is True or value == MANUAL_VALUE
+
+
+def _is_manual(output_file: Path) -> bool:
+    """Return True if an existing conversion file is marked as manually maintained."""
+    existing = _read_existing_output(output_file)
+    return existing is not None and _manual_is_set(existing.get(MANUAL_KEY))
+
+
 def convert_rules(
     config: Dynaconf,
     path_prefix: str | Path,
@@ -23,6 +70,7 @@ def convert_rules(
     all_rules: bool = False,
     changed_files: str = "",
     deleted_files: str = "",
+    manual_files: str = "",
 ) -> None:
     """Convert Sigma rules to the target format per each file in the conversions object
     in the config. The converted files will be saved in the PATH_PREFIX/conversions
@@ -60,6 +108,8 @@ def convert_rules(
         all_rules (bool): Whether to convert all rules.
         changed_files (str): The list of changed files.
         deleted_files (str): The list of deleted files.
+        manual_files (str): Space-separated conversion files a human modified since
+            the last automation commit; missing manual flags are backfilled onto them.
 
     Raises:
         ValueError: Path prefix must be set using GITHUB_WORKSPACE environment variable.
@@ -94,8 +144,8 @@ def convert_rules(
         path_prefix = path_prefix.resolve()
 
     # Check whether we have any files to process
-    if not all_rules and not changed_files and not deleted_files:
-        print("No changed or deleted files identified, but all_rules is false")
+    if not all_rules and not changed_files and not deleted_files and not manual_files:
+        print("No changed, deleted or manual files identified, but all_rules is false")
         exit(0)
 
     # Get the conversion path from the config
@@ -129,6 +179,22 @@ def convert_rules(
     default_json_indent = config.get("conversion_defaults.json_indent", 0)
     default_required_rule_fields = config.get("conversion_defaults.required_rule_fields", [])
     verbose = config.get("verbose", False)
+
+    # Backfill the manual flag onto conversion files a human modified since the last
+    # automation commit. Doing this before the conversion loop means the freshly-added
+    # flag is honoured (and the file preserved) on this same run.
+    for manual_file in (path_prefix / Path(x) for x in manual_files.split(" ") if x):
+        # Only touch files inside the conversion output directory.
+        if manual_file.parent != conversions_output_dir:
+            continue
+        existing = _read_existing_output(manual_file)
+        # A manual key that is already present (any value) reflects a deliberate
+        # human choice; do not overwrite it.
+        if existing is None or MANUAL_KEY in existing:
+            continue
+        existing[MANUAL_KEY] = True
+        _write_output(manual_file, existing, pretty_print, default_encoding)
+        print(f"Marking manually-modified conversion file as manual: {manual_file}")
 
     conversions_to_delete = []
     # Convert Sigma rules to the target format per each conversion object in the config
@@ -239,6 +305,19 @@ def convert_rules(
                 )
                 continue
 
+            # Compute the output path up front so a manually-maintained file can be
+            # skipped before the (expensive) conversion runs.
+            rel_input_path = Path(input_file).relative_to(path_prefix)
+            output_filename = f"{name}_{rel_input_path.stem}.json".replace(os.sep, "_")
+            output_file = path_prefix / conversions_output_dir / output_filename
+
+            # Do not overwrite a manually-maintained conversion file.
+            if _is_manual(output_file):
+                print(
+                    f"Skipping manually-maintained conversion file (not overwriting): {output_file}"
+                )
+                continue
+
             args = [
                 "--target",
                 conversion.get("target", default_target),
@@ -326,13 +405,6 @@ def convert_rules(
                     print("No output generated, skipping writing to file")
                     continue
 
-                # Create output filename based on input file path
-                rel_input_path = Path(input_file).relative_to(path_prefix)
-                output_filename = f"{name}_{rel_input_path.stem}.json"
-                # Replace directory separators with underscores
-                output_filename = output_filename.replace(os.sep, "_")
-                output_file = path_prefix / conversions_output_dir / output_filename
-
                 # Filter the rules to only include the required fields, if empty, return the full rule dictionaries
                 required_rule_fields = conversion.get("required_rule_fields", default_required_rule_fields)
 
@@ -346,16 +418,7 @@ def convert_rules(
                 }
 
                 # Write the output to a file
-                with open(output_file, "w", encoding=encoding) as f:
-                    options = json.OPT_NAIVE_UTC | json.OPT_SORT_KEYS
-                    if pretty_print:
-                        options = options | json.OPT_INDENT_2
-                    f.write(
-                        json.dumps(
-                            output_data,
-                            option=options,
-                        ).decode(encoding, "blackslashreplace")
-                    )
+                _write_output(output_file, output_data, pretty_print, encoding)
 
                 print(f"Output written to {output_file}")
                 print(f"Converting {name} completed with exit code {result.exit_code}")
@@ -367,6 +430,11 @@ def convert_rules(
         print("Removing conversions of deleted rules from the output directory")
         for deleted_file in conversions_to_delete:
             if deleted_file.exists():
+                if _is_manual(deleted_file):
+                    print(
+                        f"Keeping manually-maintained conversion file (not deleting): {deleted_file}"
+                    )
+                    continue
                 print(f"Removing {deleted_file}")
                 os.remove(deleted_file)
 

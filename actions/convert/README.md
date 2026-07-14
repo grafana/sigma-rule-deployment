@@ -100,6 +100,7 @@ jobs:
   - `rules`: List of rule metadata including ID, title, description, severity, and query
   - `output_file`: Path to the output file relative to the repository root
 - For correlation rules to work correctly, all the related rules must be present in the same file using the `---` notation (multi document) in YAML.
+- **Preserving manual edits**: a conversion file with a top-level `"manual": true` is never overwritten or deleted by the converter. If you edit a conversion file directly (without the flag), the action detects the human change against the last automation commit and backfills `"manual": true` automatically, so your edit is preserved on this and future runs. To hand the file back to automation, set `"manual": false` (don't just delete the key — the backfill can't distinguish a deleted flag from a normal edit and would re-add it).
 
 ## External Dependencies
 

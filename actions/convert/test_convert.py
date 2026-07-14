@@ -1088,3 +1088,169 @@ def test_filter_rule_fields():
             "logsource": {"category": "Test Category 2", "product": "Test Product 2", "service": "Test Service 2", "definition": "Test Definition 2"}
         }
     ]
+
+
+def test_convert_rules_skips_manual_conversion(temp_workspace, mock_config):
+    """A conversion file marked manual is not overwritten when its rule changes."""
+    conversion_dir = temp_workspace / "conversions"
+    conversion_dir.mkdir()
+    output_file = conversion_dir / "test_conversion_test.json"
+    manual_content = json.dumps({"manual": True, "queries": ["HAND EDITED"]}).decode(
+        "utf-8"
+    )
+    output_file.write_text(manual_content)
+
+    convert_rules(
+        config=mock_config,
+        path_prefix=temp_workspace,
+        changed_files="rules/test.yml",
+    )
+
+    # The manual file must be left exactly as the human wrote it.
+    assert output_file.read_text() == manual_content
+
+
+def test_convert_rules_backfills_manual_flag(temp_workspace, mock_config):
+    """A human-modified conversion file listed in manual_files gains the manual flag."""
+    conversion_dir = temp_workspace / "conversions"
+    conversion_dir.mkdir()
+    output_file = conversion_dir / "test_conversion_test.json"
+    output_file.write_text(
+        json.dumps(
+            {"queries": ["HUMAN EDIT"], "conversion_name": "test_conversion"}
+        ).decode("utf-8")
+    )
+
+    convert_rules(
+        config=mock_config,
+        path_prefix=temp_workspace,
+        manual_files="conversions/test_conversion_test.json",
+    )
+
+    data = json.loads(output_file.read_bytes())
+    assert data["manual"] is True
+    assert data["queries"] == ["HUMAN EDIT"]
+
+
+def test_convert_rules_backfilled_file_not_overwritten(temp_workspace, mock_config):
+    """A human edit is flagged and preserved even when the source rule also changed."""
+    conversion_dir = temp_workspace / "conversions"
+    conversion_dir.mkdir()
+    output_file = conversion_dir / "test_conversion_test.json"
+    output_file.write_text(
+        json.dumps(
+            {"queries": ["HUMAN EDIT"], "conversion_name": "test_conversion"}
+        ).decode("utf-8")
+    )
+
+    convert_rules(
+        config=mock_config,
+        path_prefix=temp_workspace,
+        changed_files="rules/test.yml",
+        manual_files="conversions/test_conversion_test.json",
+    )
+
+    data = json.loads(output_file.read_bytes())
+    assert data["manual"] is True
+    # The query was not regenerated from the (changed) rule.
+    assert data["queries"] == ["HUMAN EDIT"]
+
+
+def test_convert_rules_keeps_manual_conversion_on_delete(temp_workspace, mock_config):
+    """A manual conversion file is not deleted when its source rule is deleted."""
+    conversion_dir = temp_workspace / "conversions"
+    conversion_dir.mkdir()
+    conversion_file = conversion_dir / "test_conversion_test.json"
+    conversion_file.write_text(json.dumps({"manual": True}).decode("utf-8"))
+
+    convert_rules(
+        config=mock_config,
+        path_prefix=temp_workspace,
+        deleted_files="rules/test.yml",
+    )
+
+    assert conversion_file.exists()
+
+
+def test_convert_rules_respects_explicit_manual_false(temp_workspace, mock_config):
+    """An explicit manual:false is not re-flagged to true by the backfill."""
+    conversion_dir = temp_workspace / "conversions"
+    conversion_dir.mkdir()
+    output_file = conversion_dir / "test_conversion_test.json"
+    output_file.write_text(
+        json.dumps({"manual": False, "queries": ["HUMAN EDIT"]}).decode("utf-8")
+    )
+
+    convert_rules(
+        config=mock_config,
+        path_prefix=temp_workspace,
+        manual_files="conversions/test_conversion_test.json",
+    )
+
+    data = json.loads(output_file.read_bytes())
+    assert data["manual"] is False
+
+
+def test_convert_rules_regenerates_manual_false_conversion(temp_workspace, mock_config):
+    """The opt-out path: a conversion file set to manual:false is not re-flagged and
+    is regenerated (handed back) when its source rule changes."""
+    conversion_dir = temp_workspace / "conversions"
+    conversion_dir.mkdir()
+    output_file = conversion_dir / "test_conversion_test.json"
+    output_file.write_text(
+        json.dumps({"manual": False, "queries": ["STALE"]}).decode("utf-8")
+    )
+
+    convert_rules(
+        config=mock_config,
+        path_prefix=temp_workspace,
+        changed_files="rules/test.yml",
+        manual_files="conversions/test_conversion_test.json",
+    )
+
+    data = json.loads(output_file.read_bytes())
+    # Regenerated: fresh output carries no manual key and the real (not stale) query.
+    assert "manual" not in data
+    assert data["queries"] != ["STALE"]
+
+
+def test_convert_rules_backfill_ignores_files_outside_conversion_dir(
+    temp_workspace, mock_config
+):
+    """The backfill only flags files inside the conversion output directory."""
+    conversion_dir = temp_workspace / "conversions"
+    conversion_dir.mkdir()
+    # A JSON file outside the conversions directory must be left untouched.
+    outside = temp_workspace / "elsewhere.json"
+    outside.write_text(json.dumps({"queries": ["x"]}).decode("utf-8"))
+
+    convert_rules(
+        config=mock_config,
+        path_prefix=temp_workspace,
+        manual_files="elsewhere.json",
+    )
+
+    data = json.loads(outside.read_bytes())
+    assert "manual" not in data
+
+
+@patch("click.testing.CliRunner.invoke")
+def test_convert_rules_skips_manual_before_conversion(
+    mock_invoke, temp_workspace, mock_config
+):
+    """A manual conversion file is skipped before the (expensive) sigma-cli invoke."""
+    conversion_dir = temp_workspace / "conversions"
+    conversion_dir.mkdir()
+    output_file = conversion_dir / "test_conversion_test.json"
+    output_file.write_text(
+        json.dumps({"manual": True, "queries": ["HAND EDITED"]}).decode("utf-8")
+    )
+
+    convert_rules(
+        config=mock_config,
+        path_prefix=temp_workspace,
+        changed_files="rules/test.yml",
+    )
+
+    # The skip happens before conversion, so sigma-cli is never invoked.
+    mock_invoke.assert_not_called()

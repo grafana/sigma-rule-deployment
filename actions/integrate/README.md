@@ -109,6 +109,7 @@ jobs:
 - Only processes files that have been modified since the last commit (or base branch).
 - Use `all_rules: true` to process all conversion files regardless of changes.
 - Obsolete alert rule files are automatically removed when corresponding conversion files are deleted.
+- **Preserving manual edits**: an alert rule file whose `annotations` contain `"manual": "true"` is never overwritten or deleted by the integrator (including orphaned-file cleanup). If you edit an alert rule file directly without the annotation, the action detects the human change against the last automation commit and backfills `"manual": "true"` automatically, preserving your edit on this and future runs. To hand the file back to automation, set the annotation to `"manual": "false"` (don't just delete it — the backfill can't distinguish a deleted flag from a normal edit and would re-add it).
 
 ### Best Practices
 
