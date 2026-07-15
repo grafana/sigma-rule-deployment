@@ -1,0 +1,19 @@
+title: Manual Flag Test Rule
+id: d290f1ee-6c54-4b01-90e6-d701748f0851
+status: test
+description: >-
+  Rule used by the manual-flag integration test. Its generated conversion and
+  deployment files are hand-edited (with a sentinel value) in the test fixtures to
+  verify the converter and integrator do not overwrite manually-maintained files.
+author: integration-test
+date: 2025-11-10
+logsource:
+  category: integration-test
+detection:
+  selection:
+    action:
+      - "manual_flag_marker"
+  condition: selection
+falsepositives:
+  - This is a test rule, there are no false positives.
+level: informational

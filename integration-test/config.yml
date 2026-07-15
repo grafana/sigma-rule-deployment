@@ -27,6 +27,28 @@ conversions:
       - pipelines/datasources/test-1.yml
     rule_group: Every 1 Hour
     time_window: 1h
+  # Two conversions of the same rule used to exercise the "manual" flag feature.
+  # manual_explicit: fixtures are seeded already carrying the flag.
+  # manual_backfill: fixtures are seeded without the flag (a human edit) so the
+  # action must detect the change and backfill the flag before regenerating.
+  - name: manual_explicit
+    input:
+      - "rules/manual-test.yml"
+    backend_options:
+      case_sensitive: true
+    pipelines:
+      - pipelines/datasources/test-1.yml
+    rule_group: Every 1 Hour
+    time_window: 1h
+  - name: manual_backfill
+    input:
+      - "rules/manual-test.yml"
+    backend_options:
+      case_sensitive: true
+    pipelines:
+      - pipelines/datasources/test-1.yml
+    rule_group: Every 1 Hour
+    time_window: 1h
 integration:
   folder_id: ae9ojcgwmy48wf # sigma-rule-deployment
   org_id: 1
