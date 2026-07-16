@@ -170,7 +170,8 @@ jobs:
           # per-run token guarantees a change even when re-running on the PR
           echo "$RUN_TOKEN" > run_attempt.txt
 
-          git add action_sha.txt github_pr.txt run_attempt.txt # only commit the relevant changed files
+          # only commit the relevant changed files
+          git add .github/workflows/convert-integrate-comment-test.yml action_sha.txt github_pr.txt run_attempt.txt
 
           ../sigma-rule-deployment/.github/scripts/create-verified-commit.sh \
             grafana/sigma-rule-deployment-integration-test \
