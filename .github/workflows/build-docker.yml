@@ -101,6 +101,7 @@ jobs:
           GITHUB_PR_NUMBER: ${{ github.event.pull_request.number }}
           GH_TOKEN: ${{ steps.get-github-app-token.outputs.token }}
           ACTION_SHA: ${{ github.event.pull_request.head.sha }}
+          RUN_TOKEN: ${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           git fetch
 
@@ -121,6 +122,8 @@ jobs:
           # add the action sha so that the integration test can add the check to this PR
           echo "$ACTION_SHA" > action_sha.txt
           echo "$GITHUB_PR_NUMBER" > github_pr.txt
+          # per-run token guarantees a change even when re-running on the PR
+          echo "$RUN_TOKEN" > run_attempt.txt
 
           git add -A
 
@@ -147,6 +150,7 @@ jobs:
           GITHUB_PR_NUMBER: ${{ github.event.pull_request.number }}
           GH_TOKEN: ${{ steps.get-github-app-token.outputs.token }}
           ACTION_SHA: ${{ github.event.pull_request.head.sha }}
+          RUN_TOKEN: ${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           git fetch
           git checkout main
@@ -163,8 +167,11 @@ jobs:
           # add the action sha so that the integration test can add the check to this PR
           echo "$ACTION_SHA" > action_sha.txt
           echo "$GITHUB_PR_NUMBER" > github_pr.txt
+          # per-run token guarantees a change even when re-running on the PR
+          echo "$RUN_TOKEN" > run_attempt.txt
 
-          git add -A
+          # only commit the relevant changed files
+          git add .github/workflows/convert-integrate-comment-test.yml action_sha.txt github_pr.txt run_attempt.txt
 
           ../sigma-rule-deployment/.github/scripts/create-verified-commit.sh \
             grafana/sigma-rule-deployment-integration-test \
