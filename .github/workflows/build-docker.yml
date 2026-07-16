@@ -110,8 +110,9 @@ jobs:
             "integration-test-pr-${GITHUB_PR_NUMBER}" \
             main)
 
-          rm -r ./rules
-          rm -r ./pipelines
+          # remove old test files, if they exist
+          rm -rf ./rules
+          rm -rf ./pipelines
           rm test.yml
           rm config.yml
 
