@@ -1,0 +1,109 @@
+{
+  "id": 0,
+  "uid": "31274f1b",
+  "orgID": 1,
+  "folderUID": "ae9ojcgwmy48wf",
+  "ruleGroup": "Every 1 Hour",
+  "title": "Manual Flag Test Rule",
+  "condition": "C",
+  "data": [
+    {
+      "refId": "A0",
+      "queryType": "instant",
+      "relativeTimeRange": {
+        "from": 3600,
+        "to": 0
+      },
+      "datasourceUid": "grafanacloud-logs",
+      "model": {
+        "refId": "A0",
+        "datasource": {
+          "type": "loki",
+          "uid": "grafanacloud-logs"
+        },
+        "hide": false,
+        "expr": "SENTINEL_DEPLOY_EXPLICIT_DO_NOT_OVERWRITE",
+        "queryType": "instant",
+        "editorMode": "code"
+      }
+    },
+    {
+      "refId": "B",
+      "queryType": "",
+      "relativeTimeRange": {
+        "from": 3600,
+        "to": 0
+      },
+      "datasourceUid": "__expr__",
+      "model": {
+        "refId": "B",
+        "hide": false,
+        "type": "math",
+        "datasource": {
+          "uid": "__expr__",
+          "type": "__expr__"
+        },
+        "expression": "${A0}"
+      }
+    },
+    {
+      "refId": "C",
+      "queryType": "",
+      "relativeTimeRange": {
+        "from": 3600,
+        "to": 0
+      },
+      "datasourceUid": "__expr__",
+      "model": {
+        "refId": "C",
+        "hide": false,
+        "type": "threshold",
+        "datasource": {
+          "uid": "__expr__",
+          "type": "__expr__"
+        },
+        "conditions": [
+          {
+            "type": "query",
+            "evaluator": {
+              "params": [
+                0
+              ],
+              "type": "gt"
+            },
+            "operator": {
+              "type": "and"
+            },
+            "query": {
+              "params": [
+                "C"
+              ]
+            },
+            "reducer": {
+              "params": [],
+              "type": "last"
+            }
+          }
+        ],
+        "expression": "B"
+      }
+    }
+  ],
+  "updated": "0001-01-01T00:00:00Z",
+  "noDataState": "OK",
+  "execErrState": "OK",
+  "for": "0s",
+  "keep_firing_for": "0s",
+  "annotations": {
+    "ConversionFile": "conversions/manual_explicit_manual-test.json",
+    "LogSourceType": "loki",
+    "LogSourceUid": "grafanacloud-logs",
+    "Lookback": "0s",
+    "Query": "{name=`test-datasource`} | json | action=`manual_flag_marker`",
+    "TimeWindow": "1h",
+    "manual": "true"
+  },
+  "isPaused": false,
+  "notification_settings": null,
+  "record": null
+}

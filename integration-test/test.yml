@@ -15,6 +15,20 @@ conversions:
         queries:
           - "{name=`test-datasource`} | json | username=`user1`"
           - "{name=`test-datasource`} | json | username=`user2`"
+  - name: Manual Flag - Explicit Conversion
+    description: A conversion file already marked manual is preserved (not overwritten) by convert
+    outputs:
+      - name: manual_explicit_manual-test.json
+        manual: true
+        queries:
+          - "{name=`test-datasource`} | json | action=`SENTINEL_MANUAL_EXPLICIT_DO_NOT_OVERWRITE`"
+  - name: Manual Flag - Backfilled Conversion
+    description: A hand-edited conversion file is auto-flagged manual and preserved (not overwritten) by convert
+    outputs:
+      - name: manual_backfill_manual-test.json
+        manual: true
+        queries:
+          - "{name=`test-datasource`} | json | action=`SENTINEL_MANUAL_BACKFILL_DO_NOT_OVERWRITE`"
 integrations:
   - name: Test Integration 1
     description: Tests that the first integration is converted correctly with it's pipelines
@@ -39,3 +53,23 @@ integrations:
             model:
               type: math
               expression: "${A0}+${A1}"
+  - name: Manual Flag - Explicit Deployment
+    description: A deployment file already marked manual is preserved (not overwritten) by integrate
+    outputs:
+      - name: manual_explicit_manual-test
+        annotations:
+          manual: "true"
+        alerting_rules:
+          - refId: A0
+            model:
+              expr: SENTINEL_DEPLOY_EXPLICIT_DO_NOT_OVERWRITE
+  - name: Manual Flag - Backfilled Deployment
+    description: A hand-edited deployment file is auto-flagged manual and preserved (not overwritten) by integrate
+    outputs:
+      - name: manual_backfill_manual-test
+        annotations:
+          manual: "true"
+        alerting_rules:
+          - refId: A0
+            model:
+              expr: SENTINEL_DEPLOY_BACKFILL_DO_NOT_OVERWRITE

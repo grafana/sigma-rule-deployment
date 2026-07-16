@@ -1,0 +1,34 @@
+{
+  "conversion_name": "manual_explicit",
+  "input_file": "rules/manual-test.yml",
+  "output_file": "conversions/manual_explicit_manual-test.json",
+  "queries": [
+    "{name=`test-datasource`} | json | action=`SENTINEL_MANUAL_EXPLICIT_DO_NOT_OVERWRITE`"
+  ],
+  "rules": [
+    {
+      "author": "integration-test",
+      "date": "2025-11-10",
+      "description": "Rule used by the manual-flag integration test. Its generated conversion and deployment files are hand-edited (with a sentinel value) in the test fixtures to verify the converter and integrator do not overwrite manually-maintained files.",
+      "detection": {
+        "condition": "selection",
+        "selection": {
+          "action": [
+            "manual_flag_marker"
+          ]
+        }
+      },
+      "falsepositives": [
+        "This is a test rule, there are no false positives."
+      ],
+      "id": "d290f1ee-6c54-4b01-90e6-d701748f0851",
+      "level": "informational",
+      "logsource": {
+        "category": "integration-test"
+      },
+      "status": "test",
+      "title": "Manual Flag Test Rule"
+    }
+  ],
+  "manual": true
+}
