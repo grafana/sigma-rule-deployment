@@ -95,6 +95,7 @@ jobs:
 - The config file must include `folders.conversion_path` and `folders.deployment_path` settings.
 - Data source configurations should include connection details and authentication.
 - Alert rule templates define the structure and default values for generated rules.
+- With `template_all_rules: true`, use `{{ highestLevel . }}` in a templated label or annotation to select the highest Sigma level in the file (`informational` < `low` < `medium` < `high` < `critical`).
 
 ### Query Testing
 

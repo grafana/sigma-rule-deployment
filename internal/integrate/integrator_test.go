@@ -287,6 +287,52 @@ func TestConvertToAlert(t *testing.T) {
 				"runbook_url":    "https://my.runbook.url/A_non-title_case_title",
 			},
 		},
+		{
+			name:    "highest level template with all rules",
+			queries: []string{"{job=`.+`} | json | test=`true`"},
+			titles:  "Correlation Rule",
+			rule: &model.ProvisionedAlertRule{
+				UID: "",
+			},
+			convObject: model.ConversionOutput{
+				Rules: []model.SigmaRule{
+					{Level: "low"},
+					{Level: "critical"},
+					{Level: "medium"},
+				},
+			},
+			convConfig: model.ConversionConfig{
+				Name:       "conv",
+				Target:     "loki",
+				DataSource: "my_data_source",
+				RuleGroup:  "Every 5 Minutes",
+				TimeWindow: "5m",
+			},
+			integratorConfig: model.IntegrationConfig{
+				TemplateLabels: map[string]string{
+					"Level": "{{ highestLevel . }}",
+				},
+				TemplateAnnotations: map[string]string{
+					"severity": "{{ highestLevel . }}",
+				},
+				TemplateAllRules: true,
+			},
+			wantQueryText: "sum(count_over_time({job=`.+`} | json | test=`true`[$__auto]))",
+			wantDuration:  model.Duration(300 * time.Second),
+			wantError:     false,
+			wantLabels: map[string]string{
+				"Level": "critical",
+			},
+			wantAnnotations: map[string]string{
+				"ConversionFile": "test_conversion_file.json",
+				"LogSourceType":  "loki",
+				"LogSourceUid":   "my_data_source",
+				"Lookback":       "0s",
+				"Query":          "{job=`.+`} | json | test=`true`",
+				"TimeWindow":     "5m",
+				"severity":       "critical",
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -330,6 +376,26 @@ func TestConvertToAlert(t *testing.T) {
 					}
 				}
 			}
+		})
+	}
+}
+
+func TestHighestLevel(t *testing.T) {
+	tests := []struct {
+		name  string
+		rules []model.SigmaRule
+		want  string
+	}{
+		{name: "no rules", want: ""},
+		{name: "informational", rules: []model.SigmaRule{{Level: "informational"}}, want: "informational"},
+		{name: "highest regardless of order", rules: []model.SigmaRule{{Level: "high"}, {Level: "low"}, {Level: "medium"}}, want: "high"},
+		{name: "normalizes level", rules: []model.SigmaRule{{Level: " HIGH "}, {Level: "medium"}}, want: "high"},
+		{name: "ignores unknown levels", rules: []model.SigmaRule{{Level: "unknown"}, {Level: "medium"}}, want: "medium"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, highestLevel(tt.rules))
 		})
 	}
 }

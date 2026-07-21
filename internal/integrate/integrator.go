@@ -28,6 +28,9 @@ const TRUE = "true"
 const ManualAnnotation = "manual"
 
 var FuncMap = template.FuncMap{
+	// Sigma rule metadata
+	"highestLevel": highestLevel,
+
 	// Case conversion
 	"toUpper": strings.ToUpper,
 	"toLower": strings.ToLower,
@@ -72,6 +75,39 @@ var FuncMap = template.FuncMap{
 	// Comparison
 	"compare":   strings.Compare,
 	"equalFold": strings.EqualFold,
+}
+
+func highestLevel(rules []model.SigmaRule) string {
+	highest := ""
+	highestPriority := -1
+
+	for _, rule := range rules {
+		level := strings.ToLower(strings.TrimSpace(rule.Level))
+		priority := sigmaLevelPriority(level)
+		if priority > highestPriority {
+			highest = level
+			highestPriority = priority
+		}
+	}
+
+	return highest
+}
+
+func sigmaLevelPriority(level string) int {
+	switch level {
+	case "informational":
+		return 0
+	case "low":
+		return 1
+	case "medium":
+		return 2
+	case "high":
+		return 3
+	case "critical":
+		return 4
+	default:
+		return -1
+	}
 }
 
 type Integrator struct {
@@ -677,7 +713,7 @@ func (i *Integrator) ConvertToAlert(rule *model.ProvisionedAlertRule, queries []
 
 	if i.config.IntegratorConfig.TemplateLabels != nil {
 		for key, value := range i.config.IntegratorConfig.TemplateLabels {
-			tmpl, err := template.New("label_" + key).Parse(value)
+			tmpl, err := template.New("label_" + key).Funcs(FuncMap).Parse(value)
 			if err != nil {
 				return fmt.Errorf("error parsing template %s: %v", key, err)
 			}

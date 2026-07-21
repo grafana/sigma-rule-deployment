@@ -48,6 +48,7 @@ integration:
   to: "now"
   template_labels:
     Level: "{{.Level}}"
+    # Level: "{{ highestLevel . }}" # Use with template_all_rules to select the highest level in the file
     Product: "{{.Logsource.Product}}"
     Service: "{{.Logsource.Service}}"
   template_annotations:
