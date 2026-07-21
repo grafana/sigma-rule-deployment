@@ -50,6 +50,12 @@ type Deployer struct {
 	groupsToUpdate map[string]bool
 }
 
+// AlertDeployment identifies a deployed alert and its display title.
+type AlertDeployment struct {
+	UID   string `json:"uid"`
+	Title string `json:"title"`
+}
+
 func NewDeployer() *Deployer {
 	return &Deployer{
 		groupsToUpdate: map[string]bool{},
@@ -69,11 +75,11 @@ func (d *Deployer) IsFreshDeploy() bool {
 	return d.config.freshDeploy
 }
 
-func (d *Deployer) Deploy(ctx context.Context) ([]string, []string, []string, error) {
+func (d *Deployer) Deploy(ctx context.Context) ([]AlertDeployment, []AlertDeployment, []AlertDeployment, error) {
 	// Lists to store the alerts that were created, updated and deleted at any point during the deployment
-	alertsCreated := make([]string, len(d.config.alertsToAdd))
-	alertsUpdated := make([]string, len(d.config.alertsToUpdate))
-	alertsDeleted := make([]string, len(d.config.alertsToRemove))
+	alertsCreated := make([]AlertDeployment, 0, len(d.config.alertsToAdd))
+	alertsUpdated := make([]AlertDeployment, 0, len(d.config.alertsToUpdate))
+	alertsDeleted := make([]AlertDeployment, 0, len(d.config.alertsToRemove))
 
 	log.Printf("Preparing to deploy %d alerts, update %d alerts and delete %d alerts",
 		len(d.config.alertsToAdd), len(d.config.alertsToUpdate), len(d.config.alertsToRemove))
@@ -88,6 +94,7 @@ func (d *Deployer) Deploy(ctx context.Context) ([]string, []string, []string, er
 			err := fmt.Errorf("invalid alert filename: %s", alertFile)
 			return alertsCreated, alertsUpdated, alertsDeleted, err
 		}
+		alertTitle := d.getAlertTitle(ctx, alertUID)
 		uid, err := d.deleteAlert(ctx, alertUID)
 		if err != nil {
 			return alertsCreated, alertsUpdated, alertsDeleted, err
@@ -95,7 +102,7 @@ func (d *Deployer) Deploy(ctx context.Context) ([]string, []string, []string, er
 		// UID could be empty if the alert was not found
 		// In this case, we don't want to add it to the list of deleted alerts
 		if uid != "" {
-			alertsDeleted = append(alertsDeleted, uid)
+			alertsDeleted = append(alertsDeleted, AlertDeployment{UID: uid, Title: alertTitle})
 		}
 	}
 	// Process alert CREATIONS
@@ -105,16 +112,20 @@ func (d *Deployer) Deploy(ctx context.Context) ([]string, []string, []string, er
 			log.Printf("Can't read file %s: %v", alertFile, err)
 			return alertsCreated, alertsUpdated, alertsDeleted, err
 		}
+		alert, err := parseAlert(content)
+		if err != nil {
+			return alertsCreated, alertsUpdated, alertsDeleted, err
+		}
 		uid, updated, err := d.createAlert(ctx, content, true)
 		if err != nil {
 			return alertsCreated, alertsUpdated, alertsDeleted, err
 		}
 		if updated {
 			// If the alert was updated, we need to add it to the list of updated alerts
-			alertsUpdated = append(alertsUpdated, uid)
+			alertsUpdated = append(alertsUpdated, AlertDeployment{UID: uid, Title: alert.Title})
 		} else {
 			// If the alert was created, we need to add it to the list of created alerts
-			alertsCreated = append(alertsCreated, uid)
+			alertsCreated = append(alertsCreated, AlertDeployment{UID: uid, Title: alert.Title})
 		}
 	}
 	// Process alert UPDATES
@@ -122,6 +133,10 @@ func (d *Deployer) Deploy(ctx context.Context) ([]string, []string, []string, er
 		content, err := shared.ReadLocalFile(alertFile)
 		if err != nil {
 			log.Printf("Can't read file %s: %v", alertFile, err)
+			return alertsCreated, alertsUpdated, alertsDeleted, err
+		}
+		alert, err := parseAlert(content)
+		if err != nil {
 			return alertsCreated, alertsUpdated, alertsDeleted, err
 		}
 		uid, created, err := d.updateAlert(ctx, content, true)
@@ -133,10 +148,10 @@ func (d *Deployer) Deploy(ctx context.Context) ([]string, []string, []string, er
 		// So we take this into account for the reporting
 		if created {
 			// If the alert was created, we need to add it to the list of created alerts
-			alertsCreated = append(alertsCreated, uid)
+			alertsCreated = append(alertsCreated, AlertDeployment{UID: uid, Title: alert.Title})
 		} else {
 			// If the alert was updated, we need to add it to the list of updated alerts
-			alertsUpdated = append(alertsUpdated, uid)
+			alertsUpdated = append(alertsUpdated, AlertDeployment{UID: uid, Title: alert.Title})
 		}
 	}
 
@@ -152,10 +167,10 @@ func (d *Deployer) Deploy(ctx context.Context) ([]string, []string, []string, er
 	return alertsCreated, alertsUpdated, alertsDeleted, nil
 }
 
-func (d *Deployer) WriteOutput(alertsCreated []string, alertsUpdated []string, alertsDeleted []string) error {
-	alertsCreatedStr := strings.Join(alertsCreated, " ")
-	alertsUpdatedStr := strings.Join(alertsUpdated, " ")
-	alertsDeletedStr := strings.Join(alertsDeleted, " ")
+func (d *Deployer) WriteOutput(alertsCreated []AlertDeployment, alertsUpdated []AlertDeployment, alertsDeleted []AlertDeployment) error {
+	alertsCreatedStr := strings.Join(alertDeploymentUIDs(alertsCreated), " ")
+	alertsUpdatedStr := strings.Join(alertDeploymentUIDs(alertsUpdated), " ")
+	alertsDeletedStr := strings.Join(alertDeploymentUIDs(alertsDeleted), " ")
 
 	if err := shared.SetOutput("alerts_created", alertsCreatedStr); err != nil {
 		return err
@@ -166,7 +181,37 @@ func (d *Deployer) WriteOutput(alertsCreated []string, alertsUpdated []string, a
 	if err := shared.SetOutput("alerts_deleted", alertsDeletedStr); err != nil {
 		return err
 	}
+	if err := setAlertDeploymentOutput("alerts_created_details", alertsCreated); err != nil {
+		return err
+	}
+	if err := setAlertDeploymentOutput("alerts_updated_details", alertsUpdated); err != nil {
+		return err
+	}
+	if err := setAlertDeploymentOutput("alerts_deleted_details", alertsDeleted); err != nil {
+		return err
+	}
 	return nil
+}
+
+func alertDeploymentUIDs(alerts []AlertDeployment) []string {
+	uids := make([]string, 0, len(alerts))
+	for _, alert := range alerts {
+		if alert.UID != "" {
+			uids = append(uids, alert.UID)
+		}
+	}
+	return uids
+}
+
+func setAlertDeploymentOutput(name string, alerts []AlertDeployment) error {
+	if alerts == nil {
+		alerts = []AlertDeployment{}
+	}
+	details, err := json.Marshal(alerts)
+	if err != nil {
+		return fmt.Errorf("error encoding deployment details: %w", err)
+	}
+	return shared.SetOutput(name, string(details))
 }
 
 func (d *Deployer) LoadConfig(_ context.Context) error {
@@ -506,6 +551,15 @@ func (d *Deployer) deleteAlert(ctx context.Context, uid string) (string, error) 
 	log.Printf("Alert %s deleted", uid)
 
 	return uid, nil
+}
+
+func (d *Deployer) getAlertTitle(ctx context.Context, uid string) string {
+	alert, err := d.getAlert(ctx, uid)
+	if err != nil || strings.TrimSpace(alert.Title) == "" {
+		log.Printf("Can't retrieve title for alert %s. Using UID instead.", sanitizeForLog(uid))
+		return uid
+	}
+	return alert.Title
 }
 
 func (d *Deployer) checkAlertsMatch(a, b model.Alert) bool {

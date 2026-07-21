@@ -105,43 +105,25 @@ runs:
         ALERTS_CREATED: ${{ steps.output.outputs.alerts_created }}
         ALERTS_UPDATED: ${{ steps.output.outputs.alerts_updated }}
         ALERTS_DELETED: ${{ steps.output.outputs.alerts_deleted }}
+        ALERTS_CREATED_DETAILS: ${{ steps.output.outputs.alerts_created_details }}
+        ALERTS_UPDATED_DETAILS: ${{ steps.output.outputs.alerts_updated_details }}
+        ALERTS_DELETED_DETAILS: ${{ steps.output.outputs.alerts_deleted_details }}
         GRAFANA_INSTANCE: ${{ steps.grafana-instance.outputs.grafana_instance }}
+        ACTION_PATH: ${{ github.action_path }}
       with:
           script: |
-            const url = process.env.GRAFANA_INSTANCE.replaceAll("\"", "");
+            const { buildDeploymentComment, parseDeploymentResults } = require(`${process.env.ACTION_PATH}/deployment-comment.cjs`);
 
-            const createdUids = process.env.ALERTS_CREATED.split(" ").filter(uid => uid !== "");
-            const updatedUids = process.env.ALERTS_UPDATED.split(" ").filter(uid => uid !== "");
-            const deletedUids = process.env.ALERTS_DELETED.split(" ").filter(uid => uid !== "");
+            const createdAlerts = parseDeploymentResults(process.env.ALERTS_CREATED_DETAILS, process.env.ALERTS_CREATED);
+            const updatedAlerts = parseDeploymentResults(process.env.ALERTS_UPDATED_DETAILS, process.env.ALERTS_UPDATED);
+            const deletedAlerts = parseDeploymentResults(process.env.ALERTS_DELETED_DETAILS, process.env.ALERTS_DELETED);
 
-            let createdUrls = [];
-            let updatedUrls = [];
-
-            if (url) {
-              createdUrls = createdUids.map(uid => `${url}/alerting/grafana/${uid}/view`);
-              updatedUrls = updatedUids.map(uid => `${url}/alerting/grafana/${uid}/view`);
-            }
-
-            const body = `
-            ## Sigma Rule Deployment Status
-
-            | Created | Updated | Deleted |
-            | --- | --- | --- |
-            | ${createdUids.length} | ${updatedUids.length} | ${deletedUids.length} |
-
-            ### Created
-
-            ${createdUrls.length === createdUids.length ? createdUrls.map((url, index) => `- [${createdUids[index]}](${url})`).join("\n") : createdUids.map(uid => `- ${uid}`).join("\n")}
-
-            ### Updated
-
-            ${updatedUrls.length === updatedUids.length ? updatedUrls.map((url, index) => `- [${updatedUids[index]}](${url})`).join("\n") : updatedUids.map(uid => `- ${uid}`).join("\n")}
-
-            ### Deleted
-
-            ${deletedUids.map(uid => `- ${uid}`).join("\n")}
-
-            `;
+            const body = buildDeploymentComment({
+              created: createdAlerts,
+              updated: updatedAlerts,
+              deleted: deletedAlerts,
+              grafanaInstance: process.env.GRAFANA_INSTANCE,
+            });
 
             const associatedPrs = await github.rest.repos.listPullRequestsAssociatedWithCommit({
               owner: context.repo.owner,
