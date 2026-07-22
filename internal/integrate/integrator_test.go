@@ -333,6 +333,62 @@ func TestConvertToAlert(t *testing.T) {
 				"severity":       "critical",
 			},
 		},
+		{
+			name:    "highest level label without all rules",
+			queries: []string{"{job=`.+`} | json | test=`true`"},
+			titles:  "Correlation Rule",
+			rule: &model.ProvisionedAlertRule{
+				UID: "",
+			},
+			convObject: model.ConversionOutput{
+				Rules: []model.SigmaRule{
+					{Level: "low"},
+					{Level: "critical"},
+				},
+			},
+			convConfig: model.ConversionConfig{
+				Name:       "conv",
+				Target:     "loki",
+				DataSource: "my_data_source",
+				RuleGroup:  "Every 5 Minutes",
+				TimeWindow: "5m",
+			},
+			integratorConfig: model.IntegrationConfig{
+				TemplateLabels: map[string]string{
+					"Level": "{{ highestLevel . }}",
+				},
+				TemplateAllRules: false,
+			},
+			wantError: true,
+		},
+		{
+			name:    "highest level annotation without all rules",
+			queries: []string{"{job=`.+`} | json | test=`true`"},
+			titles:  "Correlation Rule",
+			rule: &model.ProvisionedAlertRule{
+				UID: "",
+			},
+			convObject: model.ConversionOutput{
+				Rules: []model.SigmaRule{
+					{Level: "low"},
+					{Level: "critical"},
+				},
+			},
+			convConfig: model.ConversionConfig{
+				Name:       "conv",
+				Target:     "loki",
+				DataSource: "my_data_source",
+				RuleGroup:  "Every 5 Minutes",
+				TimeWindow: "5m",
+			},
+			integratorConfig: model.IntegrationConfig{
+				TemplateAnnotations: map[string]string{
+					"severity": "{{ highestLevel . }}",
+				},
+				TemplateAllRules: false,
+			},
+			wantError: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -378,6 +434,23 @@ func TestConvertToAlert(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestTemplateFuncs(t *testing.T) {
+	withAllRules := templateFuncs(true)
+	withoutAllRules := templateFuncs(false)
+
+	assert.Contains(t, withAllRules, "highestLevel")
+	assert.NotContains(t, withoutAllRules, "highestLevel")
+
+	// Helpers that operate on a single rule stay available either way
+	for _, name := range []string{"toUpper", "toLower", "replaceAll"} {
+		assert.Contains(t, withAllRules, name)
+		assert.Contains(t, withoutAllRules, name)
+	}
+
+	// The shared map must not be mutated by building a func map
+	assert.NotContains(t, FuncMap, "highestLevel")
 }
 
 func TestHighestLevel(t *testing.T) {
