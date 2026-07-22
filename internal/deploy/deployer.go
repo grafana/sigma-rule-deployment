@@ -112,20 +112,16 @@ func (d *Deployer) Deploy(ctx context.Context) ([]AlertDeployment, []AlertDeploy
 			log.Printf("Can't read file %s: %v", alertFile, err)
 			return alertsCreated, alertsUpdated, alertsDeleted, err
 		}
-		alert, err := parseAlert(content)
-		if err != nil {
-			return alertsCreated, alertsUpdated, alertsDeleted, err
-		}
-		uid, updated, err := d.createAlert(ctx, content, true)
+		deployment, updated, err := d.createAlert(ctx, content, true)
 		if err != nil {
 			return alertsCreated, alertsUpdated, alertsDeleted, err
 		}
 		if updated {
 			// If the alert was updated, we need to add it to the list of updated alerts
-			alertsUpdated = append(alertsUpdated, AlertDeployment{UID: uid, Title: alert.Title})
+			alertsUpdated = append(alertsUpdated, deployment)
 		} else {
 			// If the alert was created, we need to add it to the list of created alerts
-			alertsCreated = append(alertsCreated, AlertDeployment{UID: uid, Title: alert.Title})
+			alertsCreated = append(alertsCreated, deployment)
 		}
 	}
 	// Process alert UPDATES
@@ -135,11 +131,7 @@ func (d *Deployer) Deploy(ctx context.Context) ([]AlertDeployment, []AlertDeploy
 			log.Printf("Can't read file %s: %v", alertFile, err)
 			return alertsCreated, alertsUpdated, alertsDeleted, err
 		}
-		alert, err := parseAlert(content)
-		if err != nil {
-			return alertsCreated, alertsUpdated, alertsDeleted, err
-		}
-		uid, created, err := d.updateAlert(ctx, content, true)
+		deployment, created, err := d.updateAlert(ctx, content, true)
 		if err != nil {
 			return alertsCreated, alertsUpdated, alertsDeleted, err
 		}
@@ -148,10 +140,10 @@ func (d *Deployer) Deploy(ctx context.Context) ([]AlertDeployment, []AlertDeploy
 		// So we take this into account for the reporting
 		if created {
 			// If the alert was created, we need to add it to the list of created alerts
-			alertsCreated = append(alertsCreated, AlertDeployment{UID: uid, Title: alert.Title})
+			alertsCreated = append(alertsCreated, deployment)
 		} else {
 			// If the alert was updated, we need to add it to the list of updated alerts
-			alertsUpdated = append(alertsUpdated, AlertDeployment{UID: uid, Title: alert.Title})
+			alertsUpdated = append(alertsUpdated, deployment)
 		}
 	}
 
@@ -363,9 +355,9 @@ func addToAlertList(alertList []string, file string, prefix string) []string {
 	return alertList
 }
 
-func (d *Deployer) createAlert(ctx context.Context, content string, updateIfExists bool) (string, bool, error) {
+func (d *Deployer) createAlert(ctx context.Context, content string, updateIfExists bool) (AlertDeployment, bool, error) {
 	//  Return values:
-	// 1. UID of the alert
+	// 1. Deployment details of the alert
 	// 2. Whether the alert was updated instead of create. If updateIfExists is false, this will always be false.
 	// 3. Error if any
 
@@ -377,92 +369,94 @@ func (d *Deployer) createAlert(ctx context.Context, content string, updateIfExis
 	// Retrieve some alert information
 	alert, err := parseAlert(content)
 	if err != nil {
-		return "", false, err
+		return AlertDeployment{}, false, err
 	}
+	deployment := AlertDeployment{UID: alert.UID, Title: alert.Title}
 	d.groupsToUpdate[alert.RuleGroup] = true
 
 	// Prepare the request
 	res, err := d.client.PostRaw(ctx, "api/v1/provisioning/alert-rules", []byte(content))
 	if err != nil {
-		return "", false, err
+		return AlertDeployment{}, false, err
 	}
 	defer res.Body.Close()
 
 	// Check the response
 	resp := Response{}
 	if err := shared.ReadJSONResponse(res, &resp); err != nil {
-		return "", false, err
+		return AlertDeployment{}, false, err
 	}
 
 	switch res.StatusCode {
 	case http.StatusCreated:
 		// Alert created successfully
 		log.Printf("Alert %s (%s) created", alert.UID, alert.Title)
-		return alert.UID, false, nil
+		return deployment, false, nil
 	case http.StatusConflict:
 		// Another alert with the same UID exists
 		// If the alert already exists and we don't want to update it, we return an error
 		if !updateIfExists {
 			log.Printf("Alert %s (%s) conflicts with another alert", alert.UID, alert.Title)
-			return "", false, fmt.Errorf("error creating alert: returned status %s", res.Status)
+			return AlertDeployment{}, false, fmt.Errorf("error creating alert: returned status %s", res.Status)
 		}
 		// Otherwise, we need to check if it's a re-creation (in which case we proceed to update it instead)
 		// or an actual conflict
-		uid, err := d.tryToUpdateConflictingAlert(ctx, alert, content)
+		updatedDeployment, err := d.tryToUpdateConflictingAlert(ctx, alert, content)
 		if err != nil {
-			return "", false, err
+			return AlertDeployment{}, false, err
 		}
 
-		return uid, true, nil
+		return updatedDeployment, true, nil
 	default:
 		log.Printf("Can't create alert %s (%s). Status: %d, Message: %s", alert.UID, alert.Title, res.StatusCode, resp.Message)
-		return "", false, fmt.Errorf("error creating alert: returned status %s", res.Status)
+		return AlertDeployment{}, false, fmt.Errorf("error creating alert: returned status %s", res.Status)
 	}
 }
 
-func (d *Deployer) tryToUpdateConflictingAlert(ctx context.Context, alert model.Alert, content string) (string, error) {
+func (d *Deployer) tryToUpdateConflictingAlert(ctx context.Context, alert model.Alert, content string) (AlertDeployment, error) {
 	// Retrieve the existing alert it's conflicting with
 	existingAlert, err := d.getAlert(ctx, alert.UID)
 	if err != nil {
 		log.Printf("Can't get alert %s. Error: %v", alert.UID, err)
-		return "", fmt.Errorf("error getting alert: %v", err)
+		return AlertDeployment{}, fmt.Errorf("error getting alert: %v", err)
 	}
 	// Check if the conflicting alerts have the same parameters
 	// Otherwise, it's an actual conflict
 	if !d.checkAlertsMatch(existingAlert, alert) {
 		// The alert already exists, but with different parameters
 		log.Printf("Alert %s (%s) is conflicting with another alert having the same UID", alert.UID, alert.Title)
-		return "", fmt.Errorf("error creating alert: %v", err)
+		return AlertDeployment{}, fmt.Errorf("error creating alert: %v", err)
 	}
 	// The alert already exists, but with the same parameters
 	// In this case, we can proceed to update it
 	log.Printf("Alert %s (%s) already exists, updating it instead", alert.UID, alert.Title)
-	uid, _, err := d.updateAlert(ctx, content, false)
+	deployment, _, err := d.updateAlert(ctx, content, false)
 	if err != nil {
 		log.Printf("Can't update alert %s: %v", alert.UID, err)
-		return "", fmt.Errorf("error updating alert: %v", err)
+		return AlertDeployment{}, fmt.Errorf("error updating alert: %v", err)
 	}
-	return uid, nil
+	return deployment, nil
 }
 
-func (d *Deployer) updateAlert(ctx context.Context, content string, createIfNotFound bool) (string, bool, error) {
+func (d *Deployer) updateAlert(ctx context.Context, content string, createIfNotFound bool) (AlertDeployment, bool, error) {
 	//  Return values:
-	// 1. UID of the alert
+	// 1. Deployment details of the alert
 	// 2. Whether the alert had to be (re-)created. If createIfNotFound is false, this will always be false.
 	// 3. Error if any
 
 	// Retrieve some alert information
 	alert, err := parseAlert(content)
 	if err != nil {
-		return "", false, err
+		return AlertDeployment{}, false, err
 	}
+	deployment := AlertDeployment{UID: alert.UID, Title: alert.Title}
 	d.groupsToUpdate[alert.RuleGroup] = true
 
 	// Prepare the request
 	path := fmt.Sprintf("api/v1/provisioning/alert-rules/%s", alert.UID)
 	res, err := d.client.PutRaw(ctx, path, []byte(content))
 	if err != nil {
-		return "", false, err
+		return AlertDeployment{}, false, err
 	}
 	defer res.Body.Close()
 
@@ -471,20 +465,20 @@ func (d *Deployer) updateAlert(ctx context.Context, content string, createIfNotF
 		// If an alert has been manually deleted in Grafana, and the deployer isn't aware of it, then next time it's modified
 		// it will try to update it. This will fail with a 404 error, so we need to create it instead
 		log.Printf("Alert %s not found for update, (re-)creating it instead", alert.UID)
-		uid, _, err := d.createAlert(ctx, content, false)
+		createdDeployment, _, err := d.createAlert(ctx, content, false)
 		if err != nil {
 			log.Printf("Can't create alert: %v", err)
-			return "", true, err
+			return AlertDeployment{}, true, err
 		}
-		return uid, true, nil
+		return createdDeployment, true, nil
 	} else if res.StatusCode != http.StatusOK {
 		log.Printf("Can't update alert. Status: %d", res.StatusCode)
-		return "", false, fmt.Errorf("error updating alert: returned status %s", res.Status)
+		return AlertDeployment{}, false, fmt.Errorf("error updating alert: returned status %s", res.Status)
 	}
 
 	log.Printf("Alert %s (%s) updated", alert.UID, alert.Title)
 
-	return alert.UID, false, nil
+	return deployment, false, nil
 }
 
 func (d *Deployer) updateAlertGroupInterval(ctx context.Context, folderUID string, group string, interval int64) error {
