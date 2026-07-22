@@ -181,16 +181,16 @@ func TestUpdateAlert(t *testing.T) {
 	}
 
 	// Update an alert
-	uid, created, err := d.updateAlert(ctx, `{"uid":"abcd123","title":"Test alert", "folderUID": "efgh456", "orgID": 23}`, true)
+	deployment, created, err := d.updateAlert(ctx, `{"uid":"abcd123","title":"Test alert", "folderUID": "efgh456", "orgID": 23}`, true)
 	assert.NoError(t, err)
 	assert.Equal(t, false, created)
-	assert.Equal(t, "abcd123", uid)
+	assert.Equal(t, AlertDeployment{UID: "abcd123", Title: "Test alert"}, deployment)
 
 	// Try to update an alert that doesn't exist. This should lead to a creation
-	uid, created, err = d.updateAlert(ctx, `{"uid":"xyz123","title":"Test alert", "folderUID": "efgh456", "orgID": 23}`, true)
+	deployment, created, err = d.updateAlert(ctx, `{"uid":"xyz123","title":"Test alert", "folderUID": "efgh456", "orgID": 23}`, true)
 	assert.NoError(t, err)
 	assert.Equal(t, true, created)
-	assert.Equal(t, "xyz123", uid)
+	assert.Equal(t, AlertDeployment{UID: "xyz123", Title: "Test alert"}, deployment)
 }
 
 func mockServerUpdate(t *testing.T, existingAlerts []string) *httptest.Server {
@@ -283,16 +283,16 @@ func TestCreateAlert(t *testing.T) {
 	}
 
 	// Create an alert
-	uid, updated, err := d.createAlert(ctx, `{"uid":"abcd123","title":"Test alert", "folderUID": "efgh456", "orgID": 23}`, true)
+	deployment, updated, err := d.createAlert(ctx, `{"uid":"abcd123","title":"Test alert", "folderUID": "efgh456", "orgID": 23}`, true)
 	assert.NoError(t, err)
 	assert.Equal(t, false, updated)
-	assert.Equal(t, "abcd123", uid)
+	assert.Equal(t, AlertDeployment{UID: "abcd123", Title: "Test alert"}, deployment)
 
 	// Try to create an alert that already exists. This should lead to an update
-	uid, updated, err = d.createAlert(ctx, `{"uid":"xyz123","title":"Test alert", "folderUID": "efgh456", "orgID": 23}`, true)
+	deployment, updated, err = d.createAlert(ctx, `{"uid":"xyz123","title":"Test alert", "folderUID": "efgh456", "orgID": 23}`, true)
 	assert.NoError(t, err)
 	assert.Equal(t, true, updated)
-	assert.Equal(t, "xyz123", uid)
+	assert.Equal(t, AlertDeployment{UID: "xyz123", Title: "Test alert"}, deployment)
 
 	// Simulate a conflict (same alert UID but different folder)
 	_, _, err = d.createAlert(ctx, `{"uid":"xyz123","title":"Test alert", "folderUID": "efgh789", "orgID": 23}`, true)
