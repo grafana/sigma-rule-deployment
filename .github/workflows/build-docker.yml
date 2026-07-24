@@ -31,21 +31,82 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
+      # For fork pull requests the job's GITHUB_TOKEN is read-only for org
+      # packages, so we cannot (and must not) log in and push. Instead we build
+      # the image, export it as an artifact, and let the gated
+      # build-docker-fork-consume.yml workflow push it after a human approval.
+      - name: "Determine PR origin"
+        id: origin
+        if: github.event_name == 'pull_request'
+        env:
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          BASE_REPO: ${{ github.repository }}
+        run: |
+          if [ "$HEAD_REPO" = "$BASE_REPO" ]; then
+            echo "is_fork=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_fork=true" >> "$GITHUB_OUTPUT"
+          fi
       - name: "Login to GitHub Container Registry"
+        # Skip for fork PRs: the token cannot write org packages and login is
+        # not needed to build + export a local image artifact.
+        if: github.event_name != 'pull_request' || steps.origin.outputs.is_fork == 'false'
         uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: "Build and Push (PR)"
+      - name: "Build and Push (same-repo PR)"
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && steps.origin.outputs.is_fork == 'false'
         with:
           context: .
           file: ./Dockerfile
           tags: |
             ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${{ github.event.pull_request.head.sha }}
           push: true
+      - name: "Build and Export (fork PR)"
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        if: github.event_name == 'pull_request' && steps.origin.outputs.is_fork == 'true'
+        with:
+          context: .
+          file: ./Dockerfile
+          tags: |
+            ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${{ github.event.pull_request.head.sha }}
+          push: false
+          outputs: type=docker,dest=/tmp/pr-image.tar
+      - name: "Write fork PR metadata"
+        if: github.event_name == 'pull_request' && steps.origin.outputs.is_fork == 'true'
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          IMAGE_TAG: ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${{ github.event.pull_request.head.sha }}
+        run: |
+          mkdir -p /tmp/pr-metadata
+          jq -n \
+            --arg pr_number "$PR_NUMBER" \
+            --arg head_sha "$HEAD_SHA" \
+            --arg head_repo "$HEAD_REPO" \
+            --arg image_tag "$IMAGE_TAG" \
+            '{pr_number: $pr_number, head_sha: $head_sha, head_repo: $head_repo, image_tag: $image_tag}' \
+            > /tmp/pr-metadata/metadata.json
+      - name: "Upload fork PR image artifact"
+        if: github.event_name == 'pull_request' && steps.origin.outputs.is_fork == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: pr-image
+          path: /tmp/pr-image.tar
+          retention-days: 1
+          if-no-files-found: error
+      - name: "Upload fork PR metadata artifact"
+        if: github.event_name == 'pull_request' && steps.origin.outputs.is_fork == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: pr-metadata
+          path: /tmp/pr-metadata/metadata.json
+          retention-days: 1
+          if-no-files-found: error
       - name: "Build and Push (Push)"
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         if: github.event_name == 'push'
@@ -67,7 +128,10 @@ jobs:
           push: true
 
   test-pr:
-    if: github.event_name == 'pull_request'
+    # Only same-repo PRs run the integration test inline here: they have secrets
+    # and a package-write token. Fork PRs are handled by the human-gated
+    # build-docker-fork-consume.yml workflow (triggered on this run completing).
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
     name: "Integration Testing"
     runs-on: ubuntu-latest
     needs:
@@ -95,111 +159,21 @@ jobs:
           repository: grafana/sigma-rule-deployment-integration-test
           path: ./sigma-rule-deployment-integration-test
       - name: Create new branch
-        id: integration-pr
-        working-directory: ./sigma-rule-deployment-integration-test
         env:
+          TEST_REPO: grafana/sigma-rule-deployment-integration-test
+          TEST_REPO_DIR: ${{ github.workspace }}/sigma-rule-deployment-integration-test
+          FIXTURES_DIR: ${{ github.workspace }}/sigma-rule-deployment
           GITHUB_PR_NUMBER: ${{ github.event.pull_request.number }}
           GH_TOKEN: ${{ steps.get-github-app-token.outputs.token }}
           ACTION_SHA: ${{ github.event.pull_request.head.sha }}
           RUN_TOKEN: ${{ github.run_id }}-${{ github.run_attempt }}
-        run: |
-          git fetch
-
-          EXPECTED_HEAD_OID=$(../sigma-rule-deployment/.github/scripts/checkout-or-create-branch.sh \
-            grafana/sigma-rule-deployment-integration-test \
-            "integration-test-pr-${GITHUB_PR_NUMBER}" \
-            main)
-
-          # remove old test files, if they exist
-          rm -rf ./rules
-          rm -rf ./pipelines
-          rm test.yml
-          rm config.yml
-
-          cp -R ../sigma-rule-deployment/integration-test/* ./
-          sed -i "s/uses: grafana\/sigma-rule-deployment\/actions\/convert@.*/uses: grafana\/sigma-rule-deployment\/actions\/convert@$ACTION_SHA/g" ./.github/workflows/convert-integrate-test.yml
-          sed -i "s/uses: grafana\/sigma-rule-deployment\/actions\/integrate@.*/uses: grafana\/sigma-rule-deployment\/actions\/integrate@$ACTION_SHA/g" ./.github/workflows/convert-integrate-test.yml
-
-          # add the action sha so that the integration test can add the check to this PR
-          echo "$ACTION_SHA" > action_sha.txt
-          echo "$GITHUB_PR_NUMBER" > github_pr.txt
-          # per-run token guarantees a change even when re-running on the PR
-          echo "$RUN_TOKEN" > run_attempt.txt
-
-          git add -A
-
-          ../sigma-rule-deployment/.github/scripts/create-verified-commit.sh \
-            grafana/sigma-rule-deployment-integration-test \
-            "integration-test-pr-${GITHUB_PR_NUMBER}" \
-            "$EXPECTED_HEAD_OID" \
-            "update integration test configuration"
-
-          RESULT=$(gh pr list --json id,title -H "integration-test-pr-${GITHUB_PR_NUMBER}" | jq -r '. | length')
-
-          if [ "$RESULT" -eq 0 ]; then
-            gh pr create \
-              --title "Integration Test PR ${GITHUB_PR_NUMBER}" \
-              --body "This PR to test Sigma Rule Deployment App from Sigma Rule Deployment Integration Test App for grafana/sigma-rule-deployment#${GITHUB_PR_NUMBER}" \
-              --head "integration-test-pr-${GITHUB_PR_NUMBER}" \
-              --base main \
-              --draft \
-              --label "automated"
-          fi
+        run: ${{ github.workspace }}/sigma-rule-deployment/.github/scripts/create-integration-test-pr.sh
       - name: Update integration main branch to latest and send test comment
-        working-directory: ./sigma-rule-deployment-integration-test
         env:
+          TEST_REPO: grafana/sigma-rule-deployment-integration-test
+          TEST_REPO_DIR: ${{ github.workspace }}/sigma-rule-deployment-integration-test
           GITHUB_PR_NUMBER: ${{ github.event.pull_request.number }}
           GH_TOKEN: ${{ steps.get-github-app-token.outputs.token }}
           ACTION_SHA: ${{ github.event.pull_request.head.sha }}
           RUN_TOKEN: ${{ github.run_id }}-${{ github.run_attempt }}
-        run: |
-          git fetch
-          git checkout main
-          git pull
-
-          EXPECTED_HEAD_OID=$(../sigma-rule-deployment/.github/scripts/checkout-or-create-branch.sh \
-            grafana/sigma-rule-deployment-integration-test \
-            "integration-test-main-update-${GITHUB_PR_NUMBER}" \
-            main)
-
-          sed -i "s/uses: grafana\/sigma-rule-deployment\/actions\/convert@.*/uses: grafana\/sigma-rule-deployment\/actions\/convert@$ACTION_SHA/g" ./.github/workflows/convert-integrate-comment-test.yml
-          sed -i "s/uses: grafana\/sigma-rule-deployment\/actions\/integrate@.*/uses: grafana\/sigma-rule-deployment\/actions\/integrate@$ACTION_SHA/g" ./.github/workflows/convert-integrate-comment-test.yml
-
-          # add the action sha so that the integration test can add the check to this PR
-          echo "$ACTION_SHA" > action_sha.txt
-          echo "$GITHUB_PR_NUMBER" > github_pr.txt
-          # per-run token guarantees a change even when re-running on the PR
-          echo "$RUN_TOKEN" > run_attempt.txt
-
-          # only commit the relevant changed files
-          git add .github/workflows/convert-integrate-comment-test.yml action_sha.txt github_pr.txt run_attempt.txt
-
-          ../sigma-rule-deployment/.github/scripts/create-verified-commit.sh \
-            grafana/sigma-rule-deployment-integration-test \
-            "integration-test-main-update-${GITHUB_PR_NUMBER}" \
-            "$EXPECTED_HEAD_OID" \
-            "update main branch to relevant hash"
-
-          RESULT=$(gh pr list --json id,title -H "integration-test-main-update-${GITHUB_PR_NUMBER}" | jq -r '. | length')
-
-          if [ "$RESULT" -eq 0 ]; then
-            gh pr create \
-              --title "Integration Test Main Update ${GITHUB_PR_NUMBER}" \
-              --body "This PR updates the main branch to the relevant hash for grafana/sigma-rule-deployment#${GITHUB_PR_NUMBER}" \
-              --head "integration-test-main-update-${GITHUB_PR_NUMBER}" \
-              --base main \
-              --label "automated" \
-              --draft
-          fi
-          sleep 10 # wait for the PR checks to start...
-
-          # wait for the required PR checks to complete
-          if gh pr checks "integration-test-main-update-${GITHUB_PR_NUMBER}" --watch; then
-            gh pr ready "integration-test-main-update-${GITHUB_PR_NUMBER}"
-            gh pr merge "integration-test-main-update-${GITHUB_PR_NUMBER}" --auto --squash
-            sleep 5 # wait for the merge to complete
-            gh pr comment "integration-test-pr-${GITHUB_PR_NUMBER}" --body "sigma convert all"
-          else
-            echo "Integration Test Main Update PR failed"
-            exit 1
-          fi
+        run: ${{ github.workspace }}/sigma-rule-deployment/.github/scripts/update-integration-main.sh

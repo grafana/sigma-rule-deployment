@@ -1,0 +1,199 @@
+name: "Fork PR Image Push & Integration Test"
+
+# Human-gated consumer for fork pull request builds.
+#
+# WHY THIS EXISTS
+# A pull_request from a fork gets a read-only GITHUB_TOKEN and NO repository
+# secrets, so it can neither push the image to GHCR nor mint the GitHub App
+# token used to drive the cross-repo integration test. The build-docker.yml
+# "build" job therefore only builds + exports the fork's image as an artifact.
+#
+# This workflow runs on completion of that build. Because workflow_run always
+# executes the definition from the default branch, the logic here is trusted
+# and cannot be altered by the fork. The privileged job is bound to the
+# `fork-integration-test` environment, which REQUIRES a maintainer approval
+# before it runs — that approval is the human gate on running external code
+# with our secrets.
+#
+# SECURITY NOTES
+#   * The untrusted fork build produces only an artifact (no secrets, read-only
+#     token). Nothing privileged happens until a human approves.
+#   * Orchestration scripts are taken from the default branch checkout, never
+#     from the PR head, so the App token is never exposed to fork-authored
+#     scripts. Only the integration-test *fixtures* (rules/pipelines/config)
+#     come from the PR head.
+#   * The image built from the fork's code IS ultimately run by the
+#     integration-test repo (which has Vault access). The maintainer approving
+#     the environment deployment MUST review the fork diff — including any
+#     changes under actions/ and the Dockerfile — before approving.
+
+# workflow_run is used deliberately here and is the whole point of this file:
+# the untrusted fork build produces only an artifact (no secrets), and every
+# privileged action below is gated behind the `fork-integration-test`
+# environment's required-reviewer approval. Orchestration scripts are taken from
+# the default branch, never the fork PR head.
+on: # zizmor: ignore[dangerous-triggers]
+  workflow_run:
+    workflows: ["Build & Integration Test Image"]
+    types:
+      - completed
+
+# Serialize fork integration tests: like build-docker.yml, this workflow commits
+# to the integration-test repo's main branch, so concurrent runs must not race.
+# cancel-in-progress is false so we never kill an integration test mid-flight.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  triage:
+    # Only consider successful fork pull_request builds. The presence of the
+    # `pr-metadata` artifact (uploaded only on the fork path) is the signal that
+    # this was a fork PR that needs the gated flow.
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success'
+    name: "Triage fork build"
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    outputs:
+      is_fork: ${{ steps.meta.outputs.is_fork }}
+      pr_number: ${{ steps.meta.outputs.pr_number }}
+      head_sha: ${{ steps.meta.outputs.head_sha }}
+      image_tag: ${{ steps.meta.outputs.image_tag }}
+    steps:
+      - name: Check for fork metadata artifact
+        id: check
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: context.payload.workflow_run.id,
+            });
+            const found = artifacts.data.artifacts.some(a => a.name === 'pr-metadata');
+            core.setOutput('found', found ? 'true' : 'false');
+      - name: Download metadata
+        if: steps.check.outputs.found == 'true'
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          name: pr-metadata
+          path: pr-metadata
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+      - name: Parse metadata
+        id: meta
+        if: steps.check.outputs.found == 'true'
+        run: |
+          META=pr-metadata/metadata.json
+          # pr_number and head_sha are validated to avoid injecting anything odd
+          # into later steps; head_sha must be a 40-char hex, pr_number an integer.
+          PR_NUMBER=$(jq -r '.pr_number' "$META")
+          HEAD_SHA=$(jq -r '.head_sha' "$META")
+          IMAGE_TAG=$(jq -r '.image_tag' "$META")
+          if ! [[ "$PR_NUMBER" =~ ^[0-9]+$ ]]; then
+            echo "Invalid pr_number: $PR_NUMBER" >&2; exit 1
+          fi
+          if ! [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Invalid head_sha: $HEAD_SHA" >&2; exit 1
+          fi
+          EXPECTED_TAG="ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${HEAD_SHA}"
+          if [ "$IMAGE_TAG" != "$EXPECTED_TAG" ]; then
+            echo "Unexpected image_tag: $IMAGE_TAG (expected $EXPECTED_TAG)" >&2; exit 1
+          fi
+          {
+            echo "is_fork=true"
+            echo "pr_number=$PR_NUMBER"
+            echo "head_sha=$HEAD_SHA"
+            echo "image_tag=$EXPECTED_TAG"
+          } >> "$GITHUB_OUTPUT"
+
+  push-and-test:
+    # Skipped for same-repo PRs (handled inline in build-docker.yml). The
+    # `fork-integration-test` environment must be configured in repo settings
+    # with required reviewers + a `main`-only deployment branch policy; that
+    # approval is what gates running the fork's code with our secrets.
+    needs: triage
+    if: needs.triage.outputs.is_fork == 'true'
+    name: "Push image & run integration test"
+    runs-on: ubuntu-latest
+    environment: fork-integration-test
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      actions: read
+    env:
+      PR_NUMBER: ${{ needs.triage.outputs.pr_number }}
+      HEAD_SHA: ${{ needs.triage.outputs.head_sha }}
+      IMAGE_TAG: ${{ needs.triage.outputs.image_tag }}
+    steps:
+      - name: Get GitHub App Token
+        id: get-github-app-token
+        uses: grafana/shared-workflows/actions/create-github-app-token@46f48da11e78ebdba7a8747ae456b11062fac83e # create-github-app-token/v0.3.1
+        with:
+          github_app: sigma-rule-deployment-app
+      # Trusted orchestration scripts come from the default branch (this repo's
+      # HEAD as checked out by workflow_run), NEVER from the fork PR head.
+      - name: Checkout trusted scripts (default branch)
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          path: ./srd-trusted
+      # The integration-test fixtures (rules/pipelines/config) come from the
+      # fork PR head via the base repo's pull ref. This is data consumed by the
+      # test, not code executed with the App token.
+      - name: Checkout fork PR fixtures
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: refs/pull/${{ env.PR_NUMBER }}/head
+          persist-credentials: false
+          path: ./sigma-rule-deployment-fixtures
+      - name: Checkout Integration Test
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          token: ${{ steps.get-github-app-token.outputs.token }}
+          persist-credentials: true
+          repository: grafana/sigma-rule-deployment-integration-test
+          path: ./sigma-rule-deployment-integration-test
+      - name: Download fork image artifact
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          name: pr-image
+          path: /tmp/pr-image
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+      - name: "Login to GitHub Container Registry"
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Load and push fork image
+        run: |
+          docker load --input /tmp/pr-image/pr-image.tar
+          docker image inspect "$IMAGE_TAG" >/dev/null
+          docker push "$IMAGE_TAG"
+      - name: Create integration test PR
+        env:
+          TEST_REPO: grafana/sigma-rule-deployment-integration-test
+          TEST_REPO_DIR: ${{ github.workspace }}/sigma-rule-deployment-integration-test
+          FIXTURES_DIR: ${{ github.workspace }}/sigma-rule-deployment-fixtures
+          GITHUB_PR_NUMBER: ${{ env.PR_NUMBER }}
+          GH_TOKEN: ${{ steps.get-github-app-token.outputs.token }}
+          ACTION_SHA: ${{ env.HEAD_SHA }}
+          RUN_TOKEN: ${{ github.run_id }}-${{ github.run_attempt }}
+        run: ${{ github.workspace }}/srd-trusted/.github/scripts/create-integration-test-pr.sh
+      - name: Update integration main branch and send test comment
+        env:
+          TEST_REPO: grafana/sigma-rule-deployment-integration-test
+          TEST_REPO_DIR: ${{ github.workspace }}/sigma-rule-deployment-integration-test
+          GITHUB_PR_NUMBER: ${{ env.PR_NUMBER }}
+          GH_TOKEN: ${{ steps.get-github-app-token.outputs.token }}
+          ACTION_SHA: ${{ env.HEAD_SHA }}
+          RUN_TOKEN: ${{ github.run_id }}-${{ github.run_attempt }}
+        run: ${{ github.workspace }}/srd-trusted/.github/scripts/update-integration-main.sh
