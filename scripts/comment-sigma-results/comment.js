@@ -314,6 +314,8 @@ ${changedFiles.length ? changedFilesList : "No files changed"}
 ${deletedFiles.length ? deletedFiles.map(file => `- ${file}`).join("\n") : "No files deleted"}
 
 ${testResultsTable ? '\n' + testResultsTable : ''}
+
+${errorsTable ? '\n' + errorsTable : ''}
 `;
 
     // GraphQL queries
