@@ -451,11 +451,11 @@ def convert_rules(
     if conversion_errors:
         github_output_path = os.getenv("GITHUB_OUTPUT")
         if github_output_path:
-            with open(github_output_path, "a") as f:
-                f.write(f"conversion_errors={json.dumps(conversion_errors)}\n")
+            with open(github_output_path, "a", encoding="utf-8") as f:
+                f.write(f"conversion_errors={json.dumps(conversion_errors).decode('utf-8')}\n")
         else:
             print("GITHUB_OUTPUT environment variable not set, cannot write conversion errors to GitHub Actions output")
-            
+
 
 def is_safe_path(base_dir: str | Path, target_path: str | Path) -> bool:
     """
