@@ -1,9 +1,9 @@
 title: Faulty GitHub Test Rule
 id: 700f552f-0fa9-4bfe-bbaf-bbbde94c1c8c
 status: test
-description: Detects a repository being deleted.
-author: jamesc-grafana
-date: 2025-09-259
+description: Should have a conversion fault
+author: flomon
+date: 2026-07-291
 logsource:
   product: github
   service: audit
