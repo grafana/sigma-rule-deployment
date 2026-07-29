@@ -32,6 +32,11 @@ inputs:
     required: false
     default: "false"
 
+outputs:
+  conversion_errors:
+    description: "List of conversion errors encountered during the conversion process."
+    value: ${{ steps.set-output.outputs.conversion_errors }}
+
 runs:
   using: "composite"
   steps:
@@ -121,6 +126,7 @@ runs:
             -v "$(pwd):/sigma-rules" \
             -w /sigma-rules \
             -e GITHUB_WORKSPACE=/sigma-rules \
+            -e GITHUB_OUTPUT=/sigma-rules/github-output \
             -e CONFIG_PATH="$CONFIG_PATH" \
             -e PLUGIN_PACKAGES="$PLUGIN_PACKAGES" \
             -e RENDER_TRACEBACK="$RENDER_TRACEBACK" \
@@ -131,6 +137,13 @@ runs:
             -e MANUAL_FILES="$MANUAL_FILES" \
             "ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:$IMAGE_REF" \
             convert
+
+    - name: Set output
+      id: set-output
+      shell: bash
+      run: |
+        mv github-output $GITHUB_OUTPUT
+
 
     - name: Comment Conversions
       id: comment-conversions
@@ -145,6 +158,7 @@ runs:
         GITHUB_REPOSITORY: ${{ github.repository }}
         GITHUB_ACTIONS: 'true'
         RULE_DIRECTORY_PATH: ${{ github.workspace }}
+        CONVERSION_ERRORS: ${{ steps.set-output.outputs.conversion_errors }}
       run: |
         # Generate comment data (git operations)
         git add "$CONVERSION_PATH"

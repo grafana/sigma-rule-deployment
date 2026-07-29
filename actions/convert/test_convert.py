@@ -371,6 +371,159 @@ def test_convert_rules_handles_empty_output_on_rule(temp_workspace, mock_config)
     assert not output_file.exists()
 
 
+@pytest.fixture
+def failing_convert():
+    """Patch the Sigma CLI to fail, as it does for an unconvertible rule.
+
+    The CLI exits non-zero, which CliRunner turns into a SystemExit on
+    result.exception, so the real error text is only in result.output.
+    """
+    mock_result = MagicMock()
+    mock_result.exception = SystemExit(1)
+    mock_result.exc_info = (SystemExit, SystemExit(1), None)
+    mock_result.exit_code = 1
+    mock_result.output = (
+        'Errors found in Sigma rules:\n* Unknown modifier "bogus" in rules/test.yml\n'
+    )
+    with patch("click.testing.CliRunner.invoke", return_value=mock_result):
+        yield mock_result
+
+
+def read_conversion_errors(github_output):
+    """Read the conversion_errors value written to a GITHUB_OUTPUT file."""
+    lines = github_output.read_text(encoding="utf-8").splitlines()
+    values = [line for line in lines if line.startswith("conversion_errors=")]
+    assert len(values) == 1, f"expected one conversion_errors line, got {lines}"
+    return json.loads(values[0].removeprefix("conversion_errors="))
+
+
+def test_conversion_errors_written_to_github_output(
+    failing_convert, temp_workspace, mock_config, monkeypatch, tmp_path
+):
+    """Test that a failed conversion is written to GITHUB_OUTPUT."""
+    github_output = tmp_path / "github-output"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(github_output))
+
+    convert_rules(config=mock_config, path_prefix=temp_workspace, all_rules=True)
+
+    errors = read_conversion_errors(github_output)
+    assert len(errors) == 1
+    assert errors[0]["conversion_name"] == "test_conversion"
+    # The input file must be relative to the workspace, so the Action can link to it
+    assert errors[0]["input_file"] == "rules/test.yml"
+    assert 'Unknown modifier "bogus"' in errors[0]["output"]
+
+
+def test_conversion_errors_written_as_a_single_line(
+    failing_convert, temp_workspace, mock_config, monkeypatch, tmp_path
+):
+    """Test that a multi-line error stays on one line, as GITHUB_OUTPUT requires."""
+    github_output = tmp_path / "github-output"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(github_output))
+
+    convert_rules(config=mock_config, path_prefix=temp_workspace, all_rules=True)
+
+    contents = github_output.read_text(encoding="utf-8")
+    assert len(contents.splitlines()) == 1
+    # JSON encoding must escape the newlines rather than emit them literally
+    assert "\\n" in contents
+
+
+def test_conversion_errors_written_as_decoded_json(
+    failing_convert, temp_workspace, mock_config, monkeypatch, tmp_path
+):
+    """Test that the value is JSON and not a stringified Python bytes object."""
+    github_output = tmp_path / "github-output"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(github_output))
+
+    convert_rules(config=mock_config, path_prefix=temp_workspace, all_rules=True)
+
+    contents = github_output.read_text(encoding="utf-8")
+    assert contents.startswith("conversion_errors=[")
+    assert "conversion_errors=b'" not in contents
+
+
+def test_no_conversion_errors_written_on_success(
+    temp_workspace, mock_config, monkeypatch, tmp_path
+):
+    """Test that nothing is written to GITHUB_OUTPUT when every rule converts."""
+    github_output = tmp_path / "github-output"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(github_output))
+
+    convert_rules(config=mock_config, path_prefix=temp_workspace, all_rules=True)
+
+    output_file = temp_workspace / "conversions" / "test_conversion_test.json"
+    assert output_file.exists(), "expected the conversion to succeed"
+    assert not github_output.exists()
+
+
+def test_conversion_errors_without_github_output(
+    failing_convert, temp_workspace, mock_config, monkeypatch, capsys
+):
+    """Test that a failed conversion outside Actions warns instead of raising."""
+    monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
+
+    convert_rules(config=mock_config, path_prefix=temp_workspace, all_rules=True)
+
+    assert "GITHUB_OUTPUT environment variable not set" in capsys.readouterr().out
+
+
+def test_conversion_errors_one_entry_per_failed_rule(
+    failing_convert, temp_workspace, mock_config, monkeypatch, tmp_path
+):
+    """Test that each failed rule gets its own entry."""
+    second_rule = temp_workspace / "rules" / "test2.yml"
+    second_rule.write_text(
+        (temp_workspace / "rules" / "test.yml").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    github_output = tmp_path / "github-output"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(github_output))
+
+    convert_rules(config=mock_config, path_prefix=temp_workspace, all_rules=True)
+
+    errors = read_conversion_errors(github_output)
+    assert sorted(error["input_file"] for error in errors) == [
+        "rules/test.yml",
+        "rules/test2.yml",
+    ]
+
+
+def test_conversion_error_does_not_stop_later_conversions(
+    temp_workspace, mock_config, monkeypatch, tmp_path
+):
+    """Test that a rule failing does not prevent the remaining rules converting."""
+    second_rule = temp_workspace / "rules" / "test2.yml"
+    second_rule.write_text(
+        (temp_workspace / "rules" / "test.yml").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    github_output = tmp_path / "github-output"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(github_output))
+
+    failure = MagicMock()
+    failure.exception = SystemExit(1)
+    failure.exc_info = (SystemExit, SystemExit(1), None)
+    failure.exit_code = 1
+    failure.output = "Errors found in Sigma rules:\n* Unknown modifier\n"
+
+    success = MagicMock()
+    success.exception = None
+    success.exc_info = None
+    success.exit_code = 0
+    success.stdout = 'Parsing Sigma rules\n{job="test"}\n'
+
+    # Rules are converted in glob order, which is not guaranteed, so only assert
+    # on the counts rather than on which of the two rules failed
+    with patch("click.testing.CliRunner.invoke", side_effect=[failure, success]):
+        convert_rules(config=mock_config, path_prefix=temp_workspace, all_rules=True)
+
+    errors = read_conversion_errors(github_output)
+    assert len(errors) == 1
+    written = list((temp_workspace / "conversions").glob("*.json"))
+    assert len(written) == 1, "the rule that converted should still be written"
+
+
 def test_load_rule_valid_yaml():
     """Test loading a valid YAML rule file."""
     with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:

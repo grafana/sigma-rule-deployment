@@ -27,7 +27,7 @@ on:
   push:
     branches:
       - main
-  workflow_dispatch:  # Allow manual triggering (optional)
+  workflow_dispatch: # Allow manual triggering (optional)
 
 jobs:
   convert:
@@ -45,6 +45,12 @@ jobs:
           pretty_print: "true"
           all_rules: "false"
 ```
+
+## Outputs
+
+| Name                | Description                                                                                       |
+| ------------------- | ------------------------------------------------------------------------------------------------- |
+| `conversion_errors` | List of conversion errors encountered during the conversion process (JSON array of error objects) |
 
 ## How It Works
 

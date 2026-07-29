@@ -8,6 +8,16 @@ conversion_defaults:
   file_pattern: "*.yml"
   data_source: grafanacloud-logs
 conversions:
+  - name: faulty
+    input:
+      - "rules/faulty.yml"
+    backend_options:
+      case_sensitive: true
+    pipelines:
+      - pipelines/datasources/test-1.yml
+      - pipelines/test-1.yml
+    rule_group: Every 1 Hour
+    time_window: 1h
   - name: github_audit
     input:
       - "rules/test*"

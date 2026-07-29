@@ -108,6 +108,32 @@ function buildTestResultsTable(testResults) {
   return resultTable;
 }
 
+function buildErrorsTableAndAnnotate(conversionErrors, repoUrl, headRef) {
+  if (!conversionErrors || conversionErrors.length === 0) {
+    return '';
+  }
+
+  let errorsTable = `### Conversion Errors\n\n| File name | Link | Error message |\n| --- | --- | --- |\n`;
+
+  for (const error of conversionErrors) {
+    const title = error.conversion_name;
+    const errorMessage = error.output || 'Unknown error';
+    const errorCell = errorMessage.replace(/\|/g, '\\|').replace(/\r?\n/g, '<br>');
+    const linkCell = error.input_file ? `[${path.basename(error.input_file)}](${repoUrl}/blob/${headRef}/${error.input_file})` : '-';
+    errorsTable += `| ${title} | ${linkCell} | ${errorCell} |\n`;
+
+    // Set GitHub Actions error annotation for the error.
+    if (process.env.GITHUB_ACTIONS) {
+      core.error(errorMessage, {
+        title: `Conversion Error in ${title}`,
+        file: error.input_file || ''
+      })
+    }
+  }
+
+  return errorsTable;
+}
+
 /**
  * Get inputs from environment variables or CLI arguments
  */
@@ -127,6 +153,16 @@ function getInputs() {
       }
     }
 
+    let errorResults = null;
+    const errorResultsStr = core.getInput('conversion_errors') || process.env.CONVERSION_ERRORS;
+    if (errorResultsStr) {
+      try {
+        errorResults = JSON.parse(errorResultsStr);
+      } catch (e) {
+        console.log('Failed to parse CONVERSION_ERRORS JSON:', e.message);
+      }
+    }
+
     return {
       pullRequestNumber: core.getInput('pull_request_number') || process.env.PULL_REQUEST_NUMBER,
       changedFiles: core.getInput('changed_files') || process.env.CHANGED_FILES || '',
@@ -134,6 +170,7 @@ function getInputs() {
       commentTitle: core.getInput('comment_title') || process.env.COMMENT_TITLE,
       commentIdentifier: core.getInput('comment_identifier') || process.env.COMMENT_IDENTIFIER,
       testResults: testResults,
+      conversionErrors: errorResults,
       githubToken: core.getInput('github_token') || process.env.GITHUB_TOKEN,
     };
   } else {
@@ -158,7 +195,17 @@ function getInputs() {
         console.log('Failed to parse TEST_RESULTS JSON:', e.message);
       }
     }
-    
+
+    let errorResults = null;
+    const errorResultsStr = inputs.conversion_errors || process.env.CONVERSION_ERRORS;
+    if (errorResultsStr) {
+      try {
+        errorResults = JSON.parse(errorResultsStr);
+      } catch (e) {
+        console.log('Failed to parse CONVERSION_ERRORS JSON:', e.message);
+      }
+    }
+
     // Fallback to environment variables
     return {
       pullRequestNumber: inputs.pull_request_number || process.env.PULL_REQUEST_NUMBER,
@@ -167,6 +214,7 @@ function getInputs() {
       commentTitle: inputs.comment_title || process.env.COMMENT_TITLE,
       commentIdentifier: inputs.comment_identifier || process.env.COMMENT_IDENTIFIER,
       testResults: testResults,
+      conversionErrors: errorResults,
       githubToken: inputs.github_token || process.env.GITHUB_TOKEN,
     };
   }
@@ -247,6 +295,10 @@ async function main() {
     // Build test results table if TEST_RESULTS is provided
     const testResultsTable = inputs.testResults ? buildTestResultsTable(inputs.testResults) : '';
 
+    // Build errors table if CONVERSION_ERRORS is provided
+    const repoUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}`;
+    const errorsTable = buildErrorsTableAndAnnotate(inputs.conversionErrors, repoUrl, prData.data.head.ref);
+
     const comment = `
 ### ${inputs.commentTitle}
 
@@ -263,6 +315,8 @@ ${changedFiles.length ? changedFilesList : "No files changed"}
 ${deletedFiles.length ? deletedFiles.map(file => `- ${file}`).join("\n") : "No files deleted"}
 
 ${testResultsTable ? '\n' + testResultsTable : ''}
+
+${errorsTable ? '\n' + errorsTable : ''}
 `;
 
     // GraphQL queries
@@ -349,5 +403,5 @@ if (isMainModule) {
   main();
 }
 
-export { main, extractTitle, buildTestResultsTable };
+export { main, extractTitle, buildTestResultsTable, buildErrorsTableAndAnnotate };
 
