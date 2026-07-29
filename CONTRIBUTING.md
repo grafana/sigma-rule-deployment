@@ -29,10 +29,10 @@ Actions and helper scripts that wrap it.
 
 ## Prerequisites
 
-- **Go 1.25.4** or newer
+- **Go** (check `go.mod` for the required version)
 - **[uv](https://docs.astral.sh/uv/)** for the Python action. `uv` provisions its own
   interpreter, so you don't need a system Python matching `requires-python`.
-- **Node 25** for the two JS scripts.
+- **Node.js** for the two JS scripts. (check `package.json` for minimum version)
 - **Docker** — only needed if you want to build or run the image locally.
 - **`shellcheck`**, **`hadolint`**, **`actionlint`**, **`golangci-lint`** — optional, but each
   is enforced by a CI workflow, so having them locally saves round-trips.
