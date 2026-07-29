@@ -117,11 +117,12 @@ function buildErrorsTableAndAnnotate(conversionErrors, repoUrl, headRef) {
 
   for (const error of conversionErrors) {
     const title = error.conversion_name;
-    const errorMessage = (error.output || 'Unknown error').replace(/\|/g, '\\|').replace(/\r?\n/g, '<br>');;
+    const errorMessage = error.output || 'Unknown error';
+    const errorCell = errorMessage.replace(/\|/g, '\\|').replace(/\r?\n/g, '<br>');
     const linkCell = error.input_file ? `[${path.basename(error.input_file)}](${repoUrl}/blob/${headRef}/${error.input_file})` : '-';
-    errorsTable += `| ${title} | ${linkCell} | ${errorMessage} |\n`;
+    errorsTable += `| ${title} | ${linkCell} | ${errorCell} |\n`;
 
-    // Set GitHub Actions warning annotation for the error
+    // Set GitHub Actions error annotation for the error.
     if (process.env.GITHUB_ACTIONS) {
       core.error(errorMessage, {
         title: `Conversion Error in ${title}`,
@@ -402,5 +403,5 @@ if (isMainModule) {
   main();
 }
 
-export { main, extractTitle, buildTestResultsTable };
+export { main, extractTitle, buildTestResultsTable, buildErrorsTableAndAnnotate };
 
