@@ -21,7 +21,7 @@
 import * as core from '@actions/core';
 import * as github from '@actions/github';
 
-import { buildCommentBody } from './lib/comment-body.js';
+import { buildCommentBody, splitCommentIntoChunks } from './lib/comment-body.js';
 import { extractTitle } from './lib/extract-title.js';
 import { getContext, getInputs } from './lib/inputs.js';
 import { addCommentMutation, minimizeCommentMutation, oldCommentQuery } from './lib/queries.js';
