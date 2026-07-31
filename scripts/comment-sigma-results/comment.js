@@ -21,7 +21,7 @@
 import * as core from '@actions/core';
 import * as github from '@actions/github';
 
-import { buildChangedFilesList, buildCommentBody } from './lib/comment-body.js';
+import { buildCommentBody } from './lib/comment-body.js';
 import { extractTitle } from './lib/extract-title.js';
 import { getContext, getInputs } from './lib/inputs.js';
 import { addCommentMutation, minimizeCommentMutation, oldCommentQuery } from './lib/queries.js';
@@ -72,24 +72,15 @@ async function main() {
     }
 
     const nodeId = prData.data.node_id;
-    const repoUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}`;
-
-    // Build file list with titles
-    const changedFilesList = buildChangedFilesList(changedFiles, repoUrl, prData.data.head.ref);
-
-    // Build test results table if TEST_RESULTS is provided
-    const testResultsTable = inputs.testResults ? buildTestResultsTable(inputs.testResults) : '';
-
-    // Build errors table if CONVERSION_ERRORS is provided
-    const errorsTable = buildErrorsTableAndAnnotate(inputs.conversionErrors, repoUrl, prData.data.head.ref);
 
     const comment = buildCommentBody({
       commentTitle: inputs.commentTitle,
       changedFiles,
       deletedFiles,
-      changedFilesList,
-      testResultsTable,
-      errorsTable,
+      testResults: inputs.testResults,
+      conversionErrors: inputs.conversionErrors,
+      repoUrl: `https://github.com/${context.repo.owner}/${context.repo.repo}`,
+      headRef: prData.data.head.ref,
     });
 
     // Find and minimize old comments

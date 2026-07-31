@@ -1,4 +1,5 @@
 import { extractTitle } from './extract-title.js';
+import { buildErrorsTableAndAnnotate, buildTestResultsTable } from './tables.js';
 
 /**
  * Build the markdown bullet list of changed files, linking each one to its
@@ -12,16 +13,28 @@ export function buildChangedFilesList(changedFiles, repoUrl, headRef) {
 }
 
 /**
- * Assemble the full comment body from its pre-rendered sections.
+ * Render the full comment body: the changed/deleted file lists, the test
+ * results table (when TEST_RESULTS was provided) and the conversion errors
+ * table (when CONVERSION_ERRORS was provided).
  */
 export function buildCommentBody({
   commentTitle,
   changedFiles,
   deletedFiles,
-  changedFilesList,
-  testResultsTable,
-  errorsTable,
+  testResults,
+  conversionErrors,
+  repoUrl,
+  headRef,
 }) {
+  // Build file list with titles
+  const changedFilesList = buildChangedFilesList(changedFiles, repoUrl, headRef);
+
+  // Build test results table if TEST_RESULTS is provided
+  const testResultsTable = testResults ? buildTestResultsTable(testResults) : '';
+
+  // Build errors table if CONVERSION_ERRORS is provided
+  const errorsTable = buildErrorsTableAndAnnotate(conversionErrors, repoUrl, headRef);
+
   return `
 ### ${commentTitle}
 
