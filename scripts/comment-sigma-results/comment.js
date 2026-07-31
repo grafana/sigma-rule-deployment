@@ -98,11 +98,14 @@ async function main() {
       }
     }
 
-    // Post new comment
-    await octokit.graphql(addCommentMutation, {
-      body: comment,
-      subjectId: nodeId
-    });
+    const commentChunks = splitCommentIntoChunks(comment);
+    // Post new comment(s)
+    for (const chunk of commentChunks) {
+      await octokit.graphql(addCommentMutation, {
+        body: chunk,
+        subjectId: nodeId
+      });
+    }
 
     console.log('Comment posted successfully');
   } catch (error) {
