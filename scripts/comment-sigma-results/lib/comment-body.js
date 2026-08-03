@@ -82,7 +82,7 @@ export function splitCommentIntoChunks(comment, maxCommentSize = MAX_COMMENT_SIZ
   }
 
   if(chunks.length > 1) {
-    chunks[0] += `:open_book: Part 1 of ${chunks.length}`;
+    chunks[0] += `\n\n:open_book: Part 1 of ${chunks.length}`;
     for(let i = 1; i < chunks.length; i++) {
       chunks[i] = `:open_book: Part ${i + 1} of ${chunks.length}\n\n` + chunks[i];
     }
