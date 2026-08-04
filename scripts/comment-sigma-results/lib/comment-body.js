@@ -19,8 +19,11 @@ export function commentByteSize(text) {
   return Buffer.byteLength(text, 'utf8');
 }
 
-export function splitCommentIntoChunks(comment, maxCommentSize = MAX_COMMENT_SIZE) {
-  const safetyMargin = commentByteSize(":open_book: Part 100 of 100\n\n")
+export function splitCommentIntoChunks(comment, commentIdentifier, maxCommentSize = MAX_COMMENT_SIZE) {
+
+  const commentIdentifierLine = `<!-- ${commentIdentifier} -->\n`;
+
+  const safetyMargin = commentByteSize(":open_book: Part 100 of 100\n\n" + commentIdentifierLine);
 
   const chunks = [];
   let currentChunk = '';
@@ -87,6 +90,13 @@ export function splitCommentIntoChunks(comment, maxCommentSize = MAX_COMMENT_SIZ
       chunks[i] = `:open_book: Part ${i + 1} of ${chunks.length}\n\n` + chunks[i];
     }
   }
+
+  // Add comment identifier line to every chunk so that the minimize filter can match them all
+  for (let i = 0; i < chunks.length; i++) {
+    // Drop the chunk's leading newlines so the identifier line sits flush above the content
+    chunks[i] = commentIdentifierLine + chunks[i].replace(/^\n+/, '');
+  }
+
   return chunks;
 }
 

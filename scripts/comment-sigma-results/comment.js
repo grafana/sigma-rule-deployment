@@ -91,14 +91,14 @@ async function main() {
     });
 
     for (const comment of comments?.repository?.pullRequest?.comments?.nodes ?? []) {
-      if (!comment.isMinimized && comment.bodyText.startsWith(inputs.commentIdentifier)) {
+      if (!comment.isMinimized && comment.body.startsWith(`<!-- ${inputs.commentIdentifier} -->`)) {
         await octokit.graphql(minimizeCommentMutation, {
           subjectId: comment.id
         });
       }
     }
 
-    const commentChunks = splitCommentIntoChunks(comment);
+    const commentChunks = splitCommentIntoChunks(comment, inputs.commentIdentifier);
     // Post new comment(s)
     for (const chunk of commentChunks) {
       await octokit.graphql(addCommentMutation, {

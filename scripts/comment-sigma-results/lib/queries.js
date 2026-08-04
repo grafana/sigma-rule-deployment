@@ -10,6 +10,7 @@ export const oldCommentQuery = `query GetPRComments($owner: String!, $name: Stri
             comments(last: 100) {
               nodes {
                 id
+                body
                 bodyText
                 isMinimized
                 author {
