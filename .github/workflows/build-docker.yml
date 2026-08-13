@@ -218,13 +218,15 @@ jobs:
           ACTION_SHA: ${{ github.event.pull_request.head.sha }}
           RUN_TOKEN: ${{ github.run_id }}-${{ github.run_attempt }}
         run: |
+          MAIN_UPDATE_BRANCH="integration-test-main-update-${GITHUB_PR_NUMBER}"
+
           git fetch
           git checkout main
           git pull
 
           EXPECTED_HEAD_OID=$(../sigma-rule-deployment/.github/scripts/checkout-or-create-branch.sh \
             grafana/sigma-rule-deployment-integration-test \
-            "integration-test-main-update-${GITHUB_PR_NUMBER}" \
+            "$MAIN_UPDATE_BRANCH" \
             main)
 
           sed -i "s/uses: grafana\/sigma-rule-deployment\/actions\/convert@.*/uses: grafana\/sigma-rule-deployment\/actions\/convert@$ACTION_SHA/g" ./.github/workflows/convert-integrate-comment-test.yml
@@ -241,30 +243,73 @@ jobs:
 
           ../sigma-rule-deployment/.github/scripts/create-verified-commit.sh \
             grafana/sigma-rule-deployment-integration-test \
-            "integration-test-main-update-${GITHUB_PR_NUMBER}" \
+            "$MAIN_UPDATE_BRANCH" \
             "$EXPECTED_HEAD_OID" \
             "update main branch to relevant hash"
 
-          RESULT=$(gh pr list --json id,title -H "integration-test-main-update-${GITHUB_PR_NUMBER}" | jq -r '. | length')
+          RESULT=$(gh pr list --json id,title -H "$MAIN_UPDATE_BRANCH" | jq -r '. | length')
 
           if [ "$RESULT" -eq 0 ]; then
             gh pr create \
               --title "Integration Test Main Update ${GITHUB_PR_NUMBER}" \
               --body "This PR updates the main branch to the relevant hash for grafana/sigma-rule-deployment#${GITHUB_PR_NUMBER}" \
-              --head "integration-test-main-update-${GITHUB_PR_NUMBER}" \
+              --head "$MAIN_UPDATE_BRANCH" \
               --base main \
               --label "automated" \
               --draft
           fi
-          sleep 10 # wait for the PR checks to start...
 
-          # wait for the required PR checks to complete
-          if gh pr checks "integration-test-main-update-${GITHUB_PR_NUMBER}" --watch; then
-            gh pr ready "integration-test-main-update-${GITHUB_PR_NUMBER}"
-            gh pr merge "integration-test-main-update-${GITHUB_PR_NUMBER}" --auto --squash
-            sleep 5 # wait for the merge to complete
-            gh pr comment "integration-test-pr-${GITHUB_PR_NUMBER}" --body "sigma convert all"
-          else
+          # `gh pr checks` fails outright when no check has registered yet, so poll
+          # for the first one rather than assuming a fixed delay covers it.
+          ATTEMPT=0
+          while [ "$(gh pr checks "$MAIN_UPDATE_BRANCH" --json name --jq 'length' 2>/dev/null || echo 0)" -eq 0 ]; do
+            ATTEMPT=$((ATTEMPT + 1))
+            if [ "$ATTEMPT" -ge 24 ]; then
+              echo "No checks registered on ${MAIN_UPDATE_BRANCH}"
+              exit 1
+            fi
+            sleep 5
+          done
+
+          if ! gh pr checks "$MAIN_UPDATE_BRANCH" --watch; then
             echo "Integration Test Main Update PR failed"
             exit 1
           fi
+
+          gh pr ready "$MAIN_UPDATE_BRANCH"
+
+          # Merge synchronously instead of with `--auto`: GitHub queues an auto-merge
+          # whenever mergeability is still being recomputed after the un-draft above,
+          # and that queued merge can then silently never fire. Retry while it settles.
+          ATTEMPT=0
+          until gh pr merge "$MAIN_UPDATE_BRANCH" --squash; do
+            ATTEMPT=$((ATTEMPT + 1))
+            if [ "$ATTEMPT" -ge 12 ]; then
+              echo "Could not merge ${MAIN_UPDATE_BRANCH}"
+              exit 1
+            fi
+            sleep 10
+          done
+
+          # The comment below triggers a workflow that, being `issue_comment`-driven,
+          # runs from the integration test repo's default branch and reads the commit
+          # to report "Integration Testing - Comment" against out of main's
+          # action_sha.txt. Commenting before main carries this SHA reports that
+          # required check against whichever PR was tested last, so this PR never gets
+          # one and stays unmergeable.
+          ATTEMPT=0
+          while true; do
+            git fetch origin main --quiet
+            MAIN_ACTION_SHA=$(git show origin/main:action_sha.txt | tr -d '[:space:]')
+            if [ "$MAIN_ACTION_SHA" = "$ACTION_SHA" ]; then
+              break
+            fi
+            ATTEMPT=$((ATTEMPT + 1))
+            if [ "$ATTEMPT" -ge 24 ]; then
+              echo "integration test main reports action_sha=${MAIN_ACTION_SHA}, expected ${ACTION_SHA}"
+              exit 1
+            fi
+            sleep 5
+          done
+
+          gh pr comment "integration-test-pr-${GITHUB_PR_NUMBER}" --body "sigma convert all"
