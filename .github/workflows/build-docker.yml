@@ -259,8 +259,6 @@ jobs:
               --draft
           fi
 
-          # `gh pr checks` fails outright when no check has registered yet, so poll
-          # for the first one rather than assuming a fixed delay covers it.
           ATTEMPT=0
           while [ "$(gh pr checks "$MAIN_UPDATE_BRANCH" --json name --jq 'length' 2>/dev/null || echo 0)" -eq 0 ]; do
             ATTEMPT=$((ATTEMPT + 1))
@@ -278,9 +276,6 @@ jobs:
 
           gh pr ready "$MAIN_UPDATE_BRANCH"
 
-          # Merge synchronously instead of with `--auto`: GitHub queues an auto-merge
-          # whenever mergeability is still being recomputed after the un-draft above,
-          # and that queued merge can then silently never fire. Retry while it settles.
           ATTEMPT=0
           until gh pr merge "$MAIN_UPDATE_BRANCH" --squash; do
             ATTEMPT=$((ATTEMPT + 1))
@@ -294,9 +289,7 @@ jobs:
           # The comment below triggers a workflow that, being `issue_comment`-driven,
           # runs from the integration test repo's default branch and reads the commit
           # to report "Integration Testing - Comment" against out of main's
-          # action_sha.txt. Commenting before main carries this SHA reports that
-          # required check against whichever PR was tested last, so this PR never gets
-          # one and stays unmergeable.
+          # action_sha.txt.
           ATTEMPT=0
           while true; do
             git fetch origin main --quiet
