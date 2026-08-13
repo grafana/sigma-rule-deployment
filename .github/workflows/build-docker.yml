@@ -68,7 +68,7 @@ jobs:
       - name: "Prepare fork artifact directory"
         if: github.event_name == 'pull_request' && steps.origin.outputs.is_fork == 'true'
         run: mkdir -p /tmp/pr-image
-      - name: "Build and Export (fork PR)"
+      - name: "Build and Load (fork PR)"
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         if: github.event_name == 'pull_request' && steps.origin.outputs.is_fork == 'true'
         with:
@@ -77,7 +77,12 @@ jobs:
           tags: |
             ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${{ github.event.pull_request.head.sha }}
           push: false
-          outputs: type=docker,dest=/tmp/pr-image/pr-image.tar
+          load: true
+      - name: "Export fork PR image to tarball"
+        if: github.event_name == 'pull_request' && steps.origin.outputs.is_fork == 'true'
+        env:
+          IMAGE_TAG: ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${{ github.event.pull_request.head.sha }}
+        run: docker save -o /tmp/pr-image/pr-image.tar "$IMAGE_TAG"
       - name: "Write fork PR metadata"
         if: github.event_name == 'pull_request' && steps.origin.outputs.is_fork == 'true'
         env:
@@ -99,7 +104,7 @@ jobs:
         with:
           name: pr-image
           path: /tmp/pr-image
-          retention-days: 5
+          retention-days: 3
           if-no-files-found: error
       - name: "Build and Push (Push)"
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
