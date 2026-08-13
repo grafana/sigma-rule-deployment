@@ -39,12 +39,21 @@ jobs:
           common_secrets: |
             SOCKET_API_TOKEN=socket:SOCKET_API_KEY
 
+      # socket-export-sbom v1.0.0 creates a fresh Socket scan of the manifest files on disk,
+      # so the tag's source tree has to be checked out before the action runs.
+      - name: "Checkout"
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ steps.meta.outputs.tag }}
+          persist-credentials: false
+
       - name: "Export SPDX SBOM from Socket"
         id: export-sbom
-        uses: grafana/shared-workflows/actions/socket-export-sbom@ff9aaa53f25716fcd6dde39f6d4e41c4e16fb5e1 # socket-export-sbom/v0.1.2
+        uses: grafana/shared-workflows/actions/socket-export-sbom@73f73d35ceadf46221741d45faefec0c5a990e6b # socket-export-sbom/v1.0.0
         with:
           socket_api_token: ${{ fromJSON(steps.vault-secrets.outputs.secrets).SOCKET_API_TOKEN }}
           socket_org: grafana
+          branch: ${{ steps.meta.outputs.tag }}
           output_file: ${{ steps.meta.outputs.repo }}-${{ steps.meta.outputs.tag }}.spdx.json
 
       # Immutable releases lock assets at publish time, so the SBOM must be attached while the
