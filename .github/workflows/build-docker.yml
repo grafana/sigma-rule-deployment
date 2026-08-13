@@ -31,21 +31,76 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
+      # Fork pull requests get a read-only GITHUB_TOKEN and no secrets, so they
+      # cannot push to the org GHCR namespace. Detect them so we build+export an
+      # artifact instead of pushing. A maintainer then runs the integration test
+      # manually from the integration-test repo (workflow_dispatch).
+      - name: "Determine PR origin"
+        id: origin
+        if: github.event_name == 'pull_request'
+        env:
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          BASE_REPO: ${{ github.repository }}
+        run: |
+          if [ "$HEAD_REPO" = "$BASE_REPO" ]; then
+            echo "is_fork=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_fork=true" >> "$GITHUB_OUTPUT"
+          fi
       - name: "Login to GitHub Container Registry"
+        # Skip for fork PRs: the token cannot write org packages and login is not
+        # needed to build + export a local image artifact.
+        if: github.event_name != 'pull_request' || steps.origin.outputs.is_fork == 'false'
         uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: "Build and Push (PR)"
+      - name: "Build and Push (same-repo PR)"
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && steps.origin.outputs.is_fork == 'false'
         with:
           context: .
           file: ./Dockerfile
           tags: |
             ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${{ github.event.pull_request.head.sha }}
           push: true
+      - name: "Prepare fork artifact directory"
+        if: github.event_name == 'pull_request' && steps.origin.outputs.is_fork == 'true'
+        run: mkdir -p /tmp/pr-image
+      - name: "Build and Export (fork PR)"
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        if: github.event_name == 'pull_request' && steps.origin.outputs.is_fork == 'true'
+        with:
+          context: .
+          file: ./Dockerfile
+          tags: |
+            ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${{ github.event.pull_request.head.sha }}
+          push: false
+          outputs: type=docker,dest=/tmp/pr-image/pr-image.tar
+      - name: "Write fork PR metadata"
+        if: github.event_name == 'pull_request' && steps.origin.outputs.is_fork == 'true'
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          IMAGE_TAG: ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:sha-${{ github.event.pull_request.head.sha }}
+        run: |
+          jq -n \
+            --arg pr_number "$PR_NUMBER" \
+            --arg head_sha "$HEAD_SHA" \
+            --arg head_repo "$HEAD_REPO" \
+            --arg image_tag "$IMAGE_TAG" \
+            '{pr_number: $pr_number, head_sha: $head_sha, head_repo: $head_repo, image_tag: $image_tag}' \
+            > /tmp/pr-image/metadata.json
+      - name: "Upload fork PR image artifact"
+        if: github.event_name == 'pull_request' && steps.origin.outputs.is_fork == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: pr-image
+          path: /tmp/pr-image
+          retention-days: 5
+          if-no-files-found: error
       - name: "Build and Push (Push)"
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         if: github.event_name == 'push'
@@ -67,7 +122,12 @@ jobs:
           push: true
 
   test-pr:
-    if: github.event_name == 'pull_request'
+    # Only same-repo PRs run the integration test automatically here (they have
+    # secrets + a package-write token). Fork PRs export an image artifact in the
+    # build job above; a maintainer runs the integration test manually from the
+    # integration-test repo via the "External Fork PR Integration Test"
+    # workflow_dispatch.
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
     name: "Integration Testing"
     runs-on: ubuntu-latest
     needs:

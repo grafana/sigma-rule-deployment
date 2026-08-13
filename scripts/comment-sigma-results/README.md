@@ -46,7 +46,7 @@ node comment.js
 | `CHANGED_FILES` | Space-separated list of changed file paths | Yes |
 | `DELETED_FILES` | Space-separated list of deleted file paths | Yes |
 | `COMMENT_TITLE` | Title for the comment section | Yes |
-| `COMMENT_IDENTIFIER` | String to identify old comments for cleanup | Yes |
+| `COMMENT_IDENTIFIER` | String to identify old comments for cleanup (will be hidden in comment) | Yes |
 | `TEST_RESULTS` | JSON string of test results (object mapping file paths to arrays of QueryTestResult) | No |
 | `GITHUB_TOKEN` | GitHub token for API access | Yes |
 | `GITHUB_REPOSITORY` | Repository in format `owner/repo` | Yes (for local) |
