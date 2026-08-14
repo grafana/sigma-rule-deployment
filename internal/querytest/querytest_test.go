@@ -418,8 +418,6 @@ func TestThrowsErrorWhenShowLogLinesIsTrueAndNoLogLines(t *testing.T) {
 	assert.Empty(t, results)
 }
 
-
-
 // testDatasourceQuery is a mock implementation for testing
 type testDatasourceQuery struct {
 	queryLog      []string
