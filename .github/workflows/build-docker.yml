@@ -167,12 +167,13 @@ jobs:
           GH_TOKEN: ${{ steps.get-github-app-token.outputs.token }}
           ACTION_SHA: ${{ github.event.pull_request.head.sha }}
           RUN_TOKEN: ${{ github.run_id }}-${{ github.run_attempt }}
+          PR_BRANCH: integration-test-pr-${{ github.event.pull_request.number }}
         run: |
           git fetch
 
           EXPECTED_HEAD_OID=$(../sigma-rule-deployment/.github/scripts/checkout-or-create-branch.sh \
             grafana/sigma-rule-deployment-integration-test \
-            "integration-test-pr-${GITHUB_PR_NUMBER}" \
+            "$PR_BRANCH" \
             main)
 
           # remove old test files, if they exist
@@ -195,21 +196,42 @@ jobs:
 
           ../sigma-rule-deployment/.github/scripts/create-verified-commit.sh \
             grafana/sigma-rule-deployment-integration-test \
-            "integration-test-pr-${GITHUB_PR_NUMBER}" \
+            "$PR_BRANCH" \
             "$EXPECTED_HEAD_OID" \
             "update integration test configuration"
 
-          RESULT=$(gh pr list --json id,title -H "integration-test-pr-${GITHUB_PR_NUMBER}" | jq -r '. | length')
+          # First run has no PR, so we create one. On later runs the branch reset above
+          # briefly emptied the existing PR, and GitHub auto-closes empty PRs, so we need to re-open
+          # it. Reopening also re-fires the `pull_request` event which posts the check.
+          # The close can land late, so re-read each pass and tolerate racing failures.
+          ATTEMPT=0
+          while true; do
+            PR_JSON=$(gh pr list --state all --head "$PR_BRANCH" --json number,state,commits --jq 'first // {}')
+            PR_NUMBER=$(jq -r '.number // empty' <<<"$PR_JSON")
+            PR_STATE=$(jq -r '.state // empty' <<<"$PR_JSON")
+            PR_COMMITS=$(jq -r '.commits | length' <<<"$PR_JSON")
 
-          if [ "$RESULT" -eq 0 ]; then
-            gh pr create \
-              --title "Integration Test PR ${GITHUB_PR_NUMBER}" \
-              --body "This PR to test Sigma Rule Deployment App from Sigma Rule Deployment Integration Test App for grafana/sigma-rule-deployment#${GITHUB_PR_NUMBER}" \
-              --head "integration-test-pr-${GITHUB_PR_NUMBER}" \
-              --base main \
-              --draft \
-              --label "automated"
-          fi
+            if [ -z "$PR_NUMBER" ]; then
+              gh pr create \
+                --title "Integration Test PR ${GITHUB_PR_NUMBER}" \
+                --body "This PR to test Sigma Rule Deployment App from Sigma Rule Deployment Integration Test App for grafana/sigma-rule-deployment#${GITHUB_PR_NUMBER}" \
+                --head "$PR_BRANCH" \
+                --base main \
+                --draft \
+                --label "automated" || true
+            elif [ "$PR_STATE" = "CLOSED" ]; then
+              gh pr reopen "$PR_NUMBER" || true
+            elif [ "$PR_COMMITS" -gt 0 ]; then
+              break
+            fi
+
+            ATTEMPT=$((ATTEMPT + 1))
+            if [ "$ATTEMPT" -ge 12 ]; then
+              echo "PR for ${PR_BRANCH} did not settle as open with commits: #${PR_NUMBER} ${PR_STATE} with ${PR_COMMITS} commits"
+              exit 1
+            fi
+            sleep 5
+          done
       - name: Update integration main branch to latest and send test comment
         working-directory: ./sigma-rule-deployment-integration-test
         env:
@@ -218,6 +240,7 @@ jobs:
           ACTION_SHA: ${{ github.event.pull_request.head.sha }}
           RUN_TOKEN: ${{ github.run_id }}-${{ github.run_attempt }}
           MAIN_UPDATE_BRANCH: integration-test-main-update-${{ github.event.pull_request.number }}
+          PR_BRANCH: integration-test-pr-${{ github.event.pull_request.number }}
         run: |
           git fetch
           git checkout main
@@ -304,4 +327,27 @@ jobs:
             sleep 5
           done
 
-          gh pr comment "integration-test-pr-${GITHUB_PR_NUMBER}" --body "sigma convert all"
+          # `gh pr comment` succeeds on a closed PR and `issue_comment` still fires, so the
+          # convert run would start against a PR the API reports as 0 commits, get an empty
+          # base-commit from identify-commits and fail on `git diff "$BASE_REF"` instead of
+          # on the PR.
+          PR_JSON=$(gh pr view "$PR_BRANCH" --json number,state,commits)
+          TEST_PR_NUMBER=$(jq -r '.number' <<<"$PR_JSON")
+          TEST_PR_STATE=$(jq -r '.state' <<<"$PR_JSON")
+          TEST_PR_COMMITS=$(jq -r '.commits | length' <<<"$PR_JSON")
+
+          if [ "$TEST_PR_STATE" != "OPEN" ] || [ "$TEST_PR_COMMITS" -lt 1 ]; then
+            echo "Integration test PR #${TEST_PR_NUMBER} is ${TEST_PR_STATE} with ${TEST_PR_COMMITS} commits, refusing to comment"
+            exit 1
+          fi
+
+          # Post the "sigma-convert-all" comment in a loop in case of api failure.
+          ATTEMPT=0
+          until gh pr comment "$TEST_PR_NUMBER" --body "sigma convert all"; do
+            ATTEMPT=$((ATTEMPT + 1))
+            if [ "$ATTEMPT" -ge 3 ]; then
+              echo "Could not comment on PR #${TEST_PR_NUMBER}"
+              exit 1
+            fi
+            sleep 5
+          done
