@@ -217,9 +217,8 @@ jobs:
           GH_TOKEN: ${{ steps.get-github-app-token.outputs.token }}
           ACTION_SHA: ${{ github.event.pull_request.head.sha }}
           RUN_TOKEN: ${{ github.run_id }}-${{ github.run_attempt }}
+          MAIN_UPDATE_BRANCH: integration-test-main-update-${{ github.event.pull_request.number }}
         run: |
-          MAIN_UPDATE_BRANCH="integration-test-main-update-${GITHUB_PR_NUMBER}"
-
           git fetch
           git checkout main
           git pull
