@@ -351,7 +351,7 @@ func TestTestQueriesReportsCorrectCountEvenOnChangingDataframeStructure(t *testi
 	assert.Equal(t, 2, results[0].Stats.Count, "total results should be 2 even with changing dataframe structure")
 }
 
-func TestThrowsErrorWhenShowLogLinesIsTrueAndNoLogLines(t *testing.T) {
+func TestTestQueriesThrowsErrorWhenShowLogLinesIsTrueAndNoLogLines(t *testing.T) {
 	// When the underlying datasource query returns no log lines (or they are on a different label (e.g. body)), but the
 	// QueryTestResult is configured to show log lines, an error should be thrown.
 	config := model.Configuration{
