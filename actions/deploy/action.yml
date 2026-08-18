@@ -29,6 +29,9 @@ outputs:
   alerts_deleted:
     description: "List of alerts UIDs deleted in Grafana"
     value: ${{ steps.output.outputs.alerts_deleted }}
+  deployment_error:
+    description: "Error reported by the deployer"
+    value: ${{ steps.output.outputs.deployment_error }}
 
 runs:
   using: "composite"
@@ -71,10 +74,11 @@ runs:
         COPIED_FILES: ${{ steps.changed-files.outputs.copied_files }}
         IMAGE_REF: ${{ steps.image-ref.outputs.image_ref }}
       run: |
+        rm -f .sigma-deploy-output
         docker run --rm \
             -v "$(pwd):/sigma-rules" \
             -w /sigma-rules \
-            -e GITHUB_OUTPUT="/sigma-rules/github-output" \
+            -e GITHUB_OUTPUT="/sigma-rules/.sigma-deploy-output" \
             -e CONFIG_PATH="$CONFIG_PATH" \
             -e DEPLOYER_GRAFANA_SA_TOKEN="$GRAFANA_SA_TOKEN" \
             -e DEPLOYER_FRESH_DEPLOY="$FRESH_DEPLOY" \
@@ -85,10 +89,14 @@ runs:
             "ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:$IMAGE_REF" \
             deploy
     - name: Move Output
+      if: ${{ always() }}
       id: output
       shell: bash
       run: |
-        mv github-output $GITHUB_OUTPUT
+        if [[ -f .sigma-deploy-output ]]; then
+          cat .sigma-deploy-output >> "$GITHUB_OUTPUT"
+          rm -f .sigma-deploy-output
+        fi
     - name: Get Grafana Instance
       if: success() && github.event_name == 'push'
       id: grafana-instance
@@ -160,8 +168,19 @@ runs:
     - name: Comment Status
       if: failure() && github.event_name == 'push'
       uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+      env:
+        DEPLOYMENT_ERROR: ${{ steps.output.outputs.deployment_error }}
       with:
           script: |
+            const deploymentError = process.env.DEPLOYMENT_ERROR?.trim();
+            const escapedError = deploymentError
+              ?.replaceAll("&", "&amp;")
+              .replaceAll("<", "&lt;")
+              .replaceAll(">", "&gt;");
+            const body = escapedError
+              ? `## Sigma Rule Deployment Failed\n\nThe deployer reported:\n\n<pre>${escapedError}</pre>`
+              : "## Sigma Rule Deployment Failed";
+
             const associatedPrs = await github.rest.repos.listPullRequestsAssociatedWithCommit({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -172,10 +191,10 @@ runs:
               for (const pr of associatedPrs.data) {
                 const nodeId = pr.node_id;
 
-                const query = `mutation AddComment {
+                const query = `mutation AddComment($body: String!, $subjectId: ID!) {
                 addComment(input: {
-                  body: "Sigma Rules Deployment Failed",
-                  subjectId: "${nodeId}",
+                  body: $body,
+                  subjectId: $subjectId,
                 }) {
                   subject {
                     id
@@ -186,6 +205,11 @@ runs:
                 }
                 }`
 
-                await github.graphql(query);
+                const variables = {
+                  body: body,
+                  subjectId: nodeId,
+                };
+
+                await github.graphql(query, variables);
               }
             }

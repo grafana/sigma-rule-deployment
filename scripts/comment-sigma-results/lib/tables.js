@@ -23,7 +23,23 @@ export function buildTestResultsTable(testResults) {
         ? `${result.stats.bytesProcessed.value.toLocaleString()} ${result.stats.bytesProcessed.unit}`.trim()
         : '-';
       const linkCell = result.link ? `[See in Explore](${result.link})` : '-';
-      resultTable += `| ${title} | ${linkCell} | ${result.stats.count} | ${executionTime} | ${bytesProcessed} | ${result.stats.errors.length} |\n`;
+      const errors = result.stats.errors || [];
+      const errorCell = errors.length === 0
+        ? '0'
+        : `${errors.length}<br>${errors
+          .map(error => String(error).replace(/\|/g, '\\|').replace(/\r?\n/g, '<br>'))
+          .join('<br>')}`;
+
+      if (process.env.GITHUB_ACTIONS) {
+        for (const error of errors) {
+          core.error(String(error), {
+            title: `Integration Error in ${title}`,
+            file: filePath,
+          });
+        }
+      }
+
+      resultTable += `| ${title} | ${linkCell} | ${result.stats.count} | ${executionTime} | ${bytesProcessed} | ${errorCell} |\n`;
     }
   }
 
