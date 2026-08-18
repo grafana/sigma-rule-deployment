@@ -142,7 +142,11 @@ runs:
       id: set-output
       shell: bash
       run: |
-        mv github-output $GITHUB_OUTPUT
+        # The converter only creates this file when there are conversion errors to report.
+        if [ -f github-output ]; then
+          cat github-output >> "$GITHUB_OUTPUT"
+          rm github-output
+        fi
 
 
     - name: Comment Conversions
