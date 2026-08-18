@@ -277,6 +277,19 @@ func ProcessFrame(frame model.Frame, result *model.QueryTestResult, showSampleVa
 		fieldIndices[field.Name] = i
 	}
 
+	// Determine which field holds the log line: "Line" (legacy) or "body" (newer)
+	var lineLabel string
+	var lineIndex int
+	if idx, ok := fieldIndices["Line"]; ok {
+		lineLabel, lineIndex = "Line", idx
+	} else if idx, ok := fieldIndices["body"]; ok {
+		lineLabel, lineIndex = "body", idx
+	}
+
+	if showLogLines && lineLabel == "" {
+		return fmt.Errorf("cannot show log lines: frame has neither a %q nor a %q field", "Line", "body")
+	}
+
 	// Skip if no values
 	if len(frame.Data.Values) == 0 {
 		return nil
@@ -289,6 +302,7 @@ func ProcessFrame(frame model.Frame, result *model.QueryTestResult, showSampleVa
 			numRows = len(values)
 		}
 	}
+	result.Stats.Count += numRows
 
 	// Process each row of values
 	for rowIndex := 0; rowIndex < numRows; rowIndex++ {
@@ -311,19 +325,11 @@ func ProcessFrame(frame model.Frame, result *model.QueryTestResult, showSampleVa
 			}
 		}
 
-		// Process Line field if present
-		if lineIndex, ok := fieldIndices["Line"]; ok {
-			if lineIndex < len(frame.Data.Values) {
-				if rowIndex < len(frame.Data.Values[lineIndex]) {
-					if lineValue, ok := frame.Data.Values[lineIndex][rowIndex].(string); ok {
-						result.Stats.Count++
-						// Only store the line value if show_log_lines is enabled
-						if showLogLines {
-							if _, exists := result.Stats.Fields["Line"]; !exists {
-								result.Stats.Fields["Line"] = lineValue
-							}
-						}
-					}
+		// Process the log line, if requested and present
+		if showLogLines && lineIndex < len(frame.Data.Values) && rowIndex < len(frame.Data.Values[lineIndex]) {
+			if lineValue, ok := frame.Data.Values[lineIndex][rowIndex].(string); ok {
+				if _, exists := result.Stats.Fields[lineLabel]; !exists {
+					result.Stats.Fields[lineLabel] = lineValue
 				}
 			}
 		}

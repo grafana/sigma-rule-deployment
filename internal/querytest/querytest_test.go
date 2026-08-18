@@ -244,6 +244,180 @@ func TestTestQueriesPreservesExploreLinkOnError(t *testing.T) {
 	assert.Len(t, results[0].Stats.Errors, 1)
 }
 
+func TestTestQueriesReportsCorrectCountEvenOnChangingDataframeStructure(t *testing.T) {
+	// When the underlying datasource query returns a different dataframe structure
+	// than the previous query, the QueryTestResult should still report the correct
+	// number of results (old dataframe structure with lines vs new dataframe structure with body).
+	config := model.Configuration{
+		ConversionDefaults: model.ConversionConfig{
+			Target:     "loki",
+			DataSource: "test-datasource",
+		},
+		IntegratorConfig: model.IntegrationConfig{
+			OrgID: 1,
+			From:  "now-1h",
+			To:    "now",
+		},
+		DeployerConfig: model.DeploymentConfig{
+			GrafanaInstance: "https://test.grafana.com",
+		},
+	}
+
+	mock := newTestDatasourceQueryWithChangingStructure()
+	mock.AddMockResponse(`{job="test"}`, `{
+		"results": {
+			"A": {
+				"frames": [
+					{
+						"schema": {
+							"fields": [
+								{"name": "Time", "type": "time"},
+								{"name": "Line", "type": "string"},
+								{"name": "labels", "type": "other"}
+							]
+						},
+						"data": {
+							"values": [
+								[1000000000, 2000000000],
+								["error log line", "warning log line"],
+								[
+									{"job": "loki", "level": "error"},
+									{"job": "loki", "level": "warning"}
+								]
+							]
+						}
+					}
+				]
+			}
+		},
+		"errors": []
+	}`)
+	mock.AddMockResponse(`{job="test"} | json`, `{
+		"results": {
+			"A": {
+				"frames": [
+					{
+						"schema": {
+							"fields": [
+								{"name": "Time", "type": "time"},
+								{"name": "body", "type": "string"},
+								{"name": "labels", "type": "other"}
+							]
+						},
+						"data": {
+							"values": [
+								[1000000000, 2000000000],
+								["error log line", "warning log line"],
+								[
+									{"job": "loki", "level": "error"},
+									{"job": "loki", "level": "warning"}
+								]
+							]
+						}
+					}
+				]
+			}
+		},
+		"errors": []
+	}`)
+
+	originalDatasourceQuery := integrate.DefaultDatasourceQuery
+	integrate.DefaultDatasourceQuery = mock
+	defer func() {
+		integrate.DefaultDatasourceQuery = originalDatasourceQuery
+	}()
+
+	// Test first query with old dataframe structure
+	queryTester := NewQueryTester(config, nil, 5*time.Second)
+	results, err := queryTester.TestQueries(
+		map[string]string{"A0": `{job="test"}`},
+		model.ConversionConfig{Name: "test_conv"},
+		config.ConversionDefaults,
+	)
+
+	assert.NoError(t, err)
+	assert.Len(t, results, 1)
+	assert.Equal(t, 2, results[0].Stats.Count, "total results should be 2 even with changing dataframe structure")
+
+	// Test second query with new dataframe structure
+	results, err = queryTester.TestQueries(
+		map[string]string{"A0": `{job="test"} | json`},
+		model.ConversionConfig{Name: "test_conv"},
+		config.ConversionDefaults,
+	)
+
+	assert.NoError(t, err)
+	assert.Len(t, results, 1)
+	assert.Equal(t, 2, results[0].Stats.Count, "total results should be 2 even with changing dataframe structure")
+}
+
+func TestTestQueriesThrowsErrorWhenShowLogLinesIsTrueAndNoLogLines(t *testing.T) {
+	// When the underlying datasource query returns no log lines (or they are on a different label (e.g. body)), but the
+	// QueryTestResult is configured to show log lines, an error should be thrown.
+	config := model.Configuration{
+		ConversionDefaults: model.ConversionConfig{
+			Target:     "loki",
+			DataSource: "test-datasource",
+		},
+		IntegratorConfig: model.IntegrationConfig{
+			OrgID:        1,
+			From:         "now-1h",
+			To:           "now",
+			ShowLogLines: true,
+		},
+		DeployerConfig: model.DeploymentConfig{
+			GrafanaInstance: "https://test.grafana.com",
+		},
+	}
+
+	mock := newTestDatasourceQueryWithChangingStructure()
+	mock.AddMockResponse(`{job="test"}`, `{
+		"results": {
+			"A": {
+				"frames": [
+					{
+						"schema": {
+							"fields": [
+								{"name": "Time", "type": "time"},
+								{"name": "somethingnew", "type": "string"},
+								{"name": "labels", "type": "other"}
+							]
+						},
+						"data": {
+							"values": [
+								[1000000000, 2000000000],
+								["error log line", "warning log line"],
+								[
+									{"job": "loki", "level": "error"},
+									{"job": "loki", "level": "warning"}
+								]
+							]
+						}
+					}
+				]
+			}
+		},
+		"errors": []
+	}`)
+
+	originalDatasourceQuery := integrate.DefaultDatasourceQuery
+	integrate.DefaultDatasourceQuery = mock
+	defer func() {
+		integrate.DefaultDatasourceQuery = originalDatasourceQuery
+	}()
+
+	queryTester := NewQueryTester(config, nil, 5*time.Second)
+	results, err := queryTester.TestQueries(
+		map[string]string{"A0": `{job="test"}`},
+		model.ConversionConfig{Name: "test_conv"},
+		config.ConversionDefaults,
+	)
+
+	assert.ErrorContains(t, err, "Line")
+	assert.ErrorContains(t, err, "body")
+	assert.Empty(t, results)
+}
+
 // testDatasourceQuery is a mock implementation for testing
 type testDatasourceQuery struct {
 	queryLog      []string
@@ -279,7 +453,7 @@ func (t *testDatasourceQuery) ExecuteQuery(query, dsName, _ string, _ string, _ 
 						"schema": {
 							"fields": [
 								{"name": "Time", "type": "time"},
-								{"name": "Line", "type": "string"},
+								{"name": "body", "type": "string"},
 								{"name": "labels", "type": "other"}
 							]
 						},
@@ -323,6 +497,33 @@ func (t *testDatasourceQueryWithErrors) ExecuteQuery(query, dsName, baseURL, api
 	// Check if we should return an error for this query
 	if err, exists := t.mockErrors[query]; exists {
 		return nil, err
+	}
+
+	// Otherwise use the parent implementation
+	return t.testDatasourceQuery.ExecuteQuery(query, dsName, baseURL, apiKey, refID, from, to, customModel, timeout)
+}
+
+// testDatasourceQueryWithChangingStructure supports simulating changing dataframe structures for testing
+type testDatasourceQueryWithChangingStructure struct {
+	*testDatasourceQuery
+	mockResponses map[string]string
+}
+
+func newTestDatasourceQueryWithChangingStructure() *testDatasourceQueryWithChangingStructure {
+	return &testDatasourceQueryWithChangingStructure{
+		testDatasourceQuery: newTestDatasourceQuery(),
+		mockResponses:       make(map[string]string),
+	}
+}
+
+func (t *testDatasourceQueryWithChangingStructure) AddMockResponse(query string, response string) {
+	t.mockResponses[query] = response
+}
+
+func (t *testDatasourceQueryWithChangingStructure) ExecuteQuery(query, dsName, baseURL, apiKey, refID, from, to, customModel string, timeout time.Duration) ([]byte, error) {
+	// Check if we have a mock response for this query
+	if response, exists := t.mockResponses[query]; exists {
+		return []byte(response), nil
 	}
 
 	// Otherwise use the parent implementation
