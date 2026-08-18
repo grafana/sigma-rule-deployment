@@ -217,6 +217,7 @@ jobs:
           GH_TOKEN: ${{ steps.get-github-app-token.outputs.token }}
           ACTION_SHA: ${{ github.event.pull_request.head.sha }}
           RUN_TOKEN: ${{ github.run_id }}-${{ github.run_attempt }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
         run: |
           git fetch
           git checkout main
@@ -258,11 +259,31 @@ jobs:
           fi
           sleep 10 # wait for the PR checks to start...
 
+          MAIN_UPDATE_PR="integration-test-main-update-${GITHUB_PR_NUMBER}"
+
           # wait for the required PR checks to complete
-          if gh pr checks "integration-test-main-update-${GITHUB_PR_NUMBER}" --watch; then
-            gh pr ready "integration-test-main-update-${GITHUB_PR_NUMBER}"
-            gh pr merge "integration-test-main-update-${GITHUB_PR_NUMBER}" --auto --squash
+          if gh pr checks "$MAIN_UPDATE_PR" --watch; then
+            gh pr ready "$MAIN_UPDATE_PR"
+            gh pr merge "$MAIN_UPDATE_PR" --auto --squash
             sleep 5 # wait for the merge to complete
+
+            # some repositories now require a manual merge even after checks pass,
+            # so auto-merge above may only have queued the merge rather than completed it
+            STATE=$(gh pr view "$MAIN_UPDATE_PR" --json state -q .state)
+            if [ "$STATE" != "MERGED" ]; then
+              gh pr comment "$MAIN_UPDATE_PR" --body "@${PR_AUTHOR} this repository requires a manual merge — please review and merge this PR so the integration test can continue."
+
+              echo "Waiting for $MAIN_UPDATE_PR to be manually merged..."
+              while [ "$STATE" != "MERGED" ]; do
+                if [ "$STATE" = "CLOSED" ]; then
+                  echo "$MAIN_UPDATE_PR was closed without merging"
+                  exit 1
+                fi
+                sleep 30
+                STATE=$(gh pr view "$MAIN_UPDATE_PR" --json state -q .state)
+              done
+            fi
+
             gh pr comment "integration-test-pr-${GITHUB_PR_NUMBER}" --body "sigma convert all"
           else
             echo "Integration Test Main Update PR failed"
