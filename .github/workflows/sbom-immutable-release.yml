@@ -34,7 +34,7 @@ jobs:
 
       - name: "Get Socket API token from Vault"
         id: vault-secrets
-        uses: grafana/shared-workflows/actions/get-vault-secrets@e46fe1e9a2bf9e618bcf8d8d32f3a7381b45c06d # get-vault-secrets/v2.0.0
+        uses: grafana/shared-workflows/actions/get-vault-secrets@2e3743a1f8abfd3e921e53a7726ec0744c11bb01 # get-vault-secrets/v2.0.1
         with:
           common_secrets: |
             SOCKET_API_TOKEN=socket:SOCKET_API_KEY
@@ -42,7 +42,7 @@ jobs:
       # socket-export-sbom v1.0.0 creates a fresh Socket scan of the manifest files on disk,
       # so the tag's source tree has to be checked out before the action runs.
       - name: "Checkout"
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ steps.meta.outputs.tag }}
           persist-credentials: false
