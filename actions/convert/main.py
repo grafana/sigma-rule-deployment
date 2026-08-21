@@ -8,6 +8,7 @@ usage: main.py [-h] [--config CONFIG] [--path-prefix PATH_PREFIX]
                [--pretty-print PRETTY_PRINT] [--all-rules ALL_RULES]
                [--changed-files CHANGED_FILES]
                [--deleted-files DELETED_FILES]
+               [--manual-files MANUAL_FILES]
 
 Sigma CLI Conversion
 
@@ -26,6 +27,9 @@ options:
                         List of changed files (default: )
   --deleted-files DELETED_FILES
                         List of deleted files (default: )
+  --manual-files MANUAL_FILES
+                        List of conversion files a human modified since the
+                        last automation commit (default: )
 ---
 Notes:
   - The path prefix must be set using the PATH_PREFIX environment variable,
@@ -57,10 +61,16 @@ if __name__ == "__main__":
     # Load config file and parse it using Dynaconf
     config = load_config(str(config_file))
 
+    previous_config = None
+    prev_config_file = Path(args.path_prefix) / Path(args.config + ".old")
+    if prev_config_file.exists():
+        previous_config = load_config(str(prev_config_file))
+
     # Convert Sigma rules to the target format per each file in the conversions object
     # in the config
     convert_rules(
         config=config,
+        previous_config=previous_config,
         path_prefix=args.path_prefix,
         render_traceback=args.render_traceback,
         pretty_print=args.pretty_print,
