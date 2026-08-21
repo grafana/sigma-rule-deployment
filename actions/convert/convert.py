@@ -71,6 +71,7 @@ def convert_rules(
     changed_files: str = "",
     deleted_files: str = "",
     manual_files: str = "",
+    previous_config: Dynaconf | None = None,
 ) -> None:
     """Convert Sigma rules to the target format per each file in the conversions object
     in the config. The converted files will be saved in the PATH_PREFIX/conversions
@@ -122,6 +123,7 @@ def convert_rules(
         ValueError: Pipeline file path must be relative to the project root.
         ValueError: Error loading rule file {rule_file}.
     """
+    # region 1. Setup & validation
     changed_files_set = set(
         path_prefix / Path(x) for x in changed_files.split(" ") if x
     )
@@ -160,7 +162,9 @@ def convert_rules(
 
     # Create the output directory if it doesn't exist
     conversions_output_dir.mkdir(parents=True, exist_ok=True)
+    # endregion
 
+    # region 2. Load conversion defaults
     # Get top-level default values
     default_target = config.get("conversion_defaults.target", "loki")
     default_format = config.get("conversion_defaults.format", "default")
@@ -179,7 +183,9 @@ def convert_rules(
     default_json_indent = config.get("conversion_defaults.json_indent", 0)
     default_required_rule_fields = config.get("conversion_defaults.required_rule_fields", [])
     verbose = config.get("verbose", False)
+    # endregion
 
+    # region 3. Backfill manual flag
     # Backfill the manual flag onto conversion files a human modified since the last
     # automation commit. Doing this before the conversion loop means the freshly-added
     # flag is honoured (and the file preserved) on this same run.
@@ -195,9 +201,23 @@ def convert_rules(
         existing[MANUAL_KEY] = True
         _write_output(manual_file, existing, pretty_print, default_encoding)
         print(f"Marking manually-modified conversion file as manual: {manual_file}")
+    # endregion
+
+    changed_conversions = []
+
+    # Determine if the config file itself changed, and if so, check for conversion groups whose own config changed. Or if any global setting changed, requiring a full conversion.
+    config_path = config._loaded_files[0] if config._loaded_files else None
+    config_file_changed = config_path is not None and Path(config_path) in changed_files_set
+    if config_file_changed:
+        print(f"Config file {config_path} changed, checking for conversion groups whose own config changed")
+        all_config_changed, changed_conversions_list = get_config_changes(previous_config, config) if previous_config else (False, [])
+        all_rules = all_rules or all_config_changed
+        changed_conversions = changed_conversions_list
+        print(f"Changed conversion groups in config: {changed_conversions}")
 
     conversions_to_delete = []
     conversion_errors = []
+    # region 4. Per-conversion loop
     # Convert Sigma rules to the target format per each conversion object in the config
     for conversion in config.get("conversions", []):
         # If the conversion name is not unique, we'll overwrite the output file,
@@ -267,6 +287,29 @@ def convert_rules(
                 f"No files matched the patterns after applying file_pattern: {file_pattern}"
             )
 
+        # A rule dropped from (or reassigned away from) this conversion's own
+        # input list, with the file left in place on disk, needs its stale
+        # output cleaned up here
+        if config_file_changed and previous_config is not None:
+            prev_conversion = next(
+                (
+                    c
+                    for c in previous_config.get("conversions", [])
+                    if c.get("name") == name
+                ),
+                None,
+            )
+            for dropped_file in get_dropped_input_files(
+                prev_conversion, input_patterns, path_prefix, filtered_files
+            ):
+                rel_dropped_path = Path(dropped_file).relative_to(path_prefix)
+                output_filename = f"{name}_{rel_dropped_path.stem}.json".replace(
+                    os.sep, "_"
+                )
+                output_path = conversions_output_dir / output_filename
+                if output_path.exists():
+                    conversions_to_delete.append(output_path)
+
         print(f"Total files: {len(filtered_files)}")
         print(f"Target backend: {conversion.get('target', default_target)}")
         if all_rules:
@@ -292,6 +335,7 @@ def convert_rules(
             else:
                 pipelines.append(f"--pipeline={pipeline}")
 
+        # region 4.a Per-input-file conversion
         for input_file in filtered_files:
             # If we're not converting all rules, skip the conversion if:
             # - the file is not in the list of changed files
@@ -300,6 +344,7 @@ def convert_rules(
                 not all_rules
                 and Path(input_file) not in changed_files_set
                 and not any_pipeline_changed
+                and not name in changed_conversions
             ):
                 print(
                     f"Skipping conversion of {input_file} because it and it's pipelines haven't changed"
@@ -431,9 +476,12 @@ def convert_rules(
 
                 print(f"Output written to {output_file}")
                 print(f"Converting {name} completed with exit code {result.exit_code}")
+        # endregion
 
         print("-" * 80)
+    # endregion
 
+    # region 5. Cleanup deleted rules
     # Remove conversions of deleted rules from the output directory
     if len(conversions_to_delete) > 0:
         print("Removing conversions of deleted rules from the output directory")
@@ -446,7 +494,9 @@ def convert_rules(
                     continue
                 print(f"Removing {deleted_file}")
                 os.remove(deleted_file)
+    # endregion
 
+    # region 6. Report errors to GitHub Actions
     # If there were any conversion errors, send them to $GITHUB_OUTPUT for the GitHub Actions workflow to pick up and display in the UI.
     if conversion_errors:
         github_output_path = os.getenv("GITHUB_OUTPUT")
@@ -455,6 +505,7 @@ def convert_rules(
                 f.write(f"conversion_errors={json.dumps(conversion_errors).decode('utf-8')}\n")
         else:
             print("GITHUB_OUTPUT environment variable not set, cannot write conversion errors to GitHub Actions output")
+    # endregion
 
 
 def is_safe_path(base_dir: str | Path, target_path: str | Path) -> bool:
@@ -538,3 +589,78 @@ def filter_rule_fields(rule_dicts: list[dict[str, Any]], desired_fields: list[st
         necessary_fields = set(["id", "title"] + desired_fields)
 
     return [dict((field, rule_dict[field]) for field in necessary_fields if field in rule_dict) for rule_dict in rule_dicts]
+
+def get_config_changes(previous_config: Dynaconf, current_config: Dynaconf) -> tuple[bool, list[str]]:
+    """Get the list of conversion names whose own config block changed.
+
+    Args:
+        previous_config (Dynaconf): The previous config object.
+        current_config (Dynaconf): The current config object.
+
+    Returns:
+        tuple[bool, list[str]]: A tuple containing a boolean indicating if a global config setting changed and a list of conversion names whose config changed.
+    """
+    global_config_changed = False
+    # Check if any global config settings changed (except for conversions)
+    for key in current_config.keys():
+        if key != "conversions" and (key not in previous_config or current_config[key] != previous_config[key]):
+            global_config_changed = True
+            break
+
+    changed_conversions = []
+    for conversion in current_config.get("conversions", []):
+        name = conversion.get("name", None)
+        if not name:
+            continue
+        prev_conversion = next(
+            (c for c in previous_config.get("conversions", []) if c.get("name") == name),
+            None,
+        )
+        if prev_conversion is None or conversion != prev_conversion:
+            changed_conversions.append(name)
+    return global_config_changed, changed_conversions
+
+
+def _normalize_patterns(value: list | str | None) -> list[str]:
+    """Normalize a conversion's `input` value to a list of pattern strings."""
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value]
+    return list(value)
+
+
+def get_dropped_input_files(
+    previous_conversion: dict | None,
+    current_input_patterns: list[str],
+    path_prefix: Path,
+    filtered_files: list[str],
+) -> list[str]:
+    """Resolve the files a conversion no longer matches because a pattern was
+    dropped from its `input` list since previous_config.
+
+    A pattern that was only narrowed, rather than dropped outright, still
+    counts as "removed" here since its exact string is gone from the current
+    list.
+    """
+    if previous_conversion is None:
+        return []
+
+    removed_patterns = [
+        pattern
+        for pattern in _normalize_patterns(previous_conversion.get("input"))
+        if pattern not in current_input_patterns
+    ]
+    if not removed_patterns:
+        return []
+
+    still_valid = set(filtered_files)
+    dropped_files = []
+    seen = set()
+    for pattern in removed_patterns:
+        for resolved in glob.glob(str(path_prefix / pattern), recursive=True):
+            if resolved in still_valid or resolved in seen:
+                continue
+            seen.add(resolved)
+            dropped_files.append(resolved)
+    return dropped_files
