@@ -1294,7 +1294,7 @@ def test_convert_rules_skips_manual_conversion(temp_workspace, mock_config):
     assert output_file.read_text() == manual_content
 
 
-def test_convert_rules_backfills_manual_flag(temp_workspace, mock_config):
+def test_convert_rules_backfills_manual_flag(temp_workspace, mock_config): # trufflehog:ignore
     """A human-modified conversion file listed in manual_files gains the manual flag."""
     conversion_dir = temp_workspace / "conversions"
     conversion_dir.mkdir()

@@ -344,7 +344,7 @@ def convert_rules(
                 not all_rules
                 and Path(input_file) not in changed_files_set
                 and not any_pipeline_changed
-                and not name in changed_conversions
+                and name not in changed_conversions
             ):
                 print(
                     f"Skipping conversion of {input_file} because it and it's pipelines haven't changed"
