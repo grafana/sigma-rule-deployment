@@ -150,6 +150,8 @@ runs:
 
     - name: Cleanup old config file
       id: cleanup-old-config
+      env: 
+        CONFIG_PATH: ${{ inputs.config_path }}
       shell: bash
       run: |
         if [ -f ${CONFIG_PATH}.old ]; then

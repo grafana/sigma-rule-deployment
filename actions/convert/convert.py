@@ -602,8 +602,8 @@ def get_config_changes(previous_config: Dynaconf, current_config: Dynaconf) -> t
     """
     global_config_changed = False
     # Check if any global config settings changed (except for conversions)
-    for key in current_config.keys():
-        if key != "conversions" and (key not in previous_config or current_config[key] != previous_config[key]):
+    for key in ["conversion_defaults", "folders", "verbose"]:
+        if current_config.get(key) != previous_config.get(key):
             global_config_changed = True
             break
 
