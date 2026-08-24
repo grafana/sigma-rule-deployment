@@ -46,15 +46,16 @@ jobs:
 
       - name: Get service account token for instance from Vault
         if: ${{ inputs.vault_path != '' }}
-        uses: grafana/shared-workflows/actions/get-vault-secrets@f1614b210386ac420af6807a997ac7f6d96e477a # get-vault-secrets/v1.3.1
+        id: get-secrets
+        uses: grafana/shared-workflows/actions/get-vault-secrets@2e3743a1f8abfd3e921e53a7726ec0744c11bb01 # get-vault-secrets/v2.0.1
         with:
           repo_secrets: ${{ format('GRAFANA_SA_TOKEN={0}', inputs.vault_path) }}
 
       - name: Deploy alert rules to Grafana
         id: deploy
-        uses: grafana/sigma-rule-deployment/actions/deploy@v0.2.0
+        uses: grafana/sigma-rule-deployment/actions/deploy@v0.2.2
         with:
           config_path: ${{ inputs.config_path }}
           fresh_deploy: ${{ inputs.fresh_deploy }}
-          grafana_sa_token: ${{ secrets.grafana_sa_token || env.GRAFANA_SA_TOKEN }}
+          grafana_sa_token: ${{ secrets.grafana_sa_token || fromJSON(steps.get-secrets.outputs.secrets || '{}').GRAFANA_SA_TOKEN }}
           github_token: ${{ secrets.custom_github_token || github.token }}

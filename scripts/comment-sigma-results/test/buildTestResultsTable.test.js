@@ -2,6 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import * as commentModule from '../comment.js';
 
+// Avoid emitting GitHub Actions annotations while testing table rendering.
+delete process.env.GITHUB_ACTIONS;
+
 test('buildTestResultsTable - empty object returns empty string', () => {
   const result = commentModule.buildTestResultsTable({});
   assert.strictEqual(result, '');
@@ -155,7 +158,29 @@ test('buildTestResultsTable - handles errors array correctly', () => {
   assert(result.includes('file1.json'));
   assert(result.includes('https://grafana.com/explore/123'));
   assert(result.includes('0'));
-  assert(result.includes('3')); // error count
+  assert(result.includes('3<br>error1<br>error2<br>error3'));
+});
+
+test('buildTestResultsTable - keeps integration errors inside one table cell', () => {
+  const testResults = {
+    '/path/to/file1.json': [
+      {
+        datasource: 'loki',
+        link: 'https://grafana.com/explore/123',
+        stats: {
+          count: 0,
+          errors: ['parse error | unexpected token\nline 2'],
+          fields: {}
+        }
+      }
+    ]
+  };
+
+  const result = commentModule.buildTestResultsTable(testResults);
+
+  assert(result.includes('1<br>parse error \\| unexpected token<br>line 2'));
+  const dataLines = result.split('\n').filter(line => line.includes('file1.json'));
+  assert.strictEqual(dataLines.length, 1);
 });
 
 test('buildTestResultsTable - displays execution time and bytes processed when provided', () => {
@@ -240,4 +265,3 @@ test('buildTestResultsTable - displays zero values when present, shows dash when
   const dataLineMissing = linesMissing.find(line => line.includes('file2.json'));
   assert(dataLineMissing.includes('-'), 'Should show dash for missing fields');
 });
-

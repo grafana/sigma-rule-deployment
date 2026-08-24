@@ -197,6 +197,7 @@ def convert_rules(
         print(f"Marking manually-modified conversion file as manual: {manual_file}")
 
     conversions_to_delete = []
+    conversion_errors = []
     # Convert Sigma rules to the target format per each conversion object in the config
     for conversion in config.get("conversions", []):
         # If the conversion name is not unique, we'll overwrite the output file,
@@ -394,6 +395,14 @@ def convert_rules(
                 # If an error occurred, print the output of the command. Sometimes the output
                 # doesn't contain anything.
                 print(f"Output:\n{result.output}".strip())
+                conversion_errors.append(
+                    {
+                        "conversion_name": name,
+                        "input_file": str(rel_input_path),
+                        "output": result.output.strip(),
+                    }
+                )
+
             else:
                 queries = [
                     line
@@ -437,6 +446,15 @@ def convert_rules(
                     continue
                 print(f"Removing {deleted_file}")
                 os.remove(deleted_file)
+
+    # If there were any conversion errors, send them to $GITHUB_OUTPUT for the GitHub Actions workflow to pick up and display in the UI.
+    if conversion_errors:
+        github_output_path = os.getenv("GITHUB_OUTPUT")
+        if github_output_path:
+            with open(github_output_path, "a", encoding="utf-8") as f:
+                f.write(f"conversion_errors={json.dumps(conversion_errors).decode('utf-8')}\n")
+        else:
+            print("GITHUB_OUTPUT environment variable not set, cannot write conversion errors to GitHub Actions output")
 
 
 def is_safe_path(base_dir: str | Path, target_path: str | Path) -> bool:
