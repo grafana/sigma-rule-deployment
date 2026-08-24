@@ -62,7 +62,7 @@ if __name__ == "__main__":
     config = load_config(str(config_file))
 
     previous_config = None
-    prev_config_file = Path(args.path_prefix) / Path(args.config + ".old")
+    prev_config_file = Path(args.path_prefix) / Path(args.config + ".old.yml")
     if prev_config_file.exists():
         previous_config = load_config(str(prev_config_file))
 
