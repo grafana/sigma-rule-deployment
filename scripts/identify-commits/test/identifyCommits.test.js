@@ -281,3 +281,29 @@ test('identifyCommits - custom actions username', async () => {
   assert.strictEqual(results.previousRef, 'commit2');
 });
 
+test('identifyCommits - throws when the API returns no commits', async () => {
+  const mockOctokit = {
+    paginate: async (endpoint) => {
+      return [];
+    },
+    rest: {
+      pulls: {
+        listCommits: {
+          endpoint: {
+            merge: (params) => params
+          }
+        }
+      }
+    }
+  };
+
+  const context = {
+    repo: { owner: 'test-owner', repo: 'test-repo' }
+  };
+
+  await assert.rejects(
+    () => identifyModule.identifyCommits(mockOctokit, context, 123, 'github-actions[bot]'),
+    /No commits were returned for pull request #123/
+  );
+});
+
