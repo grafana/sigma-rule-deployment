@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -72,6 +73,52 @@ var FuncMap = template.FuncMap{
 	// Comparison
 	"compare":   strings.Compare,
 	"equalFold": strings.EqualFold,
+}
+
+// templateFuncs returns the functions available to label and annotation
+// templates. Helpers that take the whole rule set are only registered when
+// template_all_rules is enabled, so using them without it fails at parse time
+// instead of producing a confusing execution error.
+func templateFuncs(templateAllRules bool) template.FuncMap {
+	funcs := maps.Clone(FuncMap)
+	if templateAllRules {
+		funcs["highestLevel"] = highestLevel
+	}
+
+	return funcs
+}
+
+func highestLevel(rules []model.SigmaRule) string {
+	highest := ""
+	highestPriority := -1
+
+	for _, rule := range rules {
+		level := strings.ToLower(strings.TrimSpace(rule.Level))
+		priority := sigmaLevelPriority(level)
+		if priority > highestPriority {
+			highest = level
+			highestPriority = priority
+		}
+	}
+
+	return highest
+}
+
+func sigmaLevelPriority(level string) int {
+	switch level {
+	case "informational":
+		return 0
+	case "low":
+		return 1
+	case "medium":
+		return 2
+	case "high":
+		return 3
+	case "critical":
+		return 4
+	default:
+		return -1
+	}
 }
 
 type Integrator struct {
@@ -652,9 +699,11 @@ func (i *Integrator) ConvertToAlert(rule *model.ProvisionedAlertRule, queries []
 	// Path to associated conversion file
 	rule.Annotations["ConversionFile"] = conversionFile
 
+	funcs := templateFuncs(i.config.IntegratorConfig.TemplateAllRules)
+
 	if i.config.IntegratorConfig.TemplateAnnotations != nil {
 		for key, value := range i.config.IntegratorConfig.TemplateAnnotations {
-			tmpl, err := template.New("annotation_" + key).Funcs(FuncMap).Parse(value)
+			tmpl, err := template.New("annotation_" + key).Funcs(funcs).Parse(value)
 			if err != nil {
 				return fmt.Errorf("error parsing template %s: %v", key, err)
 			}
@@ -677,7 +726,7 @@ func (i *Integrator) ConvertToAlert(rule *model.ProvisionedAlertRule, queries []
 
 	if i.config.IntegratorConfig.TemplateLabels != nil {
 		for key, value := range i.config.IntegratorConfig.TemplateLabels {
-			tmpl, err := template.New("label_" + key).Parse(value)
+			tmpl, err := template.New("label_" + key).Funcs(funcs).Parse(value)
 			if err != nil {
 				return fmt.Errorf("error parsing template %s: %v", key, err)
 			}
