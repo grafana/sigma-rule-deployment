@@ -210,8 +210,6 @@ jobs:
           # First run has no PR, so we create one. On later runs the branch reset above emptied
           # the existing PR and GitHub auto-closed it, so we reopen it, which also re-fires the
           # `pull_request` event that posts the check.
-          # Wait for the PR to report the commit we just made before judging its state. Reading
-          # our own oid back proves the reset
           ATTEMPT=0
           while true; do
             PR_JSON=$(gh pr list --state all --head "$PR_BRANCH" --json number,state,headRefOid --jq 'first // {}')
@@ -227,10 +225,10 @@ jobs:
                 --base main \
                 --draft \
                 --label "automated" || true
-            elif [ "$PR_HEAD" != "$NEW_HEAD_OID" ]; then
-              echo "PR #${PR_NUMBER} still reports head ${PR_HEAD}, waiting for ${NEW_HEAD_OID}"
             elif [ "$PR_STATE" = "CLOSED" ]; then
               gh pr reopen "$PR_NUMBER" || true
+            elif [ "$PR_HEAD" != "$NEW_HEAD_OID" ]; then
+              echo "PR #${PR_NUMBER} still reports head ${PR_HEAD}, waiting for ${NEW_HEAD_OID}"
             elif [ "$PR_STATE" = "OPEN" ]; then
               break
             fi
