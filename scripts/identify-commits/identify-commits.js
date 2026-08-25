@@ -86,8 +86,16 @@ async function identifyCommits(octokit, context, prNumber, actionsUsername) {
     owner: context.repo.owner,
     repo: context.repo.repo,
     pull_number: prNumber,
-    per_page: 1
+    per_page: 100
   }));
+
+  if (iterator.length === 0) {
+    throw new Error(
+      `No commits were returned for pull request #${prNumber}. This can happen if the GitHub API ` +
+      'has not yet finished indexing the pull request (e.g. immediately after it was opened or ' +
+      'synchronized), or if the request otherwise failed transiently. Retrying the job usually resolves it.'
+    );
+  }
 
   let previousCommit = "";
   let firstCommit = "";
