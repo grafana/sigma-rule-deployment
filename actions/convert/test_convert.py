@@ -1559,11 +1559,13 @@ def test_convert_rules_unrelated_group_not_reconverted_on_config_change(
 def test_convert_rules_identical_previous_config_skips(temp_workspace, mock_config):
     """An identical previous_config is not itself a reason to reconvert; the
     usual changed-files skip logic still applies."""
+    mock_config._loaded_files = [str(temp_workspace / "config.yaml")]
+
     convert_rules(
         config=mock_config,
         previous_config=mock_config,
         path_prefix=temp_workspace,
-        changed_files="rules/different.yml",
+        changed_files="config.yaml",
     )
 
     output_file = temp_workspace / "conversions" / "test_conversion_test.json"
@@ -1586,12 +1588,13 @@ def test_convert_rules_config_key_order_does_not_reconvert(temp_workspace, mock_
             ],
         }
     )
+    mock_config._loaded_files = [str(temp_workspace / "config.yaml")]
 
     convert_rules(
         config=mock_config,
         previous_config=previous_config,
         path_prefix=temp_workspace,
-        changed_files="rules/different.yml",
+        changed_files="config.yaml",
     )
 
     output_file = temp_workspace / "conversions" / "test_conversion_test.json"
@@ -1603,6 +1606,7 @@ def test_convert_rules_without_previous_config_behaves_as_before(
 ):
     """previous_config is optional; omitting it must not change existing
     behavior for a normal changed-files run."""
+
     convert_rules(
         config=mock_config,
         path_prefix=temp_workspace,

@@ -123,7 +123,7 @@ def convert_rules(
         ValueError: Pipeline file path must be relative to the project root.
         ValueError: Error loading rule file {rule_file}.
     """
-    # region 1. Setup & validation
+
     changed_files_set = set(
         path_prefix / Path(x) for x in changed_files.split(" ") if x
     )
@@ -162,9 +162,8 @@ def convert_rules(
 
     # Create the output directory if it doesn't exist
     conversions_output_dir.mkdir(parents=True, exist_ok=True)
-    # endregion
 
-    # region 2. Load conversion defaults
+
     # Get top-level default values
     default_target = config.get("conversion_defaults.target", "loki")
     default_format = config.get("conversion_defaults.format", "default")
@@ -183,9 +182,7 @@ def convert_rules(
     default_json_indent = config.get("conversion_defaults.json_indent", 0)
     default_required_rule_fields = config.get("conversion_defaults.required_rule_fields", [])
     verbose = config.get("verbose", False)
-    # endregion
 
-    # region 3. Backfill manual flag
     # Backfill the manual flag onto conversion files a human modified since the last
     # automation commit. Doing this before the conversion loop means the freshly-added
     # flag is honoured (and the file preserved) on this same run.
@@ -201,7 +198,6 @@ def convert_rules(
         existing[MANUAL_KEY] = True
         _write_output(manual_file, existing, pretty_print, default_encoding)
         print(f"Marking manually-modified conversion file as manual: {manual_file}")
-    # endregion
 
     changed_conversions = []
 
@@ -217,7 +213,7 @@ def convert_rules(
 
     conversions_to_delete = []
     conversion_errors = []
-    # region 4. Per-conversion loop
+
     # Convert Sigma rules to the target format per each conversion object in the config
     for conversion in config.get("conversions", []):
         # If the conversion name is not unique, we'll overwrite the output file,
@@ -300,7 +296,7 @@ def convert_rules(
                 None,
             )
             for dropped_file in get_dropped_input_files(
-                prev_conversion, input_patterns, path_prefix, filtered_files
+                prev_conversion, input_patterns, path_prefix, filtered_files, file_pattern
             ):
                 rel_dropped_path = Path(dropped_file).relative_to(path_prefix)
                 output_filename = f"{name}_{rel_dropped_path.stem}.json".replace(
@@ -335,7 +331,6 @@ def convert_rules(
             else:
                 pipelines.append(f"--pipeline={pipeline}")
 
-        # region 4.a Per-input-file conversion
         for input_file in filtered_files:
             # If we're not converting all rules, skip the conversion if:
             # - the file is not in the list of changed files
@@ -476,12 +471,9 @@ def convert_rules(
 
                 print(f"Output written to {output_file}")
                 print(f"Converting {name} completed with exit code {result.exit_code}")
-        # endregion
 
         print("-" * 80)
-    # endregion
 
-    # region 5. Cleanup deleted rules
     # Remove conversions of deleted rules from the output directory
     if len(conversions_to_delete) > 0:
         print("Removing conversions of deleted rules from the output directory")
@@ -494,9 +486,7 @@ def convert_rules(
                     continue
                 print(f"Removing {deleted_file}")
                 os.remove(deleted_file)
-    # endregion
 
-    # region 6. Report errors to GitHub Actions
     # If there were any conversion errors, send them to $GITHUB_OUTPUT for the GitHub Actions workflow to pick up and display in the UI.
     if conversion_errors:
         github_output_path = os.getenv("GITHUB_OUTPUT")
@@ -505,7 +495,6 @@ def convert_rules(
                 f.write(f"conversion_errors={json.dumps(conversion_errors).decode('utf-8')}\n")
         else:
             print("GITHUB_OUTPUT environment variable not set, cannot write conversion errors to GitHub Actions output")
-    # endregion
 
 
 def is_safe_path(base_dir: str | Path, target_path: str | Path) -> bool:
@@ -635,6 +624,7 @@ def get_dropped_input_files(
     current_input_patterns: list[str],
     path_prefix: Path,
     filtered_files: list[str],
+    file_pattern: str
 ) -> list[str]:
     """Resolve the files a conversion no longer matches because a pattern was
     dropped from its `input` list since previous_config.
@@ -663,4 +653,5 @@ def get_dropped_input_files(
                 continue
             seen.add(resolved)
             dropped_files.append(resolved)
-    return dropped_files
+    # Finally exclude any files that dont match file pattern anyways
+    return [file for file in dropped_files if fnmatch.fnmatch(file, file_pattern)]

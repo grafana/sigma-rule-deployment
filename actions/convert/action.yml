@@ -116,7 +116,7 @@ runs:
         PREVIOUS_REF: ${{ steps.commits.outputs.previous-ref }}
       run: |
         # Load the old config from the previous commit
-        git show "${PREVIOUS_REF}:${CONFIG_PATH}" > ${CONFIG_PATH}.old.yml || echo "No previous config found"
+        git show "${PREVIOUS_REF}:${CONFIG_PATH}" > "${CONFIG_PATH}.old.yml" || echo "No previous config found"
 
     - name: Run Sigma Rule Converter
       id: convert
@@ -154,8 +154,8 @@ runs:
         CONFIG_PATH: ${{ inputs.config_path }}
       shell: bash
       run: |
-        if [ -f ${CONFIG_PATH}.old.yml ]; then
-          rm -f ${CONFIG_PATH}.old.yml
+        if [ -f "${CONFIG_PATH}.old.yml" ]; then
+          rm -f "${CONFIG_PATH}.old.yml"
         fi
 
     - name: Set output
