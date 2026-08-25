@@ -353,8 +353,11 @@ jobs:
           fi
 
           # Post the "sigma-convert-all" comment in a loop in case of api failure.
+          COMMENT_BODY=$(printf 'sigma convert all\n\nTriggered by %s#%s, commit %s@%s' \
+            "$GITHUB_REPOSITORY" "$GITHUB_PR_NUMBER" "$GITHUB_REPOSITORY" "$ACTION_SHA")
+
           ATTEMPT=0
-          until gh pr comment "$TEST_PR_NUMBER" --body "sigma convert all"; do
+          until gh pr comment "$TEST_PR_NUMBER" --body "$COMMENT_BODY"; do
             ATTEMPT=$((ATTEMPT + 1))
             if [ "$ATTEMPT" -ge 3 ]; then
               echo "Could not comment on PR #${TEST_PR_NUMBER}"
