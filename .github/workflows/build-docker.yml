@@ -352,6 +352,8 @@ jobs:
             exit 1
           fi
 
+          echo "Integration test PR: [#${TEST_PR_NUMBER}](https://github.com/grafana/sigma-rule-deployment-integration-test/pull/${TEST_PR_NUMBER})" >> "$GITHUB_STEP_SUMMARY"
+
           # Post the "sigma-convert-all" comment in a loop in case of api failure.
           COMMENT_BODY=$(printf 'sigma convert all\n\nTriggered by %s#%s, commit %s@%s' \
             "$GITHUB_REPOSITORY" "$GITHUB_PR_NUMBER" "$GITHUB_REPOSITORY" "$ACTION_SHA")
