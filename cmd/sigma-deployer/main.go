@@ -4,12 +4,27 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/grafana/sigma-rule-deployment/internal/deploy"
 	"github.com/grafana/sigma-rule-deployment/internal/integrate"
 	"github.com/grafana/sigma-rule-deployment/internal/querytest"
+	"github.com/grafana/sigma-rule-deployment/shared"
 )
+
+func reportDeploymentError(prefix string, err error) {
+	message := fmt.Sprintf("%s: %v", prefix, err)
+	message = strings.NewReplacer("\r", " ", "\n", " ").Replace(message)
+	fmt.Println(message)
+
+	if os.Getenv("GITHUB_OUTPUT") == "" {
+		return
+	}
+	if outputErr := shared.SetOutput("deployment_error", message); outputErr != nil {
+		fmt.Printf("Error writing deployment error output: %v\n", outputErr)
+	}
+}
 
 func main() {
 	if len(os.Args) < 2 {
@@ -67,7 +82,7 @@ func main() {
 		deployer := deploy.NewDeployer()
 
 		if err := deployer.LoadConfig(ctx); err != nil {
-			fmt.Printf("Error loading config: %v\n", err)
+			reportDeploymentError("Error loading config", err)
 			os.Exit(1)
 		}
 
@@ -80,7 +95,7 @@ func main() {
 			err = deployer.ConfigNormalMode()
 		}
 		if err != nil {
-			fmt.Printf("Error configuring deployment: %v\n", err)
+			reportDeploymentError("Error configuring deployment", err)
 			os.Exit(1)
 		}
 
@@ -89,14 +104,14 @@ func main() {
 
 		// Write action outputs
 		if err := deployer.WriteOutput(alertsCreated, alertsUpdated, alertsDeleted); err != nil {
-			fmt.Printf("Error writing output: %v\n", err)
+			reportDeploymentError("Error writing output", err)
 			os.Exit(1)
 		}
 
 		// We only check the deployment error AFTER writing the output so that
 		// we still report the alerts that were created, updated and deleted before the error
 		if errDeploy != nil {
-			fmt.Printf("Error deploying: %v\n", errDeploy)
+			reportDeploymentError("Error deploying", errDeploy)
 			os.Exit(1)
 		}
 	default:

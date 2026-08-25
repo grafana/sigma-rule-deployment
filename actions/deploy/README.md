@@ -26,11 +26,12 @@ A fresh deployment (`fresh_deploy`) will delete all existing alert rules in the 
 
 ## Outputs
 
-| Name             | Description                                                                |
-| ---------------- | -------------------------------------------------------------------------- |
-| `alerts_created` | List of the UIDs of the alerts created during deployment (space-separated) |
-| `alerts_updated` | List of the UIDs of the alerts updated during deployment (space-separated) |
-| `alerts_deleted` | List of the UIDs of the alerts deleted during deployment (space-separated) |
+| Name               | Description                                                                |
+| ------------------ | -------------------------------------------------------------------------- |
+| `alerts_created`   | List of the UIDs of the alerts created during deployment (space-separated) |
+| `alerts_updated`   | List of the UIDs of the alerts updated during deployment (space-separated) |
+| `alerts_deleted`   | List of the UIDs of the alerts deleted during deployment (space-separated) |
+| `deployment_error` | Error reported by the deployer when the action fails                       |
 
 ## Usage
 

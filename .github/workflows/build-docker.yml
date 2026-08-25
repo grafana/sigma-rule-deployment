@@ -28,7 +28,7 @@ jobs:
       packages: write
     steps:
       - name: "Checkout"
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       # Fork pull requests get a read-only GITHUB_TOKEN and no secrets, so they
@@ -51,7 +51,7 @@ jobs:
         # Skip for fork PRs: the token cannot write org packages and login is not
         # needed to build + export a local image artifact.
         if: github.event_name != 'pull_request' || steps.origin.outputs.is_fork == 'false'
-        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -147,13 +147,13 @@ jobs:
         with:
           github_app: sigma-rule-deployment-app
       - name: Checkout Code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           token: ${{ steps.get-github-app-token.outputs.token }}
           persist-credentials: false
           path: ./sigma-rule-deployment
       - name: Checkout Integration Test
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           token: ${{ steps.get-github-app-token.outputs.token }}
           persist-credentials: true
@@ -239,6 +239,7 @@ jobs:
           GH_TOKEN: ${{ steps.get-github-app-token.outputs.token }}
           ACTION_SHA: ${{ github.event.pull_request.head.sha }}
           RUN_TOKEN: ${{ github.run_id }}-${{ github.run_attempt }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           MAIN_UPDATE_BRANCH: integration-test-main-update-${{ github.event.pull_request.number }}
           PR_BRANCH: integration-test-pr-${{ github.event.pull_request.number }}
         run: |
@@ -298,15 +299,25 @@ jobs:
 
           gh pr ready "$MAIN_UPDATE_BRANCH"
 
-          ATTEMPT=0
-          until gh pr merge "$MAIN_UPDATE_BRANCH" --squash; do
-            ATTEMPT=$((ATTEMPT + 1))
-            if [ "$ATTEMPT" -ge 12 ]; then
-              echo "Could not merge ${MAIN_UPDATE_BRANCH}"
-              exit 1
-            fi
-            sleep 10
-          done
+          # Approval is mandatory on the integration test repo, so --auto cannot merge
+          # here, it arms the merge to fire once a human approves. Ask the author for that
+          # approval and wait, because the comment below needs main to carry this commit.
+          gh pr merge "$MAIN_UPDATE_BRANCH" --auto --squash
+
+          STATE=$(gh pr view "$MAIN_UPDATE_BRANCH" --json state -q .state)
+          if [ "$STATE" != "MERGED" ]; then
+            gh pr comment "$MAIN_UPDATE_BRANCH" --body "@${PR_AUTHOR} this repository requires a manual merge — please review and merge this PR so the integration test can continue."
+
+            echo "Waiting for $MAIN_UPDATE_BRANCH to be manually merged..."
+            while [ "$STATE" != "MERGED" ]; do
+              if [ "$STATE" = "CLOSED" ]; then
+                echo "$MAIN_UPDATE_BRANCH was closed without merging"
+                exit 1
+              fi
+              sleep 30
+              STATE=$(gh pr view "$MAIN_UPDATE_BRANCH" --json state -q .state)
+            done
+          fi
 
           # The comment below triggers a workflow that, being `issue_comment`-driven,
           # runs from the integration test repo's default branch and reads the commit
@@ -327,10 +338,10 @@ jobs:
             sleep 5
           done
 
-          # `gh pr comment` succeeds on a closed PR and `issue_comment` still fires, so the
-          # convert run would start against a PR the API reports as 0 commits, get an empty
-          # base-commit from identify-commits and fail on `git diff "$BASE_REF"` instead of
-          # on the PR.
+          # The wait above can last many minutes, and if the PR that triggered this run is
+          # closed meanwhile, close-integration-test.yml closes this test PR too. Comments
+          # still fire `issue_comment` on a closed PR, which reports 0 commits, so the
+          # convert run would fail in `git diff "$BASE_REF"` with no base-commit.
           PR_JSON=$(gh pr view "$PR_BRANCH" --json number,state,commits)
           TEST_PR_NUMBER=$(jq -r '.number' <<<"$PR_JSON")
           TEST_PR_STATE=$(jq -r '.state' <<<"$PR_JSON")
