@@ -11,12 +11,6 @@ on:
     types:
       - published
 
-# Prevent concurrent execution of these workflows to avoid multiple executions commiting to main simultaneously
-# We **need** to commit to main to test the commenting feature
-concurrency:
-  group: ${{ github.workflow }}
-  cancel-in-progress: true
-
 permissions: {}
 
 jobs:
@@ -127,6 +121,14 @@ jobs:
           push: true
 
   test-pr:
+    # Prevent concurrent execution of integration tests to avoid multiple executions commiting to main simultaneously
+    # We **need** to commit to main to test the commenting feature
+    # Use concurrency queuing rather than just killing the existing jobs
+    concurrency:
+      group: ${{ github.workflow }}
+      queue: max
+
+
     # Only same-repo PRs run the integration test automatically here (they have
     # secrets + a package-write token). Fork PRs export an image artifact in the
     # build job above; a maintainer runs the integration test manually from the
