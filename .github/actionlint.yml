@@ -1,0 +1,9 @@
+paths:
+  '**/*':
+    ignore:
+      # actionlint's schema predates the `queue` key GitHub added to the `concurrency` section, so it
+      # rejects a valid workflow. Temporary until actionlint learns the key. Upstream:
+      #    - issue: https://github.com/rhysd/actionlint/issues/657
+      # Note that this is NOT fixed as of actionlint 1.7.12, so upgrading alone will not remove the need
+      # for this. Drop it once a release actually recognises the key, and re-run the check to confirm.
+      - 'unexpected key "queue" for "concurrency" section.*'
