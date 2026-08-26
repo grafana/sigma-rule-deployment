@@ -157,6 +157,10 @@ func TestRun(t *testing.T) {
 			os.Setenv("GITHUB_OUTPUT", outputFile.Name())
 			defer os.Unsetenv("GITHUB_OUTPUT")
 
+			resultsFile := filepath.Join(testDir, "test-query-results.json")
+			os.Setenv("TEST_QUERY_RESULTS_FILE", resultsFile)
+			defer os.Unsetenv("TEST_QUERY_RESULTS_FILE")
+
 			// Create mock query executor
 			var mockDatasourceQuery integrate.DatasourceQuery
 			if tt.mockQueryError {
@@ -189,14 +193,20 @@ func TestRun(t *testing.T) {
 				assert.NoError(t, err)
 			}
 
-			// Verify test_query_results output was set if testing was performed
+			// Verify test_query_results_file output was set if testing was performed
 			if tt.expectTestResults && len(tt.convOutput.Queries) > 0 {
 				_, err = outputFile.Seek(0, 0)
 				assert.NoError(t, err)
 				outputBytes, err := io.ReadAll(outputFile)
 				assert.NoError(t, err)
 				outputContent := string(outputBytes)
-				assert.Contains(t, outputContent, "test_query_results=")
+				assert.Contains(t, outputContent, "test_query_results_file="+resultsFile)
+
+				resultsBytes, err := os.ReadFile(resultsFile)
+				assert.NoError(t, err)
+				var results map[string][]model.QueryTestResult
+				assert.NoError(t, json.Unmarshal(resultsBytes, &results))
+				assert.NotEmpty(t, results)
 			}
 		})
 	}

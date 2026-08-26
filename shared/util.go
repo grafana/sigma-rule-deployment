@@ -26,14 +26,21 @@ func GetInputOrDefault(name string, value string) string {
 	return env
 }
 
+func validateOutputFilePath(path string) error {
+	cleaned := filepath.Clean(path)
+	if cleaned != path || strings.HasPrefix(cleaned, "..") {
+		return errors.New("output file path is invalid")
+	}
+	return nil
+}
+
 func SetOutput(output, value string) error {
 	outputFile := os.Getenv("GITHUB_OUTPUT")
 	if outputFile == "" {
 		return errors.New("only output with a github output file supported. See https://github.blog/changelog/2022-10-11-github-actions-deprecating-save-state-and-set-output-commands/ for further details")
 	}
-	cleaned := filepath.Clean(outputFile)
-	if cleaned != outputFile || strings.HasPrefix(cleaned, "..") {
-		return errors.New("GITHUB_OUTPUT path is invalid")
+	if err := validateOutputFilePath(outputFile); err != nil {
+		return fmt.Errorf("GITHUB_OUTPUT path is invalid: %w", err)
 	}
 
 	f, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644) //nolint:gosec // G703: outputFile validated to reject path traversal above
@@ -48,6 +55,18 @@ func SetOutput(output, value string) error {
 	}
 
 	return nil
+}
+
+// SetFileOutput writes content to path and records path (not content) as the named
+// GitHub Actions output, avoiding E2BIG failures when a later step reads it into an env var.
+func SetFileOutput(output, path, content string) error {
+	if err := validateOutputFilePath(path); err != nil {
+		return fmt.Errorf("%s output file path is invalid: %w", output, err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil { //nolint:gosec // G703: path validated to reject path traversal above
+		return fmt.Errorf("unable to write %s output file: %w", output, err)
+	}
+	return SetOutput(output, path)
 }
 
 func ReadLocalFile(path string) (string, error) {

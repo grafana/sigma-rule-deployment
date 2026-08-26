@@ -102,7 +102,7 @@ export function splitCommentIntoChunks(comment, commentIdentifier, maxCommentSiz
 
 /**
  * Render the full comment body: the changed/deleted file lists, the test
- * results table (when TEST_RESULTS was provided) and the conversion errors
+ * results table (when TEST_RESULTS_FILE was provided) and the conversion errors
  * table (when CONVERSION_ERRORS was provided).
  */
 export function buildCommentBody({
@@ -117,7 +117,7 @@ export function buildCommentBody({
   // Build file list with titles
   const changedFilesList = buildChangedFilesList(changedFiles, repoUrl, headRef);
 
-  // Build test results table if TEST_RESULTS is provided
+  // Build test results table if TEST_RESULTS_FILE was provided and parsed successfully
   const testResultsTable = testResults ? buildTestResultsTable(testResults) : '';
 
   // Build errors table if CONVERSION_ERRORS is provided

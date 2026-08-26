@@ -11,11 +11,11 @@
  *
  * Environment variables (for GitHub Actions):
  *   PULL_REQUEST_NUMBER, CHANGED_FILES, DELETED_FILES, COMMENT_TITLE,
- *   COMMENT_IDENTIFIER, TEST_RESULTS, GITHUB_TOKEN
+ *   COMMENT_IDENTIFIER, TEST_RESULTS_FILE, GITHUB_TOKEN
  *
  * CLI arguments (for local testing):
  *   --pr-number, --changed-files, --deleted-files, --title, --identifier,
- *   --test-results, --token
+ *   --test-results-file, --token
  */
 
 import * as core from '@actions/core';

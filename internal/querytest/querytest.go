@@ -138,9 +138,13 @@ func (qt *QueryTester) Run() error {
 		return fmt.Errorf("error marshalling query results: %v", err)
 	}
 
-	// Set a single output with all results
-	if err := shared.SetOutput("test_query_results", string(resultsJSON)); err != nil {
-		return fmt.Errorf("failed to set test query results output: %w", err)
+	// Write to a file rather than $GITHUB_OUTPUT directly, since this blob can grow large enough to hit E2BIG.
+	resultsPath := os.Getenv("TEST_QUERY_RESULTS_FILE")
+	if resultsPath == "" {
+		resultsPath = "test-query-results.json"
+	}
+	if err := shared.SetFileOutput("test_query_results_file", resultsPath, string(resultsJSON)); err != nil {
+		return fmt.Errorf("failed to write test query results file: %w", err)
 	}
 
 	return nil

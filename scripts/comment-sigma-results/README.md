@@ -7,7 +7,7 @@ Posts formatted comments to pull requests showing Sigma rule conversion/integrat
 - Extracts `title` field from JSON files (supports top-level or nested in `rules` array)
 - Creates clickable links to changed files in the PR
 - Minimizes outdated comments from previous runs
-- Automatically generates test results table from `TEST_RESULTS` JSON (when provided)
+- Automatically generates test results table from the JSON file referenced by `TEST_RESULTS_FILE` (when provided)
 
 ## Usage
 
@@ -47,7 +47,7 @@ node comment.js
 | `DELETED_FILES` | Space-separated list of deleted file paths | Yes |
 | `COMMENT_TITLE` | Title for the comment section | Yes |
 | `COMMENT_IDENTIFIER` | String to identify old comments for cleanup (will be hidden in comment) | Yes |
-| `TEST_RESULTS` | JSON string of test results (object mapping file paths to arrays of QueryTestResult) | No |
+| `TEST_RESULTS_FILE` | Path (workspace-relative or absolute) to a JSON file of test results (object mapping file paths to arrays of QueryTestResult) | No |
 | `GITHUB_TOKEN` | GitHub token for API access | Yes |
 | `GITHUB_REPOSITORY` | Repository in format `owner/repo` | Yes (for local) |
 
@@ -76,7 +76,7 @@ node comment.js
 | Rule Title | [See in Explore](link) | 42 | 0 |
 ```
 
-The test results table is automatically included when `TEST_RESULTS` is provided.
+The test results table is automatically included when `TEST_RESULTS_FILE` is provided.
 
 ## Dependencies
 
