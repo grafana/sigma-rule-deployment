@@ -167,12 +167,20 @@ jobs:
           GH_TOKEN: ${{ steps.get-github-app-token.outputs.token }}
           ACTION_SHA: ${{ github.event.pull_request.head.sha }}
           RUN_TOKEN: ${{ github.run_id }}-${{ github.run_attempt }}
+          PR_BRANCH: integration-test-pr-${{ github.event.pull_request.number }}
         run: |
           git fetch
 
+          # Close the current test PR before the branch is reset below. A new one is opened once
+          # the commit is in place, so no PR is ever left open on an empty branch.
+          OPEN_PR=$(gh pr list --state open --head "$PR_BRANCH" --json number --jq 'first.number // empty')
+          if [ -n "$OPEN_PR" ]; then
+            gh pr close "$OPEN_PR"
+          fi
+
           EXPECTED_HEAD_OID=$(../sigma-rule-deployment/.github/scripts/checkout-or-create-branch.sh \
             grafana/sigma-rule-deployment-integration-test \
-            "integration-test-pr-${GITHUB_PR_NUMBER}" \
+            "$PR_BRANCH" \
             main)
 
           # remove old test files, if they exist
@@ -195,21 +203,23 @@ jobs:
 
           ../sigma-rule-deployment/.github/scripts/create-verified-commit.sh \
             grafana/sigma-rule-deployment-integration-test \
-            "integration-test-pr-${GITHUB_PR_NUMBER}" \
+            "$PR_BRANCH" \
             "$EXPECTED_HEAD_OID" \
             "update integration test configuration"
 
-          RESULT=$(gh pr list --json id,title -H "integration-test-pr-${GITHUB_PR_NUMBER}" | jq -r '. | length')
+          # Open the test PR now that the branch is a commit ahead of main. This fires the
+          # `pull_request` event that posts the check, and the URL gives us the number to reuse
+          # in the next step.
+          TEST_PR_URL=$(gh pr create \
+            --title "Integration Test PR ${GITHUB_PR_NUMBER}" \
+            --body "This PR to test Sigma Rule Deployment App from Sigma Rule Deployment Integration Test App for grafana/sigma-rule-deployment#${GITHUB_PR_NUMBER}" \
+            --head "$PR_BRANCH" \
+            --base main \
+            --draft \
+            --label "automated")
 
-          if [ "$RESULT" -eq 0 ]; then
-            gh pr create \
-              --title "Integration Test PR ${GITHUB_PR_NUMBER}" \
-              --body "This PR to test Sigma Rule Deployment App from Sigma Rule Deployment Integration Test App for grafana/sigma-rule-deployment#${GITHUB_PR_NUMBER}" \
-              --head "integration-test-pr-${GITHUB_PR_NUMBER}" \
-              --base main \
-              --draft \
-              --label "automated"
-          fi
+          echo "Created $TEST_PR_URL"
+          echo "pr-number=${TEST_PR_URL##*/}" >> "$GITHUB_OUTPUT"
       - name: Update integration main branch to latest and send test comment
         working-directory: ./sigma-rule-deployment-integration-test
         env:
@@ -218,6 +228,8 @@ jobs:
           ACTION_SHA: ${{ github.event.pull_request.head.sha }}
           RUN_TOKEN: ${{ github.run_id }}-${{ github.run_attempt }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          MAIN_UPDATE_BRANCH: integration-test-main-update-${{ github.event.pull_request.number }}
+          TEST_PR_NUMBER: ${{ steps.integration-pr.outputs.pr-number }}
         run: |
           git fetch
           git checkout main
@@ -225,7 +237,7 @@ jobs:
 
           EXPECTED_HEAD_OID=$(../sigma-rule-deployment/.github/scripts/checkout-or-create-branch.sh \
             grafana/sigma-rule-deployment-integration-test \
-            "integration-test-main-update-${GITHUB_PR_NUMBER}" \
+            "$MAIN_UPDATE_BRANCH" \
             main)
 
           sed -i "s/uses: grafana\/sigma-rule-deployment\/actions\/convert@.*/uses: grafana\/sigma-rule-deployment\/actions\/convert@$ACTION_SHA/g" ./.github/workflows/convert-integrate-comment-test.yml
@@ -242,50 +254,102 @@ jobs:
 
           ../sigma-rule-deployment/.github/scripts/create-verified-commit.sh \
             grafana/sigma-rule-deployment-integration-test \
-            "integration-test-main-update-${GITHUB_PR_NUMBER}" \
+            "$MAIN_UPDATE_BRANCH" \
             "$EXPECTED_HEAD_OID" \
             "update main branch to relevant hash"
 
-          RESULT=$(gh pr list --json id,title -H "integration-test-main-update-${GITHUB_PR_NUMBER}" | jq -r '. | length')
+          RESULT=$(gh pr list --json id,title -H "$MAIN_UPDATE_BRANCH" | jq -r '. | length')
 
           if [ "$RESULT" -eq 0 ]; then
             gh pr create \
               --title "Integration Test Main Update ${GITHUB_PR_NUMBER}" \
               --body "This PR updates the main branch to the relevant hash for grafana/sigma-rule-deployment#${GITHUB_PR_NUMBER}" \
-              --head "integration-test-main-update-${GITHUB_PR_NUMBER}" \
+              --head "$MAIN_UPDATE_BRANCH" \
               --base main \
               --label "automated" \
               --draft
           fi
-          sleep 10 # wait for the PR checks to start...
 
-          MAIN_UPDATE_PR="integration-test-main-update-${GITHUB_PR_NUMBER}"
-
-          # wait for the required PR checks to complete
-          if gh pr checks "$MAIN_UPDATE_PR" --watch; then
-            gh pr ready "$MAIN_UPDATE_PR"
-            gh pr merge "$MAIN_UPDATE_PR" --auto --squash
-            sleep 5 # wait for the merge to complete
-
-            # some repositories now require a manual merge even after checks pass,
-            # so auto-merge above may only have queued the merge rather than completed it
-            STATE=$(gh pr view "$MAIN_UPDATE_PR" --json state -q .state)
-            if [ "$STATE" != "MERGED" ]; then
-              gh pr comment "$MAIN_UPDATE_PR" --body "@${PR_AUTHOR} this repository requires a manual merge — please review and merge this PR so the integration test can continue."
-
-              echo "Waiting for $MAIN_UPDATE_PR to be manually merged..."
-              while [ "$STATE" != "MERGED" ]; do
-                if [ "$STATE" = "CLOSED" ]; then
-                  echo "$MAIN_UPDATE_PR was closed without merging"
-                  exit 1
-                fi
-                sleep 30
-                STATE=$(gh pr view "$MAIN_UPDATE_PR" --json state -q .state)
-              done
+          # Wait for the checks to register; the `--watch` below fails outright if none exist yet.
+          ATTEMPT=0
+          while [ "$(gh pr checks "$MAIN_UPDATE_BRANCH" --json name --jq 'length' 2>/dev/null || echo 0)" -eq 0 ]; do
+            ATTEMPT=$((ATTEMPT + 1))
+            if [ "$ATTEMPT" -ge 24 ]; then
+              echo "No checks registered on ${MAIN_UPDATE_BRANCH}"
+              exit 1
             fi
+            sleep 5
+          done
 
-            gh pr comment "integration-test-pr-${GITHUB_PR_NUMBER}" --body "sigma convert all"
-          else
+          if ! gh pr checks "$MAIN_UPDATE_BRANCH" --watch; then
             echo "Integration Test Main Update PR failed"
             exit 1
           fi
+
+          gh pr ready "$MAIN_UPDATE_BRANCH"
+
+          # Arm the merge, then ask the author to approve it and wait. Approval is mandatory on
+          # this repo, so --auto only queues the merge, and the comment further down needs main
+          # to already carry this commit.
+          gh pr merge "$MAIN_UPDATE_BRANCH" --auto --squash
+
+          STATE=$(gh pr view "$MAIN_UPDATE_BRANCH" --json state -q .state)
+          if [ "$STATE" != "MERGED" ]; then
+            gh pr comment "$MAIN_UPDATE_BRANCH" --body "@${PR_AUTHOR} this repository requires a manual merge — please review and merge this PR so the integration test can continue."
+
+            echo "Waiting for $MAIN_UPDATE_BRANCH to be manually merged..."
+            while [ "$STATE" != "MERGED" ]; do
+              if [ "$STATE" = "CLOSED" ]; then
+                echo "$MAIN_UPDATE_BRANCH was closed without merging"
+                exit 1
+              fi
+              sleep 30
+              STATE=$(gh pr view "$MAIN_UPDATE_BRANCH" --json state -q .state)
+            done
+          fi
+
+          # Wait for main to carry this commit. The comment below triggers an `issue_comment`
+          # workflow, which runs from main and reads action_sha.txt there to pick the commit it
+          # reports "Integration Testing - Comment" against.
+          ATTEMPT=0
+          while true; do
+            git fetch origin main --quiet
+            MAIN_ACTION_SHA=$(git show origin/main:action_sha.txt | tr -d '[:space:]')
+            if [ "$MAIN_ACTION_SHA" = "$ACTION_SHA" ]; then
+              break
+            fi
+            ATTEMPT=$((ATTEMPT + 1))
+            if [ "$ATTEMPT" -ge 24 ]; then
+              echo "integration test main reports action_sha=${MAIN_ACTION_SHA}, expected ${ACTION_SHA}"
+              exit 1
+            fi
+            sleep 5
+          done
+
+          # Check the test PR is still open before commenting on it. close-integration-test.yml
+          # closes it if this PR was closed during the wait above, and a comment on a closed PR
+          # would start a convert run that fails later on an empty base-commit.
+          PR_JSON=$(gh pr view "$TEST_PR_NUMBER" --json state,commits)
+          TEST_PR_STATE=$(jq -r '.state' <<<"$PR_JSON")
+          TEST_PR_COMMITS=$(jq -r '.commits | length' <<<"$PR_JSON")
+
+          if [ "$TEST_PR_STATE" != "OPEN" ] || [ "$TEST_PR_COMMITS" -lt 1 ]; then
+            echo "Integration test PR #${TEST_PR_NUMBER} is ${TEST_PR_STATE} with ${TEST_PR_COMMITS} commits, refusing to comment"
+            exit 1
+          fi
+
+          echo "Integration test PR: [#${TEST_PR_NUMBER}](https://github.com/grafana/sigma-rule-deployment-integration-test/pull/${TEST_PR_NUMBER})" >> "$GITHUB_STEP_SUMMARY"
+
+          # Post the "sigma-convert-all" comment in a loop in case of api failure.
+          COMMENT_BODY=$(printf 'sigma convert all\n\nTriggered by %s#%s, commit %s@%s' \
+            "$GITHUB_REPOSITORY" "$GITHUB_PR_NUMBER" "$GITHUB_REPOSITORY" "$ACTION_SHA")
+
+          ATTEMPT=0
+          until gh pr comment "$TEST_PR_NUMBER" --body "$COMMENT_BODY"; do
+            ATTEMPT=$((ATTEMPT + 1))
+            if [ "$ATTEMPT" -ge 3 ]; then
+              echo "Could not comment on PR #${TEST_PR_NUMBER}"
+              exit 1
+            fi
+            sleep 5
+          done
