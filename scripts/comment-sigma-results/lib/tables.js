@@ -4,7 +4,7 @@ import path from 'path';
 import { extractTitle } from './extract-title.js';
 
 /**
- * Build test results table from TEST_RESULTS JSON
+ * Build test results table from the parsed TEST_RESULTS_FILE contents
  */
 export function buildTestResultsTable(testResults) {
   if (!testResults || Object.keys(testResults).length === 0) {

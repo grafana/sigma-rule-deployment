@@ -1,5 +1,24 @@
+import fs from 'fs';
+import path from 'path';
+
 import * as core from '@actions/core';
 import * as github from '@actions/github';
+
+/**
+ * Read and parse the JSON file referenced by TEST_RESULTS_FILE.
+ */
+function readTestResultsFile(filePath) {
+  if (!filePath) return null;
+  const resolved = path.isAbsolute(filePath)
+    ? filePath
+    : path.join(process.env.RULE_DIRECTORY_PATH || process.cwd(), filePath);
+  try {
+    return JSON.parse(fs.readFileSync(resolved, 'utf8'));
+  } catch (e) {
+    console.log(`Failed to read/parse test results file (${resolved}):`, e.message);
+    return null;
+  }
+}
 
 /**
  * Get inputs from environment variables or CLI arguments
@@ -10,15 +29,8 @@ export function getInputs() {
 
   if (isGitHubActions) {
     // Use @actions/core for GitHub Actions
-    let testResults = null;
-    const testResultsStr = core.getInput('test_results') || process.env.TEST_RESULTS;
-    if (testResultsStr) {
-      try {
-        testResults = JSON.parse(testResultsStr);
-      } catch (e) {
-        console.log('Failed to parse TEST_RESULTS JSON:', e.message);
-      }
-    }
+    const testResultsFile = core.getInput('test_results_file') || process.env.TEST_RESULTS_FILE;
+    const testResults = readTestResultsFile(testResultsFile);
 
     let errorResults = null;
     const errorResultsStr = core.getInput('conversion_errors') || process.env.CONVERSION_ERRORS;
@@ -53,15 +65,8 @@ export function getInputs() {
       }
     }
 
-    let testResults = null;
-    const testResultsStr = inputs.test_results || process.env.TEST_RESULTS;
-    if (testResultsStr) {
-      try {
-        testResults = JSON.parse(testResultsStr);
-      } catch (e) {
-        console.log('Failed to parse TEST_RESULTS JSON:', e.message);
-      }
-    }
+    const testResultsFile = inputs.test_results_file || process.env.TEST_RESULTS_FILE;
+    const testResults = readTestResultsFile(testResultsFile);
 
     let errorResults = null;
     const errorResultsStr = inputs.conversion_errors || process.env.CONVERSION_ERRORS;

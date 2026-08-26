@@ -16,7 +16,7 @@ inputs:
     required: false
     default: "false"
   output_log_lines:
-    description: "Output log lines to the outputs of the test_query_results"
+    description: "Output log lines to the outputs of the test_query_results_file"
     required: false
     default: "false"
   all_rules:
@@ -40,9 +40,9 @@ outputs:
   rules_integrated:
     description: "The repository file names changed (added/updated or removed) by this Action"
     value: ${{ steps.set-output.outputs.rules_integrated }}
-  test_query_results:
-    description: "The results of testing the queries against the datasource for the past hour"
-    value: ${{ steps.set-output.outputs.test_query_results }}
+  test_query_results_file:
+    description: "Path (relative to the job workspace) to a JSON file with the results of testing the queries against the datasource for the past hour. Only set when query testing ran (grafana_sa_token provided)."
+    value: ${{ steps.set-output.outputs.test_query_results_file }}
 
 runs:
   using: "composite"
@@ -139,6 +139,7 @@ runs:
             -e MANUAL_FILES="$MANUAL_FILES" \
             -e ALL_RULES="$ALL_RULES" \
             -e CONTINUE_ON_QUERY_TESTING_ERRORS="$CONTINUE_ON_QUERY_TESTING_ERRORS" \
+            -e TEST_QUERY_RESULTS_FILE=test-query-results.json \
             "ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:$IMAGE_REF" \
             integrate
     - name: Set output
@@ -154,7 +155,7 @@ runs:
         PULL_REQUEST_NUMBER: ${{ github.event.number || github.event.issue.number }}
         BASE_REF: ${{ steps.commits.outputs.base-commit }}
         DEPLOYMENT_PATH: ${{ steps.config-paths.outputs.deployment_path }}
-        TEST_RESULTS: ${{ steps.set-output.outputs.test_query_results }}
+        TEST_RESULTS_FILE: ${{ steps.set-output.outputs.test_query_results_file }}
         COMMENT_TITLE: 'Sigma Rule Integrations'
         COMMENT_IDENTIFIER: 'Sigma Rule Integrations'
         GITHUB_TOKEN: ${{ github.token }}
@@ -183,3 +184,12 @@ runs:
         fi
 
         node comment.js
+
+    - name: Cleanup test results file
+      id: cleanup-test-results
+      if: ${{ always() && steps.set-output.outputs.test_query_results_file != '' }}
+      shell: bash
+      env:
+        TEST_RESULTS_FILE: ${{ steps.set-output.outputs.test_query_results_file }}
+      run: |
+        rm -f -- "$TEST_RESULTS_FILE"

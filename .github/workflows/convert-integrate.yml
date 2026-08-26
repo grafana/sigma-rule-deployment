@@ -23,7 +23,7 @@ on:
         type: boolean
         default: false
       output_log_lines:
-        description: "Output log lines to the outputs of the test_query_results"
+        description: "Output log lines to the outputs of the test_query_results_file"
         required: false
         type: boolean
         default: false
