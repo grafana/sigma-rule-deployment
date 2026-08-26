@@ -108,6 +108,16 @@ runs:
         REPO_ROOT="$(cd "$GITHUB_ACTION_PATH/../.." && pwd)"
         "$REPO_ROOT/scripts/determine-image-ref/determine-image-ref.sh" "$ACTION_REF"
 
+    - name: Load old config
+      id: load-old-config
+      shell: bash
+      env:
+        CONFIG_PATH: ${{ inputs.config_path }}
+        PREVIOUS_REF: ${{ steps.commits.outputs.previous-ref }}
+      run: |
+        # Load the old config from the previous commit
+        git show "${PREVIOUS_REF}:${CONFIG_PATH}" > "${CONFIG_PATH}.old.yml" || echo "No previous config found"
+
     - name: Run Sigma Rule Converter
       id: convert
       shell: bash
@@ -138,6 +148,16 @@ runs:
             "ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:$IMAGE_REF" \
             convert
 
+    - name: Cleanup old config file
+      id: cleanup-old-config
+      env: 
+        CONFIG_PATH: ${{ inputs.config_path }}
+      shell: bash
+      run: |
+        if [ -f "${CONFIG_PATH}.old.yml" ]; then
+          rm -f "${CONFIG_PATH}.old.yml"
+        fi
+
     - name: Set output
       id: set-output
       shell: bash
@@ -147,7 +167,6 @@ runs:
           cat github-output >> "$GITHUB_OUTPUT"
           rm github-output
         fi
-
 
     - name: Comment Conversions
       id: comment-conversions

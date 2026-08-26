@@ -59,6 +59,37 @@ def mock_config_with_correlation_rule():
 
 
 @pytest.fixture
+def mock_config_two_groups():
+    """Mock configuration object with two independent conversion groups."""
+    return DynaconfDict(
+        {
+            "conversion_defaults": {
+                "target": "loki",
+                "format": "default",
+                "skip_unsupported": "true",
+                "file_pattern": "*.yml",
+            },
+            "conversions": [
+                {
+                    "name": "group_a",
+                    "input": ["rules/*.yml"],
+                    "target": "loki",
+                    "format": "default",
+                },
+                {
+                    "name": "group_b",
+                    "input": ["rules/*.yml"],
+                    # A different but genuinely installed backend, so a real
+                    # sigma-cli invocation for this group actually succeeds.
+                    "target": "text_query_test",
+                    "format": "default",
+                },
+            ],
+        }
+    )
+
+
+@pytest.fixture
 def temp_workspace(tmp_path):
     """Create a temporary workspace with a rules directory."""
     workspace = tmp_path / "workspace"
@@ -1263,7 +1294,7 @@ def test_convert_rules_skips_manual_conversion(temp_workspace, mock_config):
     assert output_file.read_text() == manual_content
 
 
-def test_convert_rules_backfills_manual_flag(temp_workspace, mock_config):
+def test_convert_rules_backfills_manual_flag(temp_workspace, mock_config): # trufflehog:ignore
     """A human-modified conversion file listed in manual_files gains the manual flag."""
     conversion_dir = temp_workspace / "conversions"
     conversion_dir.mkdir()
@@ -1407,3 +1438,479 @@ def test_convert_rules_skips_manual_before_conversion(
 
     # The skip happens before conversion, so sigma-cli is never invoked.
     mock_invoke.assert_not_called()
+
+
+####
+# Config file changes tests
+####
+
+def test_convert_rules_config_change_reconverts_group(temp_workspace, mock_config):
+    """A conversion group whose own config block changed is fully reconverted,
+    even though none of its rule files are in changed_files."""
+    previous_config = DynaconfDict(
+        {
+            "conversion_defaults": dict(mock_config["conversion_defaults"]),
+            "conversions": [
+                {
+                    "name": "test_conversion",
+                    "input": ["rules/*.yml"],
+                    "target": "splunk",
+                    "format": "default",
+                }
+            ],
+        }
+    )
+    # The config-change check is gated on the config file's own path appearing in
+    # changed_files, mirroring how the real action includes CONFIG_PATH in its diff.
+    mock_config._loaded_files = [str(temp_workspace / "config.yaml")]
+
+    convert_rules(
+        config=mock_config,
+        previous_config=previous_config,
+        path_prefix=temp_workspace,
+        changed_files="config.yaml",
+    )
+
+    output_file = temp_workspace / "conversions" / "test_conversion_test.json"
+    assert output_file.exists()
+
+
+def test_convert_rules_renamed_group_converts_without_deleting_old(
+    temp_workspace, mock_config
+):
+    """A renamed conversion group is converted under its new name; the old
+    output file is left alone (its cleanup is the integrator's job, not the
+    converter's)."""
+    conversion_dir = temp_workspace / "conversions"
+    conversion_dir.mkdir()
+    old_output_file = conversion_dir / "old_name_test.json"
+    old_output_file.write_text(
+        json.dumps({"conversion_name": "old_name"}).decode("utf-8")
+    )
+
+    previous_config = DynaconfDict(
+        {
+            "conversion_defaults": dict(mock_config["conversion_defaults"]),
+            "conversions": [
+                {
+                    "name": "old_name",
+                    "input": ["rules/*.yml"],
+                    "target": "loki",
+                    "format": "default",
+                }
+            ],
+        }
+    )
+    mock_config._loaded_files = [str(temp_workspace / "config.yaml")]
+
+    convert_rules(
+        config=mock_config,
+        previous_config=previous_config,
+        path_prefix=temp_workspace,
+        changed_files="config.yaml",
+    )
+
+    new_output_file = conversion_dir / "test_conversion_test.json"
+    assert new_output_file.exists()
+    assert old_output_file.exists()
+    assert json.loads(old_output_file.read_bytes()) == {"conversion_name": "old_name"}
+
+
+def test_convert_rules_unrelated_group_not_reconverted_on_config_change(
+    temp_workspace, mock_config_two_groups
+):
+    """Only the conversion group whose config actually changed is reconverted;
+    a sibling group with an unchanged config block stays skipped."""
+    previous_config = DynaconfDict(
+        {
+            "conversion_defaults": dict(
+                mock_config_two_groups["conversion_defaults"]
+            ),
+            "conversions": [
+                {
+                    "name": "group_a",
+                    "input": ["rules/*.yml"],
+                    "target": "loki",
+                    "format": "default",
+                },
+                {
+                    "name": "group_b",
+                    "input": ["rules/*.yml"],
+                    "target": "elastic",
+                    "format": "default",
+                },
+            ],
+        }
+    )
+    mock_config_two_groups._loaded_files = [str(temp_workspace / "config.yaml")]
+
+    convert_rules(
+        config=mock_config_two_groups,
+        previous_config=previous_config,
+        path_prefix=temp_workspace,
+        changed_files="config.yaml",
+    )
+
+    conversion_dir = temp_workspace / "conversions"
+    assert (conversion_dir / "group_b_test.json").exists()
+    assert not (conversion_dir / "group_a_test.json").exists()
+
+
+def test_convert_rules_identical_previous_config_skips(temp_workspace, mock_config):
+    """An identical previous_config is not itself a reason to reconvert; the
+    usual changed-files skip logic still applies."""
+    mock_config._loaded_files = [str(temp_workspace / "config.yaml")]
+
+    convert_rules(
+        config=mock_config,
+        previous_config=mock_config,
+        path_prefix=temp_workspace,
+        changed_files="config.yaml",
+    )
+
+    output_file = temp_workspace / "conversions" / "test_conversion_test.json"
+    assert not output_file.exists()
+
+
+def test_convert_rules_config_key_order_does_not_reconvert(temp_workspace, mock_config):
+    """A conversion block that is semantically identical, just with its keys
+    in a different order, must not be treated as changed."""
+    previous_config = DynaconfDict(
+        {
+            "conversion_defaults": dict(mock_config["conversion_defaults"]),
+            "conversions": [
+                {
+                    "format": "default",
+                    "target": "loki",
+                    "input": ["rules/*.yml"],
+                    "name": "test_conversion",
+                }
+            ],
+        }
+    )
+    mock_config._loaded_files = [str(temp_workspace / "config.yaml")]
+
+    convert_rules(
+        config=mock_config,
+        previous_config=previous_config,
+        path_prefix=temp_workspace,
+        changed_files="config.yaml",
+    )
+
+    output_file = temp_workspace / "conversions" / "test_conversion_test.json"
+    assert not output_file.exists()
+
+
+def test_convert_rules_without_previous_config_behaves_as_before(
+    temp_workspace, mock_config
+):
+    """previous_config is optional; omitting it must not change existing
+    behavior for a normal changed-files run."""
+
+    convert_rules(
+        config=mock_config,
+        path_prefix=temp_workspace,
+        changed_files="rules/test.yml",
+    )
+
+    output_file = temp_workspace / "conversions" / "test_conversion_test.json"
+    assert output_file.exists()
+
+
+def test_convert_rules_config_change_respects_manual_flag(temp_workspace, mock_config):
+    """A group-wide reconvert triggered by a config change must still skip
+    an output file already marked manual."""
+    conversion_dir = temp_workspace / "conversions"
+    conversion_dir.mkdir()
+    output_file = conversion_dir / "test_conversion_test.json"
+    manual_content = json.dumps({"manual": True, "queries": ["HAND EDITED"]}).decode(
+        "utf-8"
+    )
+    output_file.write_text(manual_content)
+
+    previous_config = DynaconfDict(
+        {
+            "conversion_defaults": dict(mock_config["conversion_defaults"]),
+            "conversions": [
+                {
+                    "name": "test_conversion",
+                    "input": ["rules/*.yml"],
+                    "target": "splunk",
+                    "format": "default",
+                }
+            ],
+        }
+    )
+    mock_config._loaded_files = [str(temp_workspace / "config.yaml")]
+
+    convert_rules(
+        config=mock_config,
+        previous_config=previous_config,
+        path_prefix=temp_workspace,
+        changed_files="config.yaml",
+    )
+
+    assert output_file.read_text() == manual_content
+
+
+def test_convert_rules_multiple_new_groups_convert_independently(
+    temp_workspace, mock_config_two_groups
+):
+    """Several conversion groups added in the same config update all convert,
+    independently of one another."""
+    previous_config = DynaconfDict(
+        {
+            "conversion_defaults": dict(
+                mock_config_two_groups["conversion_defaults"]
+            ),
+            "conversions": [],
+        }
+    )
+    mock_config_two_groups._loaded_files = [str(temp_workspace / "config.yaml")]
+
+    convert_rules(
+        config=mock_config_two_groups,
+        previous_config=previous_config,
+        path_prefix=temp_workspace,
+        changed_files="config.yaml",
+    )
+
+    conversion_dir = temp_workspace / "conversions"
+    assert (conversion_dir / "group_a_test.json").exists()
+    assert (conversion_dir / "group_b_test.json").exists()
+
+
+def test_convert_rules_default_change_reconverts_all_groups(temp_workspace):
+    """A change to a top-level conversion_defaults value affects every group
+    that inherits it, so the whole repository is reconverted, not just the
+    group whose own block happened to change."""
+    shared_conversions = [
+        {"name": "group_a", "input": ["rules/*.yml"]},
+        {"name": "group_b", "input": ["rules/*.yml"]},
+    ]
+    config = DynaconfDict(
+        {
+            "conversion_defaults": {
+                "target": "splunk",
+                "format": "default",
+                "skip_unsupported": "true",
+                "file_pattern": "*.yml",
+            },
+            "conversions": shared_conversions,
+        }
+    )
+    previous_config = DynaconfDict(
+        {
+            "conversion_defaults": {
+                "target": "loki",
+                "format": "default",
+                "skip_unsupported": "true",
+                "file_pattern": "*.yml",
+            },
+            "conversions": shared_conversions,
+        }
+    )
+    config._loaded_files = [str(temp_workspace / "config.yaml")]
+
+    convert_rules(
+        config=config,
+        previous_config=previous_config,
+        path_prefix=temp_workspace,
+        changed_files="config.yaml",
+    )
+
+    conversion_dir = temp_workspace / "conversions"
+    assert (conversion_dir / "group_a_test.json").exists()
+    assert (conversion_dir / "group_b_test.json").exists()
+
+
+def test_convert_rules_dropped_input_entry_deletes_stale_output(
+    temp_workspace, mock_config
+):
+    """A rule dropped from a conversion's input list, with the
+    file left in place on disk, has its stale conversion output deleted even
+    though the rule was never in changed_files or deleted_files."""
+    (temp_workspace / "rules" / "keep.yml").write_text(
+        (temp_workspace / "rules" / "test.yml").read_text()
+    )
+    conversion_dir = temp_workspace / "conversions"
+    conversion_dir.mkdir()
+    stale_output = conversion_dir / "test_conversion_test.json"
+    stale_output.write_text(
+        json.dumps(
+            {"conversion_name": "test_conversion", "input_file": "rules/test.yml"}
+        ).decode("utf-8")
+    )
+
+    previous_config = DynaconfDict(
+        {
+            "conversion_defaults": dict(mock_config["conversion_defaults"]),
+            "conversions": [
+                {
+                    "name": "test_conversion",
+                    "input": ["rules/test.yml", "rules/keep.yml"],
+                    "target": "loki",
+                    "format": "default",
+                }
+            ],
+        }
+    )
+    mock_config["conversions"][0]["input"] = ["rules/keep.yml"]
+    mock_config._loaded_files = [str(temp_workspace / "config.yaml")]
+
+    convert_rules(
+        config=mock_config,
+        previous_config=previous_config,
+        path_prefix=temp_workspace,
+        changed_files="config.yaml",
+    )
+
+    assert not stale_output.exists()
+    # The entry that's still in scope must still be (re)converted.
+    assert (conversion_dir / "test_conversion_keep.json").exists()
+
+
+def test_convert_rules_narrowed_input_pattern_keeps_still_matched_files(
+    temp_workspace, mock_config
+):
+    """Narrowing a glob (rather than dropping a specific file) must not
+    delete output for a rule that's still matched by the narrower pattern,
+    even though the old, broader pattern string is no longer present."""
+    conversion_dir = temp_workspace / "conversions"
+    conversion_dir.mkdir()
+    still_valid_output = conversion_dir / "test_conversion_test.json"
+    still_valid_output.write_text(
+        json.dumps(
+            {"conversion_name": "test_conversion", "input_file": "rules/test.yml"}
+        ).decode("utf-8")
+    )
+
+    previous_config = DynaconfDict(
+        {
+            "conversion_defaults": dict(mock_config["conversion_defaults"]),
+            "conversions": [
+                {
+                    "name": "test_conversion",
+                    "input": ["rules/*.yml"],
+                    "target": "loki",
+                    "format": "default",
+                }
+            ],
+        }
+    )
+    mock_config["conversions"][0]["input"] = ["rules/test.yml"]
+    mock_config._loaded_files = [str(temp_workspace / "config.yaml")]
+
+    convert_rules(
+        config=mock_config,
+        previous_config=previous_config,
+        path_prefix=temp_workspace,
+        changed_files="config.yaml",
+    )
+
+    assert still_valid_output.exists()
+
+
+def test_convert_rules_reassigned_input_moves_output_between_groups(
+    temp_workspace, mock_config_two_groups
+):
+    """A rule reassigned from one conversion's input to another's
+    via a config edit (not a git-detected file change) gets its old group's
+    stale output deleted while the new group produces fresh output."""
+    (temp_workspace / "rules" / "keep.yml").write_text(
+        (temp_workspace / "rules" / "test.yml").read_text()
+    )
+    conversion_dir = temp_workspace / "conversions"
+    conversion_dir.mkdir()
+    stale_output = conversion_dir / "group_a_test.json"
+    stale_output.write_text(
+        json.dumps(
+            {"conversion_name": "group_a", "input_file": "rules/test.yml"}
+        ).decode("utf-8")
+    )
+
+    previous_config = DynaconfDict(
+        {
+            "conversion_defaults": dict(
+                mock_config_two_groups["conversion_defaults"]
+            ),
+            "conversions": [
+                {
+                    "name": "group_a",
+                    "input": ["rules/test.yml", "rules/keep.yml"],
+                    "target": "loki",
+                    "format": "default",
+                },
+                {
+                    "name": "group_b",
+                    "input": [],
+                    "target": "text_query_test",
+                    "format": "default",
+                },
+            ],
+        }
+    )
+    mock_config_two_groups["conversions"][0]["input"] = ["rules/keep.yml"]
+    mock_config_two_groups["conversions"][1]["input"] = ["rules/test.yml"]
+    mock_config_two_groups._loaded_files = [str(temp_workspace / "config.yaml")]
+
+    convert_rules(
+        config=mock_config_two_groups,
+        previous_config=previous_config,
+        path_prefix=temp_workspace,
+        changed_files="config.yaml",
+    )
+
+    # The old owner's stale output for the reassigned rule is gone.
+    assert not stale_output.exists()
+    # The new owner produced fresh output for it.
+    assert (conversion_dir / "group_b_test.json").exists()
+    # The old owner's remaining rule is unaffected.
+    assert (conversion_dir / "group_a_keep.json").exists()
+
+
+def test_convert_rules_dropped_input_entry_respects_manual_flag(
+    temp_workspace, mock_config
+):
+    """A manually-maintained conversion file must not be deleted just because
+    its rule was dropped from the conversion's input list."""
+    (temp_workspace / "rules" / "keep.yml").write_text(
+        (temp_workspace / "rules" / "test.yml").read_text()
+    )
+    conversion_dir = temp_workspace / "conversions"
+    conversion_dir.mkdir()
+    manual_output = conversion_dir / "test_conversion_test.json"
+    manual_content = json.dumps(
+        {
+            "conversion_name": "test_conversion",
+            "input_file": "rules/test.yml",
+            "manual": True,
+            "queries": ["HAND EDITED"],
+        }
+    ).decode("utf-8")
+    manual_output.write_text(manual_content)
+
+    previous_config = DynaconfDict(
+        {
+            "conversion_defaults": dict(mock_config["conversion_defaults"]),
+            "conversions": [
+                {
+                    "name": "test_conversion",
+                    "input": ["rules/test.yml", "rules/keep.yml"],
+                    "target": "loki",
+                    "format": "default",
+                }
+            ],
+        }
+    )
+    mock_config["conversions"][0]["input"] = ["rules/keep.yml"]
+    mock_config._loaded_files = [str(temp_workspace / "config.yaml")]
+
+    convert_rules(
+        config=mock_config,
+        previous_config=previous_config,
+        path_prefix=temp_workspace,
+        changed_files="config.yaml",
+    )
+
+    assert manual_output.read_text() == manual_content
