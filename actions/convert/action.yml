@@ -133,6 +133,7 @@ runs:
         IMAGE_REF: ${{ steps.image-ref.outputs.image_ref }}
       run: |
         docker run --rm \
+            --user "$(id -u):$(id -g)" \
             -v "$(pwd):/sigma-rules" \
             -w /sigma-rules \
             -e GITHUB_WORKSPACE=/sigma-rules \
