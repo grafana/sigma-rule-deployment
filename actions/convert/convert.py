@@ -150,6 +150,13 @@ def convert_rules(
         print("No changed, deleted or manual files identified, but all_rules is false")
         exit(0)
 
+    # Validate config version
+    config_version = config.get("version")
+    if config_version != 2:
+        raise ValueError(
+            f"Unsupported config version {config_version!r}: only version 2 is supported"
+        )
+
     # Get the conversion path from the config
     conversion_path = "conversions"  # Default conversion path if none is set
     if folders := config.get("folders"):
@@ -163,25 +170,29 @@ def convert_rules(
     # Create the output directory if it doesn't exist
     conversions_output_dir.mkdir(parents=True, exist_ok=True)
 
+    defaults = dict((config.get("defaults") or {}).get("conversion") or {})
+    raw_conversions = config.get("configurations") or []
+    conversions = []
+    for entry in raw_conversions:
+        item = dict(entry.get("conversion") or {})
+        item["name"] = entry.get("name")
+        conversions.append(item)
+    verbose = defaults.pop("verbose", False)
 
-    # Get top-level default values
-    default_target = config.get("conversion_defaults.target", "loki")
-    default_format = config.get("conversion_defaults.format", "default")
-    default_skip_unsupported = config.get("conversion_defaults.skip_unsupported", True)
-    default_fail_unsupported = config.get("conversion_defaults.fail_unsupported", False)
-    default_encoding = config.get("conversion_defaults.encoding", "utf-8")
-    default_pipeline_check = config.get("conversion_defaults.pipeline_check", True)
-    default_file_pattern = config.get("conversion_defaults.file_pattern", "*.yml")
-    default_correlation_method = config.get(
-        "conversion_defaults.correlation_method", []
-    )
-    default_filters = config.get("conversion_defaults.filters", [])
-    default_backend_options = config.get("conversion_defaults.backend_options", {})
-    default_without_pipeline = config.get("conversion_defaults.without_pipeline", False)
-    default_pipelines = config.get("conversion_defaults.pipelines", [])
-    default_json_indent = config.get("conversion_defaults.json_indent", 0)
-    default_required_rule_fields = config.get("conversion_defaults.required_rule_fields", [])
-    verbose = config.get("verbose", False)
+    default_target = defaults.get("target", "loki")
+    default_format = defaults.get("format", "default")
+    default_skip_unsupported = defaults.get("skip_unsupported", True)
+    default_fail_unsupported = defaults.get("fail_unsupported", False)
+    default_encoding = defaults.get("encoding", "utf-8")
+    default_pipeline_check = defaults.get("pipeline_check", True)
+    default_file_pattern = defaults.get("file_pattern", "*.yml")
+    default_correlation_method = defaults.get("correlation_method", [])
+    default_filters = defaults.get("filters", [])
+    default_backend_options = defaults.get("backend_options", {})
+    default_without_pipeline = defaults.get("without_pipeline", False)
+    default_pipelines = defaults.get("pipelines", [])
+    default_json_indent = defaults.get("json_indent", 0)
+    default_required_rule_fields = defaults.get("required_rule_fields", [])
 
     # Backfill the manual flag onto conversion files a human modified since the last
     # automation commit. Doing this before the conversion loop means the freshly-added
@@ -215,7 +226,7 @@ def convert_rules(
     conversion_errors = []
 
     # Convert Sigma rules to the target format per each conversion object in the config
-    for conversion in config.get("conversions", []):
+    for conversion in conversions:
         # If the conversion name is not unique, we'll overwrite the output file,
         # which might not be the desired behavior for the user.
         name = conversion.get("name", None)
@@ -274,7 +285,7 @@ def convert_rules(
                 raise ValueError("Invalid input file type")
 
         # Apply file_pattern filtering to exclude files that don't match the pattern
-        file_pattern = conversion.get("file_pattern", default_file_pattern)
+        file_pattern = conversion.get("file_pattern") or default_file_pattern
         filtered_files = [f for f in input_files if fnmatch.fnmatch(f, file_pattern)]
 
         # Skip conversion if no files match the pattern
@@ -289,8 +300,8 @@ def convert_rules(
         if config_file_changed and previous_config is not None:
             prev_conversion = next(
                 (
-                    c
-                    for c in previous_config.get("conversions", [])
+                    c.get("conversion", {})
+                    for c in previous_config.get("configurations", [])
                     if c.get("name") == name
                 ),
                 None,
@@ -312,17 +323,17 @@ def convert_rules(
             print("Converting all discovered rules")
 
         # Verify that all pipeline files are relative to the repository root (GITHUB_WORKSPACE)
-        for pipeline in conversion.get("pipelines", default_pipelines):
+        for pipeline in (conversion.get("pipelines") or default_pipelines):
             if Path(pipeline).is_absolute():
                 raise ValueError(
                     "Pipeline file path must be relative to the project root"
                 )
 
-        encoding = conversion.get("encoding", default_encoding)
+        encoding = conversion.get("encoding") or default_encoding
 
         pipelines = []
         any_pipeline_changed = False
-        for pipeline in conversion.get("pipelines", default_pipelines):
+        for pipeline in (conversion.get("pipelines") or default_pipelines):
             if is_path(pipeline, file_pattern):
                 pipeline_path = path_prefix / Path(pipeline)
                 pipelines.append(f"--pipeline={pipeline_path}")
@@ -375,7 +386,7 @@ def convert_rules(
                         else []
                     )
                 ),
-                *[f"--filter={f}" for f in conversion.get("filters", default_filters)],
+                *[f"--filter={f}" for f in (conversion.get("filters") or default_filters)],
                 "--file-pattern",
                 file_pattern,
                 "--output",
@@ -384,8 +395,8 @@ def convert_rules(
                 encoding,
                 *[
                     f"--backend-option={k}={v}"
-                    for k, v in conversion.get(
-                        "backend_options", default_backend_options
+                    for k, v in (
+                        conversion.get("backend_options") or default_backend_options
                     ).items()
                 ],
                 *(
@@ -455,7 +466,7 @@ def convert_rules(
                     continue
 
                 # Filter the rules to only include the required fields, if empty, return the full rule dictionaries
-                required_rule_fields = conversion.get("required_rule_fields", default_required_rule_fields)
+                required_rule_fields = conversion.get("required_rule_fields") or default_required_rule_fields
 
                 # Create the output data structure
                 output_data = {
@@ -573,9 +584,8 @@ def filter_rule_fields(rule_dicts: list[dict[str, Any]], desired_fields: list[st
     """
     if not desired_fields:
         return rule_dicts
-    else:
-        # Ensure desired_fields contains at least the id and title fields
-        necessary_fields = set(["id", "title"] + desired_fields)
+    # Ensure desired_fields contains at least the id and title fields
+    necessary_fields = set(["id", "title"] + desired_fields)
 
     return [dict((field, rule_dict[field]) for field in necessary_fields if field in rule_dict) for rule_dict in rule_dicts]
 
@@ -590,22 +600,26 @@ def get_config_changes(previous_config: Dynaconf, current_config: Dynaconf) -> t
         tuple[bool, list[str]]: A tuple containing a boolean indicating if a global config setting changed and a list of conversion names whose config changed.
     """
     global_config_changed = False
-    # Check if any global config settings changed (except for conversions)
-    for key in ["conversion_defaults", "folders", "verbose"]:
+    # Check if any global config settings changed (except for per-configuration conversion blocks)
+    for key in ["folders"]:
         if current_config.get(key) != previous_config.get(key):
             global_config_changed = True
             break
+    if (current_config.get("defaults") or {}).get("conversion") != (
+        previous_config.get("defaults") or {}
+    ).get("conversion"):
+        global_config_changed = True
 
     changed_conversions = []
-    for conversion in current_config.get("conversions", []):
-        name = conversion.get("name", None)
+    for entry in current_config.get("configurations", []):
+        name = entry.get("name", None)
         if not name:
             continue
-        prev_conversion = next(
-            (c for c in previous_config.get("conversions", []) if c.get("name") == name),
+        prev_entry = next(
+            (c for c in previous_config.get("configurations", []) if c.get("name") == name),
             None,
         )
-        if prev_conversion is None or conversion != prev_conversion:
+        if prev_entry is None or entry.get("conversion") != prev_entry.get("conversion"):
             changed_conversions.append(name)
     return global_config_changed, changed_conversions
 
