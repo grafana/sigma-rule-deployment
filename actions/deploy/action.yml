@@ -76,6 +76,7 @@ runs:
       run: |
         rm -f .sigma-deploy-output
         docker run --rm \
+            --user "$(id -u):$(id -g)" \
             -v "$(pwd):/sigma-rules" \
             -w /sigma-rules \
             -e GITHUB_OUTPUT="/sigma-rules/.sigma-deploy-output" \
