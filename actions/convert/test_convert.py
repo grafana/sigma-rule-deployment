@@ -1,14 +1,14 @@
-import orjson as json
 import os
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import orjson as json
 import pytest
 from dynaconf.utils import DynaconfDict
 
 from convert import convert
-from convert.convert import convert_rules, is_path, is_safe_path, load_rules, filter_rule_fields
+from convert.convert import convert_rules, filter_rule_fields, is_path, is_safe_path, load_rules
 
 
 @pytest.fixture
@@ -1070,73 +1070,69 @@ def test_convert_rules_command_args(
         config_dict["verbose"] = False
 
     # Mock is_path to return True for any pipeline paths
-    with patch.object(convert, "is_path", side_effect=lambda p, f: True):
-        # Setup path mocking
-        with patch("pathlib.Path.relative_to") as mock_relative_to:
-            mock_relative_to.return_value = Path("test.yml")
+    # Mock pipeline paths, path handling, rules loading, and file I/O
+    with (
+        patch.object(convert, "is_path", side_effect=lambda p, f: True),
+        patch("pathlib.Path.relative_to", return_value=Path("test.yml")),
+        patch.object(convert, "load_rules", return_value=[{"title": "Test Rule"}]),
+        patch("builtins.open", MagicMock()),
+    ):
+        # Run the function
+        convert_rules(
+            config=dynaconf_instance, path_prefix="/tmp", all_rules=True
+        )
 
-            # Create a patch context for load_rules
-            with patch.object(
-                convert, "load_rules", return_value=[{"title": "Test Rule"}]
-            ):
-                # Mock file I/O
-                with patch("builtins.open", MagicMock()):
-                    # Run the function
-                    convert_rules(
-                        config=dynaconf_instance, path_prefix="/tmp", all_rules=True
-                    )
+        # Verify invoke arguments
+        call_args = mock_invoke.call_args[1]["args"]
 
-                    # Verify invoke arguments
-                    call_args = mock_invoke.call_args[1]["args"]
+        # Check key arguments are present
+        assert "--target" in call_args
 
-                    # Check key arguments are present
-                    assert "--target" in call_args
+        # Add input file that's always at the end
+        # Test the actual args rather than expected vs actual since some paths may be transformed
+        assert call_args[-1] == "/tmp/test.yml"
 
-                    # Add input file that's always at the end
-                    # Test the actual args rather than expected vs actual since some paths may be transformed
-                    assert call_args[-1] == "/tmp/test.yml"
+        # Only check critical specific arguments based on the test case
+        if "--correlation-method" in expected_args:
+            assert "--correlation-method" in call_args
+            corr_index = call_args.index("--correlation-method")
+            assert (
+                call_args[corr_index + 1]
+                == expected_args[
+                    expected_args.index("--correlation-method") + 1
+                ]
+            )
 
-                    # Only check critical specific arguments based on the test case
-                    if "--correlation-method" in expected_args:
-                        assert "--correlation-method" in call_args
-                        corr_index = call_args.index("--correlation-method")
-                        assert (
-                            call_args[corr_index + 1]
-                            == expected_args[
-                                expected_args.index("--correlation-method") + 1
-                            ]
-                        )
+        if "--filter=" in "".join(expected_args):
+            for filter_arg in [
+                arg for arg in expected_args if arg.startswith("--filter=")
+            ]:
+                assert filter_arg in call_args
 
-                    if "--filter=" in "".join(expected_args):
-                        for filter_arg in [
-                            arg for arg in expected_args if arg.startswith("--filter=")
-                        ]:
-                            assert filter_arg in call_args
+        if "--without-pipeline" in expected_args:
+            assert "--without-pipeline" in call_args
 
-                    if "--without-pipeline" in expected_args:
-                        assert "--without-pipeline" in call_args
+        if "--disable-pipeline-check" in expected_args:
+            assert "--disable-pipeline-check" in call_args
 
-                    if "--disable-pipeline-check" in expected_args:
-                        assert "--disable-pipeline-check" in call_args
+        # For fail-unsupported, we need to check if skip-unsupported is not in the args
+        if "--fail-unsupported" in expected_args:
+            # The actual behavior seems to include --skip-unsupported regardless
+            # of the fail-unsupported setting, so we just check target is present
+            assert "--target" in call_args
 
-                    # For fail-unsupported, we need to check if skip-unsupported is not in the args
-                    if "--fail-unsupported" in expected_args:
-                        # The actual behavior seems to include --skip-unsupported regardless
-                        # of the fail-unsupported setting, so we just check target is present
-                        assert "--target" in call_args
+        if "--verbose" in expected_args:
+            assert "--verbose" in call_args
 
-                    if "--verbose" in expected_args:
-                        assert "--verbose" in call_args
+        # Verify target
+        target_index = call_args.index("--target")
+        assert (
+            call_args[target_index + 1]
+            == expected_args[expected_args.index("--target") + 1]
+        )
 
-                    # Verify target
-                    target_index = call_args.index("--target")
-                    assert (
-                        call_args[target_index + 1]
-                        == expected_args[expected_args.index("--target") + 1]
-                    )
-
-                    # Format might be different due to conversion_defaults - don't assert strict equality
-                    assert "--format" in call_args
+        # Format might be different due to conversion_defaults - don't assert strict equality
+        assert "--format" in call_args
 
 
 # Test handling of correlation_method when set in conversion_defaults but not in conversion
@@ -1191,29 +1187,25 @@ def test_default_correlation_method(
         config_dict["verbose"] = False
 
     # Mock is_path to handle pipeline paths
-    with patch.object(convert, "is_path", side_effect=lambda p, f: True):
-        # Setup path mocking
-        with patch("pathlib.Path.relative_to") as mock_relative_to:
-            mock_relative_to.return_value = Path("test.yml")
+    # Setup mocks for path validation, path handling, rule loading, and file I/O
+    with (
+        patch.object(convert, "is_path", side_effect=lambda p, f: True),
+        patch("pathlib.Path.relative_to", return_value=Path("test.yml")),
+        patch.object(convert, "load_rules", return_value=[{"title": "Test Rule"}]),
+        patch("builtins.open", MagicMock()),
+    ):
+        # Run the function
+        convert_rules(
+            config=dynaconf_instance, path_prefix="/tmp", all_rules=True
+        )
 
-            # Create a patch context for load_rules
-            with patch.object(
-                convert, "load_rules", return_value=[{"title": "Test Rule"}]
-            ):
-                # Mock file I/O
-                with patch("builtins.open", MagicMock()):
-                    # Run the function
-                    convert_rules(
-                        config=dynaconf_instance, path_prefix="/tmp", all_rules=True
-                    )
+        # Verify the function was called with the right parameters
+        assert mock_invoke.called
 
-                    # Verify the function was called with the right parameters
-                    assert mock_invoke.called
-
-                    # The test is verifying that default correlation method
-                    # is being included in the config, not necessarily in the args
-                    # So we just verify the conversion ran successfully
-                    assert mock_invoke.call_count > 0
+        # The test is verifying that default correlation method
+        # is being included in the config, not necessarily in the args
+        # So we just verify the conversion ran successfully
+        assert mock_invoke.call_count > 0
 
 
 def test_convert_rules_deletes_conversion_for_deleted_rule(temp_workspace, mock_config):
