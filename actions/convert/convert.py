@@ -202,7 +202,7 @@ def convert_rules(
     changed_conversions = []
 
     # Determine if the config file itself changed, and if so, check for conversion groups whose own config changed. Or if any global setting changed, requiring a full conversion.
-    config_path = config._loaded_files[0] if config._loaded_files else None
+    config_path = config.loaded_files[0] if config.loaded_files else None
     config_file_changed = config_path is not None and Path(config_path) in changed_files_set
     if config_file_changed:
         print(f"Config file {config_path} changed, checking for conversion groups whose own config changed")
