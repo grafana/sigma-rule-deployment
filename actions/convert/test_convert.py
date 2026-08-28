@@ -14,7 +14,7 @@ from convert.convert import convert_rules, filter_rule_fields, is_path, is_safe_
 @pytest.fixture
 def mock_config():
     """Mock configuration object."""
-    config = DynaconfDict(
+    return DynaconfDict(
         {
             "conversion_defaults": {
                 "target": "loki",
@@ -32,14 +32,12 @@ def mock_config():
             ],
         }
     )
-    config.loaded_files = []
-    return config
 
 
 @pytest.fixture
 def mock_config_with_correlation_rule():
     """Mock configuration object with a correlation rule."""
-    config = DynaconfDict(
+    return DynaconfDict(
         {
             "conversion_defaults": {
                 "target": "loki",
@@ -58,14 +56,12 @@ def mock_config_with_correlation_rule():
             ],
         }
     )
-    config.loaded_files = []
-    return config
 
 
 @pytest.fixture
 def mock_config_two_groups():
     """Mock configuration object with two independent conversion groups."""
-    config = DynaconfDict(
+    return DynaconfDict(
         {
             "conversion_defaults": {
                 "target": "loki",
@@ -91,8 +87,6 @@ def mock_config_two_groups():
             ],
         }
     )
-    config.loaded_files = []
-    return config
 
 
 @pytest.fixture
@@ -152,7 +146,6 @@ def test_convert_rules_missing_conversion_name():
     invalid_config = DynaconfDict(
         {"conversions": [{"input": ["rules/*.yml"], "target": "loki"}]}
     )
-    invalid_config.loaded_files = []
     with pytest.raises(
         ValueError,
         match=(
@@ -172,7 +165,6 @@ def test_convert_rules_absolute_input_path():
             ]
         }
     )
-    invalid_config.loaded_files = []
     with pytest.raises(ValueError, match="must be relative"):
         convert_rules(config=invalid_config, path_prefix="/tmp", all_rules=True)
 
@@ -1462,13 +1454,12 @@ def test_convert_rules_config_change_reconverts_group(temp_workspace, mock_confi
     )
     # The config-change check is gated on the config file's own path appearing in
     # changed_files, mirroring how the real action includes CONFIG_PATH in its diff.
-    mock_config.loaded_files = [str(temp_workspace / "config.yaml")]
-
     convert_rules(
         config=mock_config,
         previous_config=previous_config,
         path_prefix=temp_workspace,
         changed_files="config.yaml",
+        config_path=str(temp_workspace / "config.yaml"),
     )
 
     output_file = temp_workspace / "conversions" / "test_conversion_test.json"
@@ -1501,13 +1492,12 @@ def test_convert_rules_renamed_group_converts_without_deleting_old(
             ],
         }
     )
-    mock_config.loaded_files = [str(temp_workspace / "config.yaml")]
-
     convert_rules(
         config=mock_config,
         previous_config=previous_config,
         path_prefix=temp_workspace,
         changed_files="config.yaml",
+        config_path=str(temp_workspace / "config.yaml"),
     )
 
     new_output_file = conversion_dir / "test_conversion_test.json"
@@ -1542,13 +1532,12 @@ def test_convert_rules_unrelated_group_not_reconverted_on_config_change(
             ],
         }
     )
-    mock_config_two_groups.loaded_files = [str(temp_workspace / "config.yaml")]
-
     convert_rules(
         config=mock_config_two_groups,
         previous_config=previous_config,
         path_prefix=temp_workspace,
         changed_files="config.yaml",
+        config_path=str(temp_workspace / "config.yaml"),
     )
 
     conversion_dir = temp_workspace / "conversions"
@@ -1559,13 +1548,12 @@ def test_convert_rules_unrelated_group_not_reconverted_on_config_change(
 def test_convert_rules_identical_previous_config_skips(temp_workspace, mock_config):
     """An identical previous_config is not itself a reason to reconvert; the
     usual changed-files skip logic still applies."""
-    mock_config.loaded_files = [str(temp_workspace / "config.yaml")]
-
     convert_rules(
         config=mock_config,
         previous_config=mock_config,
         path_prefix=temp_workspace,
         changed_files="config.yaml",
+        config_path=str(temp_workspace / "config.yaml"),
     )
 
     output_file = temp_workspace / "conversions" / "test_conversion_test.json"
@@ -1588,13 +1576,12 @@ def test_convert_rules_config_key_order_does_not_reconvert(temp_workspace, mock_
             ],
         }
     )
-    mock_config.loaded_files = [str(temp_workspace / "config.yaml")]
-
     convert_rules(
         config=mock_config,
         previous_config=previous_config,
         path_prefix=temp_workspace,
         changed_files="config.yaml",
+        config_path=str(temp_workspace / "config.yaml"),
     )
 
     output_file = temp_workspace / "conversions" / "test_conversion_test.json"
@@ -1641,13 +1628,12 @@ def test_convert_rules_config_change_respects_manual_flag(temp_workspace, mock_c
             ],
         }
     )
-    mock_config.loaded_files = [str(temp_workspace / "config.yaml")]
-
     convert_rules(
         config=mock_config,
         previous_config=previous_config,
         path_prefix=temp_workspace,
         changed_files="config.yaml",
+        config_path=str(temp_workspace / "config.yaml"),
     )
 
     assert output_file.read_text() == manual_content
@@ -1666,13 +1652,12 @@ def test_convert_rules_multiple_new_groups_convert_independently(
             "conversions": [],
         }
     )
-    mock_config_two_groups.loaded_files = [str(temp_workspace / "config.yaml")]
-
     convert_rules(
         config=mock_config_two_groups,
         previous_config=previous_config,
         path_prefix=temp_workspace,
         changed_files="config.yaml",
+        config_path=str(temp_workspace / "config.yaml"),
     )
 
     conversion_dir = temp_workspace / "conversions"
@@ -1710,13 +1695,12 @@ def test_convert_rules_default_change_reconverts_all_groups(temp_workspace):
             "conversions": shared_conversions,
         }
     )
-    config.loaded_files = [str(temp_workspace / "config.yaml")]
-
     convert_rules(
         config=config,
         previous_config=previous_config,
         path_prefix=temp_workspace,
         changed_files="config.yaml",
+        config_path=str(temp_workspace / "config.yaml"),
     )
 
     conversion_dir = temp_workspace / "conversions"
@@ -1756,13 +1740,12 @@ def test_convert_rules_dropped_input_entry_deletes_stale_output(
         }
     )
     mock_config["conversions"][0]["input"] = ["rules/keep.yml"]
-    mock_config.loaded_files = [str(temp_workspace / "config.yaml")]
-
     convert_rules(
         config=mock_config,
         previous_config=previous_config,
         path_prefix=temp_workspace,
         changed_files="config.yaml",
+        config_path=str(temp_workspace / "config.yaml"),
     )
 
     assert not stale_output.exists()
@@ -1799,13 +1782,12 @@ def test_convert_rules_narrowed_input_pattern_keeps_still_matched_files(
         }
     )
     mock_config["conversions"][0]["input"] = ["rules/test.yml"]
-    mock_config.loaded_files = [str(temp_workspace / "config.yaml")]
-
     convert_rules(
         config=mock_config,
         previous_config=previous_config,
         path_prefix=temp_workspace,
         changed_files="config.yaml",
+        config_path=str(temp_workspace / "config.yaml"),
     )
 
     assert still_valid_output.exists()
@@ -1852,13 +1834,12 @@ def test_convert_rules_reassigned_input_moves_output_between_groups(
     )
     mock_config_two_groups["conversions"][0]["input"] = ["rules/keep.yml"]
     mock_config_two_groups["conversions"][1]["input"] = ["rules/test.yml"]
-    mock_config_two_groups.loaded_files = [str(temp_workspace / "config.yaml")]
-
     convert_rules(
         config=mock_config_two_groups,
         previous_config=previous_config,
         path_prefix=temp_workspace,
         changed_files="config.yaml",
+        config_path=str(temp_workspace / "config.yaml"),
     )
 
     # The old owner's stale output for the reassigned rule is gone.
@@ -1904,13 +1885,12 @@ def test_convert_rules_dropped_input_entry_respects_manual_flag(
         }
     )
     mock_config["conversions"][0]["input"] = ["rules/keep.yml"]
-    mock_config.loaded_files = [str(temp_workspace / "config.yaml")]
-
     convert_rules(
         config=mock_config,
         previous_config=previous_config,
         path_prefix=temp_workspace,
         changed_files="config.yaml",
+        config_path=str(temp_workspace / "config.yaml"),
     )
 
     assert manual_output.read_text() == manual_content

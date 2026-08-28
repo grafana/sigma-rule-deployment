@@ -72,6 +72,7 @@ def convert_rules(
     deleted_files: str = "",
     manual_files: str = "",
     previous_config: Dynaconf | None = None,
+    config_path: str | Path | None = None,
 ) -> None:
     """Convert Sigma rules to the target format per each file in the conversions object
     in the config. The converted files will be saved in the PATH_PREFIX/conversions
@@ -111,6 +112,10 @@ def convert_rules(
         deleted_files (str): The list of deleted files.
         manual_files (str): Space-separated conversion files a human modified since
             the last automation commit; missing manual flags are backfilled onto them.
+        previous_config (Dynaconf | None): The config as it was before the current change,
+            used to detect which conversion groups changed.
+        config_path (str | Path | None): Path to the config file that was loaded into
+            `config`, used to detect whether the config file itself changed.
 
     Raises:
         ValueError: Path prefix must be set using GITHUB_WORKSPACE environment variable.
@@ -202,7 +207,6 @@ def convert_rules(
     changed_conversions = []
 
     # Determine if the config file itself changed, and if so, check for conversion groups whose own config changed. Or if any global setting changed, requiring a full conversion.
-    config_path = config.loaded_files[0] if config.loaded_files else None
     config_file_changed = config_path is not None and Path(config_path) in changed_files_set
     if config_file_changed:
         print(f"Config file {config_path} changed, checking for conversion groups whose own config changed")
