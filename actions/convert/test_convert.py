@@ -1,14 +1,14 @@
-import orjson as json
 import os
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import orjson as json
 import pytest
 from dynaconf.utils import DynaconfDict
 
 from convert import convert
-from convert.convert import convert_rules, is_path, is_safe_path, load_rules, filter_rule_fields
+from convert.convert import convert_rules, filter_rule_fields, is_path, is_safe_path, load_rules
 
 
 @pytest.fixture
@@ -1070,73 +1070,69 @@ def test_convert_rules_command_args(
         config_dict["verbose"] = False
 
     # Mock is_path to return True for any pipeline paths
-    with patch.object(convert, "is_path", side_effect=lambda p, f: True):
-        # Setup path mocking
-        with patch("pathlib.Path.relative_to") as mock_relative_to:
-            mock_relative_to.return_value = Path("test.yml")
+    # Mock pipeline paths, path handling, rules loading, and file I/O
+    with (
+        patch.object(convert, "is_path", side_effect=lambda p, f: True),
+        patch("pathlib.Path.relative_to", return_value=Path("test.yml")),
+        patch.object(convert, "load_rules", return_value=[{"title": "Test Rule"}]),
+        patch("builtins.open", MagicMock()),
+    ):
+        # Run the function
+        convert_rules(
+            config=dynaconf_instance, path_prefix="/tmp", all_rules=True
+        )
 
-            # Create a patch context for load_rules
-            with patch.object(
-                convert, "load_rules", return_value=[{"title": "Test Rule"}]
-            ):
-                # Mock file I/O
-                with patch("builtins.open", MagicMock()):
-                    # Run the function
-                    convert_rules(
-                        config=dynaconf_instance, path_prefix="/tmp", all_rules=True
-                    )
+        # Verify invoke arguments
+        call_args = mock_invoke.call_args[1]["args"]
 
-                    # Verify invoke arguments
-                    call_args = mock_invoke.call_args[1]["args"]
+        # Check key arguments are present
+        assert "--target" in call_args
 
-                    # Check key arguments are present
-                    assert "--target" in call_args
+        # Add input file that's always at the end
+        # Test the actual args rather than expected vs actual since some paths may be transformed
+        assert call_args[-1] == "/tmp/test.yml"
 
-                    # Add input file that's always at the end
-                    # Test the actual args rather than expected vs actual since some paths may be transformed
-                    assert call_args[-1] == "/tmp/test.yml"
+        # Only check critical specific arguments based on the test case
+        if "--correlation-method" in expected_args:
+            assert "--correlation-method" in call_args
+            corr_index = call_args.index("--correlation-method")
+            assert (
+                call_args[corr_index + 1]
+                == expected_args[
+                    expected_args.index("--correlation-method") + 1
+                ]
+            )
 
-                    # Only check critical specific arguments based on the test case
-                    if "--correlation-method" in expected_args:
-                        assert "--correlation-method" in call_args
-                        corr_index = call_args.index("--correlation-method")
-                        assert (
-                            call_args[corr_index + 1]
-                            == expected_args[
-                                expected_args.index("--correlation-method") + 1
-                            ]
-                        )
+        if "--filter=" in "".join(expected_args):
+            for filter_arg in [
+                arg for arg in expected_args if arg.startswith("--filter=")
+            ]:
+                assert filter_arg in call_args
 
-                    if "--filter=" in "".join(expected_args):
-                        for filter_arg in [
-                            arg for arg in expected_args if arg.startswith("--filter=")
-                        ]:
-                            assert filter_arg in call_args
+        if "--without-pipeline" in expected_args:
+            assert "--without-pipeline" in call_args
 
-                    if "--without-pipeline" in expected_args:
-                        assert "--without-pipeline" in call_args
+        if "--disable-pipeline-check" in expected_args:
+            assert "--disable-pipeline-check" in call_args
 
-                    if "--disable-pipeline-check" in expected_args:
-                        assert "--disable-pipeline-check" in call_args
+        # For fail-unsupported, we need to check if skip-unsupported is not in the args
+        if "--fail-unsupported" in expected_args:
+            # The actual behavior seems to include --skip-unsupported regardless
+            # of the fail-unsupported setting, so we just check target is present
+            assert "--target" in call_args
 
-                    # For fail-unsupported, we need to check if skip-unsupported is not in the args
-                    if "--fail-unsupported" in expected_args:
-                        # The actual behavior seems to include --skip-unsupported regardless
-                        # of the fail-unsupported setting, so we just check target is present
-                        assert "--target" in call_args
+        if "--verbose" in expected_args:
+            assert "--verbose" in call_args
 
-                    if "--verbose" in expected_args:
-                        assert "--verbose" in call_args
+        # Verify target
+        target_index = call_args.index("--target")
+        assert (
+            call_args[target_index + 1]
+            == expected_args[expected_args.index("--target") + 1]
+        )
 
-                    # Verify target
-                    target_index = call_args.index("--target")
-                    assert (
-                        call_args[target_index + 1]
-                        == expected_args[expected_args.index("--target") + 1]
-                    )
-
-                    # Format might be different due to conversion_defaults - don't assert strict equality
-                    assert "--format" in call_args
+        # Format might be different due to conversion_defaults - don't assert strict equality
+        assert "--format" in call_args
 
 
 # Test handling of correlation_method when set in conversion_defaults but not in conversion
@@ -1191,29 +1187,25 @@ def test_default_correlation_method(
         config_dict["verbose"] = False
 
     # Mock is_path to handle pipeline paths
-    with patch.object(convert, "is_path", side_effect=lambda p, f: True):
-        # Setup path mocking
-        with patch("pathlib.Path.relative_to") as mock_relative_to:
-            mock_relative_to.return_value = Path("test.yml")
+    # Setup mocks for path validation, path handling, rule loading, and file I/O
+    with (
+        patch.object(convert, "is_path", side_effect=lambda p, f: True),
+        patch("pathlib.Path.relative_to", return_value=Path("test.yml")),
+        patch.object(convert, "load_rules", return_value=[{"title": "Test Rule"}]),
+        patch("builtins.open", MagicMock()),
+    ):
+        # Run the function
+        convert_rules(
+            config=dynaconf_instance, path_prefix="/tmp", all_rules=True
+        )
 
-            # Create a patch context for load_rules
-            with patch.object(
-                convert, "load_rules", return_value=[{"title": "Test Rule"}]
-            ):
-                # Mock file I/O
-                with patch("builtins.open", MagicMock()):
-                    # Run the function
-                    convert_rules(
-                        config=dynaconf_instance, path_prefix="/tmp", all_rules=True
-                    )
+        # Verify the function was called with the right parameters
+        assert mock_invoke.called
 
-                    # Verify the function was called with the right parameters
-                    assert mock_invoke.called
-
-                    # The test is verifying that default correlation method
-                    # is being included in the config, not necessarily in the args
-                    # So we just verify the conversion ran successfully
-                    assert mock_invoke.call_count > 0
+        # The test is verifying that default correlation method
+        # is being included in the config, not necessarily in the args
+        # So we just verify the conversion ran successfully
+        assert mock_invoke.call_count > 0
 
 
 def test_convert_rules_deletes_conversion_for_deleted_rule(temp_workspace, mock_config):
@@ -1462,13 +1454,12 @@ def test_convert_rules_config_change_reconverts_group(temp_workspace, mock_confi
     )
     # The config-change check is gated on the config file's own path appearing in
     # changed_files, mirroring how the real action includes CONFIG_PATH in its diff.
-    mock_config._loaded_files = [str(temp_workspace / "config.yaml")]
-
     convert_rules(
         config=mock_config,
         previous_config=previous_config,
         path_prefix=temp_workspace,
         changed_files="config.yaml",
+        config_path=str(temp_workspace / "config.yaml"),
     )
 
     output_file = temp_workspace / "conversions" / "test_conversion_test.json"
@@ -1501,13 +1492,12 @@ def test_convert_rules_renamed_group_converts_without_deleting_old(
             ],
         }
     )
-    mock_config._loaded_files = [str(temp_workspace / "config.yaml")]
-
     convert_rules(
         config=mock_config,
         previous_config=previous_config,
         path_prefix=temp_workspace,
         changed_files="config.yaml",
+        config_path=str(temp_workspace / "config.yaml"),
     )
 
     new_output_file = conversion_dir / "test_conversion_test.json"
@@ -1542,13 +1532,12 @@ def test_convert_rules_unrelated_group_not_reconverted_on_config_change(
             ],
         }
     )
-    mock_config_two_groups._loaded_files = [str(temp_workspace / "config.yaml")]
-
     convert_rules(
         config=mock_config_two_groups,
         previous_config=previous_config,
         path_prefix=temp_workspace,
         changed_files="config.yaml",
+        config_path=str(temp_workspace / "config.yaml"),
     )
 
     conversion_dir = temp_workspace / "conversions"
@@ -1559,13 +1548,12 @@ def test_convert_rules_unrelated_group_not_reconverted_on_config_change(
 def test_convert_rules_identical_previous_config_skips(temp_workspace, mock_config):
     """An identical previous_config is not itself a reason to reconvert; the
     usual changed-files skip logic still applies."""
-    mock_config._loaded_files = [str(temp_workspace / "config.yaml")]
-
     convert_rules(
         config=mock_config,
         previous_config=mock_config,
         path_prefix=temp_workspace,
         changed_files="config.yaml",
+        config_path=str(temp_workspace / "config.yaml"),
     )
 
     output_file = temp_workspace / "conversions" / "test_conversion_test.json"
@@ -1588,13 +1576,12 @@ def test_convert_rules_config_key_order_does_not_reconvert(temp_workspace, mock_
             ],
         }
     )
-    mock_config._loaded_files = [str(temp_workspace / "config.yaml")]
-
     convert_rules(
         config=mock_config,
         previous_config=previous_config,
         path_prefix=temp_workspace,
         changed_files="config.yaml",
+        config_path=str(temp_workspace / "config.yaml"),
     )
 
     output_file = temp_workspace / "conversions" / "test_conversion_test.json"
@@ -1641,13 +1628,12 @@ def test_convert_rules_config_change_respects_manual_flag(temp_workspace, mock_c
             ],
         }
     )
-    mock_config._loaded_files = [str(temp_workspace / "config.yaml")]
-
     convert_rules(
         config=mock_config,
         previous_config=previous_config,
         path_prefix=temp_workspace,
         changed_files="config.yaml",
+        config_path=str(temp_workspace / "config.yaml"),
     )
 
     assert output_file.read_text() == manual_content
@@ -1666,13 +1652,12 @@ def test_convert_rules_multiple_new_groups_convert_independently(
             "conversions": [],
         }
     )
-    mock_config_two_groups._loaded_files = [str(temp_workspace / "config.yaml")]
-
     convert_rules(
         config=mock_config_two_groups,
         previous_config=previous_config,
         path_prefix=temp_workspace,
         changed_files="config.yaml",
+        config_path=str(temp_workspace / "config.yaml"),
     )
 
     conversion_dir = temp_workspace / "conversions"
@@ -1710,13 +1695,12 @@ def test_convert_rules_default_change_reconverts_all_groups(temp_workspace):
             "conversions": shared_conversions,
         }
     )
-    config._loaded_files = [str(temp_workspace / "config.yaml")]
-
     convert_rules(
         config=config,
         previous_config=previous_config,
         path_prefix=temp_workspace,
         changed_files="config.yaml",
+        config_path=str(temp_workspace / "config.yaml"),
     )
 
     conversion_dir = temp_workspace / "conversions"
@@ -1756,13 +1740,12 @@ def test_convert_rules_dropped_input_entry_deletes_stale_output(
         }
     )
     mock_config["conversions"][0]["input"] = ["rules/keep.yml"]
-    mock_config._loaded_files = [str(temp_workspace / "config.yaml")]
-
     convert_rules(
         config=mock_config,
         previous_config=previous_config,
         path_prefix=temp_workspace,
         changed_files="config.yaml",
+        config_path=str(temp_workspace / "config.yaml"),
     )
 
     assert not stale_output.exists()
@@ -1799,13 +1782,12 @@ def test_convert_rules_narrowed_input_pattern_keeps_still_matched_files(
         }
     )
     mock_config["conversions"][0]["input"] = ["rules/test.yml"]
-    mock_config._loaded_files = [str(temp_workspace / "config.yaml")]
-
     convert_rules(
         config=mock_config,
         previous_config=previous_config,
         path_prefix=temp_workspace,
         changed_files="config.yaml",
+        config_path=str(temp_workspace / "config.yaml"),
     )
 
     assert still_valid_output.exists()
@@ -1852,13 +1834,12 @@ def test_convert_rules_reassigned_input_moves_output_between_groups(
     )
     mock_config_two_groups["conversions"][0]["input"] = ["rules/keep.yml"]
     mock_config_two_groups["conversions"][1]["input"] = ["rules/test.yml"]
-    mock_config_two_groups._loaded_files = [str(temp_workspace / "config.yaml")]
-
     convert_rules(
         config=mock_config_two_groups,
         previous_config=previous_config,
         path_prefix=temp_workspace,
         changed_files="config.yaml",
+        config_path=str(temp_workspace / "config.yaml"),
     )
 
     # The old owner's stale output for the reassigned rule is gone.
@@ -1904,13 +1885,12 @@ def test_convert_rules_dropped_input_entry_respects_manual_flag(
         }
     )
     mock_config["conversions"][0]["input"] = ["rules/keep.yml"]
-    mock_config._loaded_files = [str(temp_workspace / "config.yaml")]
-
     convert_rules(
         config=mock_config,
         previous_config=previous_config,
         path_prefix=temp_workspace,
         changed_files="config.yaml",
+        config_path=str(temp_workspace / "config.yaml"),
     )
 
     assert manual_output.read_text() == manual_content

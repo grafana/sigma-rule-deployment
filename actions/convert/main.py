@@ -71,6 +71,7 @@ if __name__ == "__main__":
     convert_rules(
         config=config,
         previous_config=previous_config,
+        config_path=config_file,
         path_prefix=args.path_prefix,
         render_traceback=args.render_traceback,
         pretty_print=args.pretty_print,

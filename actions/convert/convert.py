@@ -3,17 +3,17 @@ in the config."""
 
 import fnmatch
 import glob
-import orjson as json
 import os
+import sys
 import traceback
 from pathlib import Path
 from typing import Any
 
+import orjson as json
 from click.testing import CliRunner
 from dynaconf import Dynaconf
 from sigma.cli.convert import convert
 from yaml import FullLoader, load_all
-
 
 # The manual flag marks a generated file as manually maintained. Conversion files
 # carry it as a top-level boolean; deployment annotations use the string "true".
@@ -72,6 +72,7 @@ def convert_rules(
     deleted_files: str = "",
     manual_files: str = "",
     previous_config: Dynaconf | None = None,
+    config_path: str | Path | None = None,
 ) -> None:
     """Convert Sigma rules to the target format per each file in the conversions object
     in the config. The converted files will be saved in the PATH_PREFIX/conversions
@@ -111,6 +112,10 @@ def convert_rules(
         deleted_files (str): The list of deleted files.
         manual_files (str): Space-separated conversion files a human modified since
             the last automation commit; missing manual flags are backfilled onto them.
+        previous_config (Dynaconf | None): The config as it was before the current change,
+            used to detect which conversion groups changed.
+        config_path (str | Path | None): Path to the config file that was loaded into
+            `config`, used to detect whether the config file itself changed.
 
     Raises:
         ValueError: Path prefix must be set using GITHUB_WORKSPACE environment variable.
@@ -124,12 +129,12 @@ def convert_rules(
         ValueError: Error loading rule file {rule_file}.
     """
 
-    changed_files_set = set(
+    changed_files_set = {
         path_prefix / Path(x) for x in changed_files.split(" ") if x
-    )
-    deleted_files_set = set(
+    }
+    deleted_files_set = {
         path_prefix / Path(x) for x in deleted_files.split(" ") if x
-    )
+    }
 
     # Check if the path_prefix is set
     if not path_prefix or path_prefix == Path("."):
@@ -148,7 +153,7 @@ def convert_rules(
     # Check whether we have any files to process
     if not all_rules and not changed_files and not deleted_files and not manual_files:
         print("No changed, deleted or manual files identified, but all_rules is false")
-        exit(0)
+        sys.exit(0)
 
     # Get the conversion path from the config
     conversion_path = "conversions"  # Default conversion path if none is set
@@ -202,7 +207,6 @@ def convert_rules(
     changed_conversions = []
 
     # Determine if the config file itself changed, and if so, check for conversion groups whose own config changed. Or if any global setting changed, requiring a full conversion.
-    config_path = config._loaded_files[0] if config._loaded_files else None
     config_file_changed = config_path is not None and Path(config_path) in changed_files_set
     if config_file_changed:
         print(f"Config file {config_path} changed, checking for conversion groups whose own config changed")
@@ -367,8 +371,7 @@ def convert_rules(
                 conversion.get("format", default_format),
                 *(
                     ["--correlation-method", conversion["correlation_method"]]
-                    if "correlation_method" in conversion
-                    and conversion["correlation_method"]
+                    if conversion.get("correlation_method")
                     else (
                         ["--correlation-method", default_correlation_method]
                         if default_correlation_method
@@ -530,10 +533,10 @@ def is_path(path_string, file_pattern) -> bool:
     if Path(path_string).is_absolute() or "/" in path_string:
         return True
 
-    if os.path.splitext(path_string)[1] and fnmatch.fnmatch(path_string, file_pattern):
+    if os.path.splitext(path_string)[1] and fnmatch.fnmatch(path_string, file_pattern): # noqa: SIM103
         return True
 
-    return False
+    return False 
 
 
 def load_rules(rule_file: str) -> list[dict[str, Any]]:
@@ -557,7 +560,7 @@ def load_rules(rule_file: str) -> list[dict[str, Any]]:
         # to enumerate all items.
         return list(load_all(rule_content, FullLoader))
     except Exception as e:
-        print(f"{e.__class__.__name__}: Error loading rule file {rule_file}: {str(e)}")
+        print(f"{e.__class__.__name__}: Error loading rule file {rule_file}: {e!s}")
         raise ValueError(f"Error loading rule file {rule_file}") from e
 
 def filter_rule_fields(rule_dicts: list[dict[str, Any]], desired_fields: list[str]) -> list[dict[str, Any]]:
@@ -577,7 +580,7 @@ def filter_rule_fields(rule_dicts: list[dict[str, Any]], desired_fields: list[st
         # Ensure desired_fields contains at least the id and title fields
         necessary_fields = set(["id", "title"] + desired_fields)
 
-    return [dict((field, rule_dict[field]) for field in necessary_fields if field in rule_dict) for rule_dict in rule_dicts]
+    return [{field: rule_dict[field] for field in necessary_fields if field in rule_dict} for rule_dict in rule_dicts]
 
 def get_config_changes(previous_config: Dynaconf, current_config: Dynaconf) -> tuple[bool, list[str]]:
     """Get the list of conversion names whose own config block changed.

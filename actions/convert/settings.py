@@ -5,7 +5,6 @@ import os
 
 from dynaconf import Dynaconf
 
-
 TRUE_VALUES = ("true", "1", "t", "yes", "y", "on", "enabled")
 
 
