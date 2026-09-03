@@ -32,8 +32,9 @@ export function splitCommentIntoChunks(comment, commentIdentifier, maxCommentSiz
   for (const line of comment.split('\n')) {
     const lineWithNewline = line + '\n';
 
+    const TABLE_SEPARATOR_REGEX = /^\|(?:\s*:?-+:?\s*\|)+$/;
     // If the line is a table header, store it
-    if (line.startsWith('|') && line.includes('---')) {
+    if (line.startsWith('|') && TABLE_SEPARATOR_REGEX.test(line.trim())) {
       lastTableHeader = currentChunk.split('\n').slice(0,-1).pop() + '\n' + lineWithNewline;
     } else if (!line.startsWith('|') && lastTableHeader) {
       lastTableHeader = ''; // Reset if we are no longer in a table
@@ -57,7 +58,7 @@ export function splitCommentIntoChunks(comment, commentIdentifier, maxCommentSiz
         } else if (line.startsWith('### ')) {
           preparedNewChunk = line + '\n' + preparedNewChunk;
           chunkLines.splice(i, 1);
-        } else if( line.startsWith('|') && line.includes('---')) {
+        } else if (line.startsWith('|') && TABLE_SEPARATOR_REGEX.test(line.trim())) {
           preparedNewChunk = chunkLines.splice(i-1, 2).join('\n') + '\n' + preparedNewChunk;
           i--; // Skip the next line since we already spliced it
         }
