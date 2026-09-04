@@ -532,7 +532,7 @@ func (i *Integrator) DoConversions() error {
 			fmt.Printf("Skipping manually-maintained deployment file (not overwriting): %s\n", file)
 			continue
 		}
-		err = i.ConvertToAlert(rule, queries, titles, config, inputFile, conversionObject)
+		err = i.ConvertToAlert(rule, queries, titles, config, inputFile, file, conversionObject)
 		if err != nil {
 			return err
 		}
@@ -599,7 +599,7 @@ func (i *Integrator) SetOutputs() error {
 	return nil
 }
 
-func (i *Integrator) ConvertToAlert(rule *model.ProvisionedAlertRule, queries []string, titles string, config model.ConversionConfig, conversionFile string, conversionObject model.ConversionOutput) error {
+func (i *Integrator) ConvertToAlert(rule *model.ProvisionedAlertRule, queries []string, titles string, config model.ConversionConfig, conversionFile string, integrateFile string, conversionObject model.ConversionOutput) error {
 	datasource := shared.GetConfigValue(config.DataSource, i.config.ConversionDefaults.DataSource, "nil")
 	timewindow := shared.GetConfigValue(config.TimeWindow, i.config.ConversionDefaults.TimeWindow, "1m")
 	duration, err := time.ParseDuration(timewindow)
@@ -696,8 +696,10 @@ func (i *Integrator) ConvertToAlert(rule *model.ProvisionedAlertRule, queries []
 	logSourceType := shared.GetConfigValue(config.Target, i.config.ConversionDefaults.Target, shared.Loki)
 	rule.Annotations["LogSourceType"] = logSourceType
 
-	// Path to associated conversion file
+	// Path to associated files
+	rule.Annotations["SigmaRule"] = conversionObject.InputFile
 	rule.Annotations["ConversionFile"] = conversionFile
+	rule.Annotations["DeploymentFile"] = integrateFile
 
 	funcs := templateFuncs(i.config.IntegratorConfig.TemplateAllRules)
 
