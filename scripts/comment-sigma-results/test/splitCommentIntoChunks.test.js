@@ -22,6 +22,14 @@ const SAFETY_MARGIN = commentByteSize(`${partLabel(100, 100)}\n\n${IDENTIFIER_MA
 
 /** A comment shaped like the ones buildCommentBody renders, built here to keep the test isolated. */
 function buildComment() {
+  return buildCommentWithInjectedLine();
+}
+
+function buildCommentWithInjectedLine(
+  injectedTableLine = "", 
+  injectedTableLineIndex = -1, 
+  injectedChangedFilesLine = "", 
+  injectedChangedFilesLineIndex = -1) {
   return [
     '',
     TITLE,
@@ -32,7 +40,7 @@ function buildComment() {
     '',
     CHANGED_HEADING,
     '',
-    ...Array.from({ length: 20 }, (_, i) => changedFile(i)),
+    ...Array.from({ length: 20 }, (_, i) => i == injectedChangedFilesLineIndex ? injectedChangedFilesLine : changedFile(i)),
     '',
     DELETED_HEADING,
     '',
@@ -42,7 +50,7 @@ function buildComment() {
     '',
     RESULTS_TABLE_HEADER,
     RESULTS_TABLE_SEPARATOR,
-    ...Array.from({ length: 20 }, (_, i) => resultsRow(i)),
+    ...Array.from({ length: 20 }, (_, i) => i == injectedTableLineIndex ? injectedTableLine : resultsRow(i)),
     '',
   ].join('\n');
 }
@@ -254,5 +262,29 @@ test('splitCommentIntoChunks - every chunk is numbered with its part and the tot
   // Exactly one label per chunk
   for (const chunk of chunks) {
     assert.strictEqual(chunk.split('\n').filter(line => line.startsWith(':open_book: Part ')).length, 1);
+  }
+});
+
+test('splitCommentIntoChunks - no false positive table header separators are detected', () => {
+
+  const dangerousLine = '| Looking for credentials | [See in Explore](https://example.grafana.example/explore?something=---BEGIN RSA PRIVATE KEY---) | 0 | 5.230158 s | 342,526,137 decbytes | 0 |'; // Has the triple dash which might trip up table header separator detection
+
+  const comment = buildCommentWithInjectedLine(
+    dangerousLine,
+    5,
+  );
+  const chunks = splitCommentIntoChunks(comment, COMMENT_IDENTIFIER, 400);
+  assert(chunks.length > 1);
+
+  const chunksWithDangerousLine = chunks.filter(chunk => chunk.includes(dangerousLine));
+  assert.strictEqual(chunksWithDangerousLine.length, 1, 'the dangerous line should appear in exactly one chunk');
+
+  const chunksWithRows = chunks.filter(chunk => chunk.includes('| rule_') || chunk.includes(dangerousLine));
+  assert(chunksWithRows.length > 1, `expected the table to span more than one chunk, got ${chunksWithRows.length}`);
+  for (const chunk of chunksWithRows) {
+    assert(
+      chunk.includes(`${RESULTS_TABLE_HEADER}\n${RESULTS_TABLE_SEPARATOR}`),
+      `chunk without a table header: ${JSON.stringify(chunk)}`,
+    );
   }
 });
