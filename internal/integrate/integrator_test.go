@@ -239,6 +239,7 @@ func TestConvertToAlert(t *testing.T) {
 				UID: "",
 			},
 			convObject: model.ConversionOutput{
+				InputFile: "test_sigma_rule.yml",
 				Rules: []model.SigmaRule{
 					{
 						Title:     "A non-title case title",
@@ -278,10 +279,12 @@ func TestConvertToAlert(t *testing.T) {
 			wantAnnotations: map[string]string{
 				"Author":         "John Doe",
 				"ConversionFile": "test_conversion_file.json",
+				"DeploymentFile": "test_integrate_file.json",
 				"LogSourceType":  "loki",
 				"LogSourceUid":   "my_data_source",
 				"Lookback":       "0s",
 				"Query":          "{job=`.+`} | json | test=`true`",
+				"SigmaRule":      "test_sigma_rule.yml",
 				"TimeWindow":     "5m",
 				"summary":        "A Non-Title Case Title",
 				"runbook_url":    "https://my.runbook.url/A_non-title_case_title",
@@ -295,6 +298,7 @@ func TestConvertToAlert(t *testing.T) {
 				UID: "",
 			},
 			convObject: model.ConversionOutput{
+				InputFile: "test_sigma_rule.yml",
 				Rules: []model.SigmaRule{
 					{Level: "low"},
 					{Level: "critical"},
@@ -325,10 +329,12 @@ func TestConvertToAlert(t *testing.T) {
 			},
 			wantAnnotations: map[string]string{
 				"ConversionFile": "test_conversion_file.json",
+				"DeploymentFile": "test_integrate_file.json",
 				"LogSourceType":  "loki",
 				"LogSourceUid":   "my_data_source",
 				"Lookback":       "0s",
 				"Query":          "{job=`.+`} | json | test=`true`",
+				"SigmaRule":      "test_sigma_rule.yml",
 				"TimeWindow":     "5m",
 				"severity":       "critical",
 			},
@@ -395,7 +401,7 @@ func TestConvertToAlert(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			i := NewIntegrator()
 			i.config.IntegratorConfig = tt.integratorConfig
-			err := i.ConvertToAlert(tt.rule, tt.queries, tt.titles, tt.convConfig, "test_conversion_file.json", tt.convObject)
+			err := i.ConvertToAlert(tt.rule, tt.queries, tt.titles, tt.convConfig, "test_conversion_file.json", "test_integrate_file.json", tt.convObject)
 			if tt.wantError {
 				assert.NotNil(t, err)
 			} else {
