@@ -32,7 +32,7 @@ export function splitCommentIntoChunks(comment, commentIdentifier, maxCommentSiz
   for (const line of comment.split('\n')) {
     const lineWithNewline = line + '\n';
 
-    const TABLE_SEPARATOR_REGEX = /^\|(?:\s*:?-+:?\s*\|)+$/;
+    const TABLE_SEPARATOR_REGEX = /^\|(?:\s*:?-{3,}:?\s*\|)+$/;
     // If the line is a table header, store it
     if (line.startsWith('|') && TABLE_SEPARATOR_REGEX.test(line.trim())) {
       lastTableHeader = currentChunk.split('\n').slice(0,-1).pop() + '\n' + lineWithNewline;
