@@ -230,6 +230,7 @@ jobs:
           ACTION_SHA: ${{ github.event.pull_request.head.sha }}
           RUN_TOKEN: ${{ github.run_id }}-${{ github.run_attempt }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_AUTHOR_TYPE: ${{ github.event.pull_request.user.type }}
           MAIN_UPDATE_BRANCH: integration-test-main-update-${{ github.event.pull_request.number }}
           TEST_PR_NUMBER: ${{ steps.integration-pr.outputs.pr-number }}
         run: |
@@ -297,7 +298,12 @@ jobs:
 
           STATE=$(gh pr view "$MAIN_UPDATE_BRANCH" --json state -q .state)
           if [ "$STATE" != "MERGED" ]; then
-            gh pr comment "$MAIN_UPDATE_BRANCH" --body "@${PR_AUTHOR} this repository requires a manual merge — please review and merge this PR so the integration test can continue."
+            # a bot author can't act on the mention, so notify the team who can instead
+            MENTION="@${PR_AUTHOR}"
+            if [ "$PR_AUTHOR_TYPE" = "Bot" ]; then
+              MENTION="@grafana/security-operations"
+            fi
+            gh pr comment "$MAIN_UPDATE_BRANCH" --body "${MENTION} this repository requires a manual merge — please review and merge this PR so the integration test can continue."
 
             echo "Waiting for $MAIN_UPDATE_BRANCH to be manually merged..."
             while [ "$STATE" != "MERGED" ]; do
