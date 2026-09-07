@@ -702,7 +702,10 @@ func (i *Integrator) ConvertToAlert(rule *model.ProvisionedAlertRule, queries []
 	// Path to associated conversion file
 	rule.Annotations["ConversionFile"] = conversionFile
 
-	funcs := templateFuncs(i.config.Defaults.Integration.TemplateAllRules)
+	// Additive: a per-conversion true can't be un-set by the (false) zero value, so either
+	// source enabling this turns it on, matching TestQueries/ContinueOnError/ShowLogLines/ShowSampleValues.
+	templateAllRules := i.config.Defaults.Integration.TemplateAllRules || cfg.Integration.TemplateAllRules
+	funcs := templateFuncs(templateAllRules)
 
 	templateAnnotations := i.config.Defaults.Integration.TemplateAnnotations
 	if cfg.Integration.TemplateAnnotations != nil {
@@ -714,7 +717,7 @@ func (i *Integrator) ConvertToAlert(rule *model.ProvisionedAlertRule, queries []
 			return fmt.Errorf("error parsing template %s: %v", key, err)
 		}
 		var buf bytes.Buffer
-		if i.config.Defaults.Integration.TemplateAllRules {
+		if templateAllRules {
 			err = tmpl.Execute(&buf, conversionObject.Rules)
 		} else {
 			err = tmpl.Execute(&buf, conversionObject.Rules[0])
@@ -739,7 +742,7 @@ func (i *Integrator) ConvertToAlert(rule *model.ProvisionedAlertRule, queries []
 			return fmt.Errorf("error parsing template %s: %v", key, err)
 		}
 		var buf bytes.Buffer
-		if i.config.Defaults.Integration.TemplateAllRules {
+		if templateAllRules {
 			err = tmpl.Execute(&buf, conversionObject.Rules)
 		} else {
 			err = tmpl.Execute(&buf, conversionObject.Rules[0])

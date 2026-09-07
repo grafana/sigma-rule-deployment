@@ -20,3 +20,9 @@ configurations:
     integration:
       rule_group: "group3"
       time_window: "6h"
+  - name: group4_config
+    integration:
+      rule_group: "group4"
+      time_window: "5m"
+      folder_id: other456
+      org_id: 99

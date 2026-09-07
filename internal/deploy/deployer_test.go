@@ -523,6 +523,45 @@ func TestListAlerts(t *testing.T) {
 	assert.Equal(t, []string{"abcd123", "qwerty123", "newalert1"}, retrievedAlerts)
 }
 
+// TestListAlertsMultipleFolderOrgPairs verifies that alerts are matched against every
+// configured (folder, org) pair, not just the default one, so alerts that live in a
+// conversion-specific folder_id/org_id are still found during fresh-deploy discovery.
+func TestListAlertsMultipleFolderOrgPairs(t *testing.T) {
+	ctx := context.Background()
+
+	alertList := `[
+		{"uid": "abcd123", "title": "Test alert", "folderUID": "efgh456", "orgID": 23},
+		{"uid": "ijkl456", "title": "Test alert 2", "folderUID": "mnop789", "orgID": 23},
+		{"uid": "test123123", "title": "Test alert 4", "folderUID": "efgh456", "orgID": 1}
+	]`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(alertList))
+	}))
+	defer server.Close()
+
+	d := Deployer{
+		config: deploymentConfig{
+			endpoints: []string{server.URL + "/"},
+			saToken:   "my-test-token",
+			folderUID: "efgh456",
+			orgID:     23,
+			folderOrgPairs: []folderOrg{
+				{folderUID: "efgh456", orgID: 23},
+				{folderUID: "mnop789", orgID: 23},
+			},
+		},
+		client: shared.NewGrafanaClient(server.URL+"/", "my-test-token", "sigma-rule-deployment/deployer", defaultRequestTimeout),
+	}
+
+	retrievedAlerts, err := d.listAlerts(ctx)
+	assert.NoError(t, err)
+	// abcd123 (efgh456/23) and ijkl456 (mnop789/23) match a configured pair;
+	// test123123 (efgh456/1) does not match any configured pair.
+	assert.ElementsMatch(t, []string{"abcd123", "ijkl456"}, retrievedAlerts)
+}
+
 func TestLoadConfig(t *testing.T) {
 	// Set up environment variables
 	os.Setenv("CONFIG_PATH", "test_config.yml")
@@ -578,9 +617,23 @@ func TestLoadConfig(t *testing.T) {
 		"group1": 600,   // 10m in seconds
 		"group2": 3600,  // 1h in seconds
 		"group3": 21600, // 6h (default) in seconds
+		"group4": 300,   // 5m in seconds
 	}
 
 	assert.Equal(t, expectedIntervals, d.config.groupsIntervals)
+
+	// group4_config overrides folder_id/org_id per-conversion; the others fall back to Defaults.
+	expectedGroupsFolders := map[string]string{
+		"group1": "abcdef123",
+		"group2": "abcdef123",
+		"group3": "abcdef123",
+		"group4": "other456",
+	}
+	assert.Equal(t, expectedGroupsFolders, d.config.groupsFolders)
+	assert.ElementsMatch(t, []folderOrg{
+		{folderUID: "abcdef123", orgID: 23},
+		{folderUID: "other456", orgID: 99},
+	}, d.config.folderOrgPairs)
 }
 
 func TestFakeAlertFilename(t *testing.T) {
@@ -1082,4 +1135,82 @@ func TestDeployWithMultipleInstanceListInConfig(t *testing.T) {
 	assert.Contains(t, server1UIDs, "conv-default-uid")
 	assert.Contains(t, server2UIDs, "conv-default-uid")
 	assert.NotContains(t, overrideUIDs, "conv-default-uid")
+}
+
+// TestDeployUsesPerConversionFolderForGroupIntervalUpdate verifies that when a rule group's
+// folder_id is overridden per-conversion, the alert-group-interval update targets that
+// conversion's folder rather than always using the global default folder.
+func TestDeployUsesPerConversionFolderForGroupIntervalUpdate(t *testing.T) {
+	ctx := context.Background()
+
+	var folderPaths []string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+		body, _ := io.ReadAll(r.Body)
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/api/v1/provisioning/alert-rules") && r.Method == http.MethodPost:
+			if _, err := parseAlert(string(body)); err != nil {
+				t.Errorf("failed to parse alert: %v", err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write(body)
+		case strings.HasPrefix(r.URL.Path, "/api/v1/provisioning/folder/") && r.Method == http.MethodGet:
+			folderPaths = append(folderPaths, r.URL.Path)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"folderUID":"x","interval":300,"rules":[],"title":"x"}`))
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	// conv_default has no folder/org override and falls back to Defaults.
+	// conv_override sets its own folder_id/org_id and rule_group.
+	configContent := "version: 2\n" +
+		"folders:\n  deployment_path: \"./deployments\"\n" +
+		"defaults:\n" +
+		"  integration:\n    folder_id: default-folder\n    org_id: 1\n" +
+		"  deployment:\n    grafana_instance: " + server.URL + "\n" +
+		"configurations:\n" +
+		"  - name: conv_default\n    integration:\n      rule_group: \"normal_group\"\n      time_window: \"5m\"\n" +
+		"  - name: conv_override\n    integration:\n      rule_group: \"special_group\"\n      time_window: \"5m\"\n      folder_id: special-folder\n      org_id: 2\n"
+
+	configFile, err := os.CreateTemp(".", "test_folder_override_*.yml")
+	assert.NoError(t, err)
+	t.Cleanup(func() { os.Remove(configFile.Name()) })
+	_, err = configFile.WriteString(configContent)
+	assert.NoError(t, err)
+	assert.NoError(t, configFile.Close())
+
+	tmpDir, err := os.MkdirTemp(".", "test-folder-override-*")
+	assert.NoError(t, err)
+	t.Cleanup(func() { os.RemoveAll(tmpDir) })
+
+	defaultAlert := `{"uid":"default-uid","title":"Default Alert","folderUID":"default-folder","orgID":1,"ruleGroup":"normal_group"}`
+	overrideAlert := `{"uid":"override-uid","title":"Override Alert","folderUID":"special-folder","orgID":2,"ruleGroup":"special_group"}`
+
+	defaultFile := filepath.Join(tmpDir, "alert_rule_conv_default_rule_default-uid.json")
+	overrideFile := filepath.Join(tmpDir, "alert_rule_conv_override_rule_override-uid.json")
+	assert.NoError(t, os.WriteFile(defaultFile, []byte(defaultAlert), 0o600))
+	assert.NoError(t, os.WriteFile(overrideFile, []byte(overrideAlert), 0o600))
+
+	os.Setenv("CONFIG_PATH", configFile.Name())
+	defer os.Unsetenv("CONFIG_PATH")
+	os.Setenv("DEPLOYER_GRAFANA_SA_TOKEN", "my-test-token")
+	defer os.Unsetenv("DEPLOYER_GRAFANA_SA_TOKEN")
+
+	d := NewDeployer()
+	assert.NoError(t, d.LoadConfig(ctx))
+	d.SetClient()
+	d.config.alertsToAdd = []string{defaultFile, overrideFile}
+
+	_, _, _, err = d.Deploy(ctx) //nolint:dogsled
+	assert.NoError(t, err)
+
+	assert.Contains(t, folderPaths, "/api/v1/provisioning/folder/default-folder/rule-groups/normal_group")
+	assert.Contains(t, folderPaths, "/api/v1/provisioning/folder/special-folder/rule-groups/special_group")
 }
