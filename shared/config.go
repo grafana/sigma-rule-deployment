@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/grafana/sigma-rule-deployment/internal/model"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 // LoadConfigFromFile reads a YAML configuration file and unmarshals it into a Configuration struct.
