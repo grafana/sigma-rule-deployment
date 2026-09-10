@@ -148,6 +148,13 @@ jobs:
         uses: grafana/shared-workflows/actions/create-github-app-token@46f48da11e78ebdba7a8747ae456b11062fac83e # create-github-app-token/v0.3.1
         with:
           github_app: sigma-rule-deployment-app
+      - name: Set the wait deadline
+        env:
+          WAIT_BUDGET_MINUTES: 25
+        run: |
+          # Budget stops short of the app token's 30 minute lifetime so the closing step at the end
+          # of the job still authenticates.
+          echo "WAIT_DEADLINE=$(( $(date +%s) + WAIT_BUDGET_MINUTES * 60 ))" >> "$GITHUB_ENV"
       - name: Checkout Code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -238,6 +245,12 @@ jobs:
           git checkout main
           git pull
 
+          # Close the main-update PR from any earlier run before the branch is reset below.
+          OPEN_PR=$(gh pr list --state open --head "$MAIN_UPDATE_BRANCH" --json number --jq 'first.number // empty')
+          if [ -n "$OPEN_PR" ]; then
+            gh pr close "$OPEN_PR" -c "Superseded by a newer integration test run"
+          fi
+
           EXPECTED_HEAD_OID=$(../sigma-rule-deployment/.github/scripts/checkout-or-create-branch.sh \
             grafana/sigma-rule-deployment-integration-test \
             "$MAIN_UPDATE_BRANCH" \
@@ -261,58 +274,64 @@ jobs:
             "$EXPECTED_HEAD_OID" \
             "update main branch to relevant hash"
 
-          RESULT=$(gh pr list --json id,title -H "$MAIN_UPDATE_BRANCH" | jq -r '. | length')
-
-          if [ "$RESULT" -eq 0 ]; then
-            gh pr create \
-              --title "Integration Test Main Update ${GITHUB_PR_NUMBER}" \
-              --body "This PR updates the main branch to the relevant hash for grafana/sigma-rule-deployment#${GITHUB_PR_NUMBER}" \
-              --head "$MAIN_UPDATE_BRANCH" \
-              --base main \
-              --label "automated" \
-              --draft
-          fi
+          # Open the main-update PR now that the branch is a commit ahead of main. Addressing it by
+          # number below keeps every `gh pr` call on this PR; a branch name also resolves to the
+          # closed PRs earlier runs left on the same branch.
+          MAIN_UPDATE_PR_URL=$(gh pr create \
+            --title "Integration Test Main Update ${GITHUB_PR_NUMBER}" \
+            --body "This PR updates the main branch to the relevant hash for grafana/sigma-rule-deployment#${GITHUB_PR_NUMBER}" \
+            --head "$MAIN_UPDATE_BRANCH" \
+            --base main \
+            --label "automated" \
+            --draft)
+          MAIN_UPDATE_PR="${MAIN_UPDATE_PR_URL##*/}"
+          echo "Created $MAIN_UPDATE_PR_URL"
 
           # Wait for the checks to register; the `--watch` below fails outright if none exist yet.
-          ATTEMPT=0
-          while [ "$(gh pr checks "$MAIN_UPDATE_BRANCH" --json name --jq 'length' 2>/dev/null || echo 0)" -eq 0 ]; do
-            ATTEMPT=$((ATTEMPT + 1))
-            if [ "$ATTEMPT" -ge 24 ]; then
-              echo "No checks registered on ${MAIN_UPDATE_BRANCH}"
+          while [ "$(gh pr checks "$MAIN_UPDATE_PR" --json name --jq 'length' 2>/dev/null || echo 0)" -eq 0 ]; do
+            if [ "$(date +%s)" -ge "$WAIT_DEADLINE" ]; then
+              echo "No checks registered on #${MAIN_UPDATE_PR}"
               exit 1
             fi
             sleep 5
           done
 
-          if ! gh pr checks "$MAIN_UPDATE_BRANCH" --watch; then
-            echo "Integration Test Main Update PR failed"
+          # Cap `--watch` at what is left of the budget; it blocks for as long as a check runs.
+          # `timeout` reads 0 as "no limit", so an exhausted budget has to bail out here instead.
+          REMAINING=$(( WAIT_DEADLINE - $(date +%s) ))
+          if [ "$REMAINING" -le 0 ] || ! timeout "$REMAINING" gh pr checks "$MAIN_UPDATE_PR" --watch; then
+            echo "Checks on #${MAIN_UPDATE_PR} failed or did not finish in time"
             exit 1
           fi
 
-          gh pr ready "$MAIN_UPDATE_BRANCH"
+          gh pr ready "$MAIN_UPDATE_PR"
 
           # Arm the merge, then ask the author to approve it and wait. Approval is mandatory on
           # this repo, so --auto only queues the merge, and the comment further down needs main
           # to already carry this commit.
-          gh pr merge "$MAIN_UPDATE_BRANCH" --auto --squash
+          gh pr merge "$MAIN_UPDATE_PR" --auto --squash
 
-          STATE=$(gh pr view "$MAIN_UPDATE_BRANCH" --json state -q .state)
+          STATE=$(gh pr view "$MAIN_UPDATE_PR" --json state -q .state)
           if [ "$STATE" != "MERGED" ]; then
             # a bot author can't act on the mention, so notify the team who can instead
             MENTION="@${PR_AUTHOR}"
             if [ "$PR_AUTHOR_TYPE" = "Bot" ]; then
               MENTION="@grafana/security-operations"
             fi
-            gh pr comment "$MAIN_UPDATE_BRANCH" --body "${MENTION} this repository requires a manual merge — please review and merge this PR so the integration test can continue."
+            gh pr comment "$MAIN_UPDATE_PR" --body "${MENTION} this repository requires a manual merge — please review and merge this PR within $(( (WAIT_DEADLINE - $(date +%s)) / 60 )) minutes so the integration test can continue."
 
-            echo "Waiting for $MAIN_UPDATE_BRANCH to be manually merged..."
+            echo "Waiting for #${MAIN_UPDATE_PR} to be manually merged..."
             while [ "$STATE" != "MERGED" ]; do
               if [ "$STATE" = "CLOSED" ]; then
-                echo "$MAIN_UPDATE_BRANCH was closed without merging"
+                echo "#${MAIN_UPDATE_PR} was closed without merging"
+                exit 1
+              fi
+              if [ "$(date +%s)" -ge "$WAIT_DEADLINE" ]; then
+                echo "#${MAIN_UPDATE_PR} was not merged in time. Re-run this job when someone is around to approve it."
                 exit 1
               fi
               sleep 30
-              STATE=$(gh pr view "$MAIN_UPDATE_BRANCH" --json state -q .state)
+              STATE=$(gh pr view "$MAIN_UPDATE_PR" --json state -q .state)
             done
           fi
 
@@ -361,3 +380,16 @@ jobs:
             fi
             sleep 5
           done
+      - name: Close the main update PR if it never merged
+        if: always()
+        env:
+          GH_TOKEN: ${{ steps.get-github-app-token.outputs.token }}
+          MAIN_UPDATE_BRANCH: integration-test-main-update-${{ github.event.pull_request.number }}
+        run: |
+          # Close the main-update PR whenever the job ends without merging it.
+          OPEN_PR=$(gh pr list --repo grafana/sigma-rule-deployment-integration-test \
+            --state open --head "$MAIN_UPDATE_BRANCH" --json number --jq 'first.number // empty')
+          if [ -n "$OPEN_PR" ]; then
+            gh pr close --repo grafana/sigma-rule-deployment-integration-test "$OPEN_PR" \
+              -c "Integration test run ended without merging this; closing so the next run starts clean" -d
+          fi
