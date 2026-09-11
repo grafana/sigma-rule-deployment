@@ -7,3 +7,11 @@ paths:
       # Note that this is NOT fixed as of actionlint 1.7.12, so upgrading alone will not remove the need
       # for this. Drop it once a release actually recognises the key, and re-run the check to confirm.
       - 'unexpected key "queue" for "concurrency" section.*'
+
+      # actionlint's schema predates GitHub's `$/` self-repository `uses:` syntax, so it rejects a valid
+      # workflow. Temporary until actionlint learns the syntax. Upstream:
+      #    - issue: https://github.com/rhysd/actionlint/issues/711
+      #    - PR: https://github.com/rhysd/actionlint/pull/732
+      # Not fixed as of actionlint 1.7.12, so upgrading alone will not remove the need for this. Drop it
+      # once a release actually recognises the syntax, and re-run the check to confirm.
+      - 'specifying action "\$/.*" in invalid format because ref is missing.*'
