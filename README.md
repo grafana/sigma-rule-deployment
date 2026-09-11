@@ -162,12 +162,8 @@ This repository has [immutable releases](https://docs.github.com/en/code-securit
 When the main branch is in a state that is ready to release, the process is as follows:
 
 1. Determine the correct version number using the [Semantic Versioning](https://semver.org/) methodology. All version numbers should be in the format `\d+\.\d+\.\d+(-[0-9A-Za-z-]+)?`
-2. Create a PR to update **all** the version tags used in the reusable workflows [convert-integrate.yml](.github/workflows/convert-integrate.yml) and [deploy.yml](.github/workflows/deploy.yml) to the new version, and merge it into `main` once it is approved, e.g.:
-```
-        uses: grafana/sigma-rule-deployment/actions/convert@vX.X.X
-```
-3. Checkout `main` and create a signed tag for the release, named the version number prefixed with a v, e.g., `git tag --sign --message="Release vX.X.X" vX.X.X`
-4. Push the tag to GitHub, e.g., `git push --tags`. This triggers the ["SBOM on Release"](.github/workflows/sbom-release.yml) workflow, which exports the SPDX SBOM from Socket, creates a **draft** release with auto-generated notes, and attaches the SBOM as the `sigma-rule-deployment-vX.X.X.spdx.json` asset. The release is automatically marked as a pre-release when the tag starts with `v0.` or has a `-alpha/beta/rcX` suffix.
-5. Open the auto-created **draft** release in GitHub. Review and adjust the generated release notes, confirm the pre-release flag is correct, and check that the `.spdx.json` SBOM asset is attached. (The SBOM must be present now, because immutable releases prevent adding assets after publishing.)
-6. Publish the draft release.
-7. Validate that the ["Build & Integration Test Image"](.github/workflows/build-docker.yml) action, which pushes the tagged image to the GitHub Container Registry (GHCR) on publish, has completed successfully for the release.
+2. Checkout `main` and create a signed tag for the release, named the version number prefixed with a v, e.g., `git tag --sign --message="Release vX.X.X" vX.X.X`
+3. Push the tag to GitHub, e.g., `git push --tags`. This triggers the ["SBOM on Release"](.github/workflows/sbom-release.yml) workflow, which exports the SPDX SBOM from Socket, creates a **draft** release with auto-generated notes, and attaches the SBOM as the `sigma-rule-deployment-vX.X.X.spdx.json` asset. The release is automatically marked as a pre-release when the tag starts with `v0.` or has a `-alpha/beta/rcX` suffix.
+4. Open the auto-created **draft** release in GitHub. Review and adjust the generated release notes, confirm the pre-release flag is correct, and check that the `.spdx.json` SBOM asset is attached. (The SBOM must be present now, because immutable releases prevent adding assets after publishing.)
+5. Publish the draft release.
+6. Validate that the ["Build & Integration Test Image"](.github/workflows/build-docker.yml) action, which pushes the tagged image to the GitHub Container Registry (GHCR) on publish, has completed successfully for the release.
