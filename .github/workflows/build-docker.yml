@@ -51,7 +51,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: "Build and Push (same-repo PR)"
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         if: github.event_name == 'pull_request' && steps.origin.outputs.is_fork == 'false'
         with:
           context: .
@@ -63,7 +63,7 @@ jobs:
         if: github.event_name == 'pull_request' && steps.origin.outputs.is_fork == 'true'
         run: mkdir -p /tmp/pr-image
       - name: "Build and Load (fork PR)"
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         if: github.event_name == 'pull_request' && steps.origin.outputs.is_fork == 'true'
         with:
           context: .
@@ -101,7 +101,7 @@ jobs:
           retention-days: 3
           if-no-files-found: error
       - name: "Build and Push (Push)"
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         if: github.event_name == 'push'
         with:
           context: .
@@ -111,7 +111,7 @@ jobs:
             ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:main
           push: true
       - name: "Build and Push (Release)"
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         if: github.event_name == 'release'
         with:
           context: .
