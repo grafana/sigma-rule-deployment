@@ -1,69 +1,81 @@
+version: 2
 folders:
   conversion_path: "./conversions"
   deployment_path: "./deployments"
-conversion_defaults:
-  target: loki
-  format: default
-  skip_unsupported: true
-  file_pattern: "*.yml"
-  data_source: grafanacloud-logs
-conversions:
+defaults:
+  conversion:
+    target: loki
+    format: default
+    skip_unsupported: true
+    file_pattern: "*.yml"
+  integration:
+    data_source: grafanacloud-logs
+    folder_id: ae9ojcgwmy48wf # sigma-rule-deployment
+    org_id: 1
+    test_queries: false # Whether to test the queries against the datasource
+    from: "now-1h"
+    to: "now"
+  deployment:
+    grafana_instance: https://securityops.grafana-dev.net
+configurations:
   - name: faulty
-    input:
-      - "rules/faulty.yml"
-    backend_options:
-      case_sensitive: true
-    pipelines:
-      - pipelines/datasources/test-1.yml
-      - pipelines/test-1.yml
-    rule_group: Every 1 Hour
-    time_window: 1h
+    conversion:
+      input:
+        - "rules/faulty.yml"
+      backend_options:
+        case_sensitive: true
+      pipelines:
+        - pipelines/datasources/test-1.yml
+        - pipelines/test-1.yml
+    integration:
+      rule_group: Every 1 Hour
+      time_window: 1h
   - name: github_audit
-    input:
-      - "rules/test*"
-    backend_options:
-      case_sensitive: true
-    pipelines:
-      - pipelines/datasources/test-1.yml
-      - pipelines/test-1.yml
-    rule_group: Every 1 Hour
-    time_window: 1h
+    conversion:
+      input:
+        - "rules/test*"
+      backend_options:
+        case_sensitive: true
+      pipelines:
+        - pipelines/datasources/test-1.yml
+        - pipelines/test-1.yml
+    integration:
+      rule_group: Every 1 Hour
+      time_window: 1h
   - name: combine_queries
-    input:
-      - "rules/condition-split.yml"
-    backend_options:
-      case_sensitive: true
-    pipelines:
-      - pipelines/datasources/test-1.yml
-    rule_group: Every 1 Hour
-    time_window: 1h
+    conversion:
+      input:
+        - "rules/condition-split.yml"
+      backend_options:
+        case_sensitive: true
+      pipelines:
+        - pipelines/datasources/test-1.yml
+    integration:
+      rule_group: Every 1 Hour
+      time_window: 1h
   # Two conversions of the same rule used to exercise the "manual" flag feature.
   # manual_explicit: fixtures are seeded already carrying the flag.
   # manual_backfill: fixtures are seeded without the flag (a human edit) so the
   # action must detect the change and backfill the flag before regenerating.
   - name: manual_explicit
-    input:
-      - "rules/manual-test.yml"
-    backend_options:
-      case_sensitive: true
-    pipelines:
-      - pipelines/datasources/test-1.yml
-    rule_group: Every 1 Hour
-    time_window: 1h
+    conversion:
+      input:
+        - "rules/manual-test.yml"
+      backend_options:
+        case_sensitive: true
+      pipelines:
+        - pipelines/datasources/test-1.yml
+    integration:
+      rule_group: Every 1 Hour
+      time_window: 1h
   - name: manual_backfill
-    input:
-      - "rules/manual-test.yml"
-    backend_options:
-      case_sensitive: true
-    pipelines:
-      - pipelines/datasources/test-1.yml
-    rule_group: Every 1 Hour
-    time_window: 1h
-integration:
-  folder_id: ae9ojcgwmy48wf # sigma-rule-deployment
-  org_id: 1
-  test_queries: false # Whether to test the queries against the datasource
-  from: "now-1h"
-  to: "now"
-deployment:
-  grafana_instance: https://securityops.grafana-dev.net
+    conversion:
+      input:
+        - "rules/manual-test.yml"
+      backend_options:
+        case_sensitive: true
+      pipelines:
+        - pipelines/datasources/test-1.yml
+    integration:
+      rule_group: Every 1 Hour
+      time_window: 1h
