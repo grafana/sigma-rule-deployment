@@ -11,11 +11,11 @@ import (
 // GenerateExploreLink creates a Grafana explore link based on the datasource type
 func GenerateExploreLink(
 	query, datasource, datasourceType string,
-	config, defaultConf model.ConversionConfig,
+	cfg model.NamedConfigBlock, defaults model.ConfigBlock,
 	grafanaInstance, from, to string,
 	orgID int64,
 ) (string, error) {
-	customModel := shared.GetConfigValue(config.QueryModel, defaultConf.QueryModel, "")
+	customModel := shared.GetConfigValue(cfg.Integration.QueryModel, defaults.Integration.QueryModel, "")
 	escapedQuery, err := shared.EscapeQueryJSON(query)
 	if err != nil {
 		return "", fmt.Errorf("could not escape provided query: %s", query)

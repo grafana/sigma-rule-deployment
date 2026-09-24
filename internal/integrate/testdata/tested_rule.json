@@ -1,0 +1,1 @@
+{"queries": ["{job=~\".+\"} | logfmt"], "conversion_name": "tested", "input_file": "rules/test.yml", "output_file": "testdata/tested_rule.json", "rules": []}
