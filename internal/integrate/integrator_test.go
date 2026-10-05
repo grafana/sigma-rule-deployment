@@ -2158,3 +2158,83 @@ func TestIntegratorWithExploreLinkGeneration(t *testing.T) {
 		})
 	}
 }
+
+func TestCorrelationWindowWarnings(t *testing.T) {
+	correlationRule := func(title, timespan string) model.SigmaRule {
+		return model.SigmaRule{
+			Title:       title,
+			Correlation: map[string]any{"type": "event_count", "timespan": timespan},
+		}
+	}
+	tests := []struct {
+		name       string
+		rules      []model.SigmaRule
+		timeWindow time.Duration
+		wantCount  int
+	}{
+		{
+			name:       "timespan longer than window warns",
+			rules:      []model.SigmaRule{correlationRule("Brute force", "15m")},
+			timeWindow: 5 * time.Minute,
+			wantCount:  1,
+		},
+		{
+			name:       "timespan equal to window does not warn",
+			rules:      []model.SigmaRule{correlationRule("Brute force", "5m")},
+			timeWindow: 5 * time.Minute,
+			wantCount:  0,
+		},
+		{
+			name:       "timespan shorter than window does not warn",
+			rules:      []model.SigmaRule{correlationRule("Brute force", "1m")},
+			timeWindow: 5 * time.Minute,
+			wantCount:  0,
+		},
+		{
+			name:       "day suffix timespan is parsed",
+			rules:      []model.SigmaRule{correlationRule("Slow exfil", "1d")},
+			timeWindow: time.Hour,
+			wantCount:  1,
+		},
+		{
+			name:       "rule without correlation does not warn",
+			rules:      []model.SigmaRule{{Title: "Plain rule"}},
+			timeWindow: time.Minute,
+			wantCount:  0,
+		},
+		{
+			name: "correlation without timespan does not warn",
+			rules: []model.SigmaRule{{
+				Title:       "No timespan",
+				Correlation: map[string]any{"type": "event_count"},
+			}},
+			timeWindow: time.Minute,
+			wantCount:  0,
+		},
+		{
+			name:       "unparseable timespan does not warn",
+			rules:      []model.SigmaRule{correlationRule("Weird", "not-a-duration")},
+			timeWindow: time.Minute,
+			wantCount:  0,
+		},
+		{
+			name: "only offending rules warn",
+			rules: []model.SigmaRule{
+				correlationRule("Too long", "30m"),
+				correlationRule("Fine", "1m"),
+				{Title: "Plain rule"},
+			},
+			timeWindow: 5 * time.Minute,
+			wantCount:  1,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			warnings := correlationWindowWarnings(tt.rules, tt.timeWindow)
+			assert.Len(t, warnings, tt.wantCount)
+			for _, w := range warnings {
+				assert.Contains(t, w, "correlation timespan")
+			}
+		})
+	}
+}
