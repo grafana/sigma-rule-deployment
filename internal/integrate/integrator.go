@@ -9,6 +9,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"text/template"
 	"time"
@@ -599,12 +600,59 @@ func (i *Integrator) SetOutputs() error {
 	return nil
 }
 
+// correlationWindowWarnings returns a warning for every Sigma correlation rule
+// whose timespan is longer than the configured query time window. With a
+// shorter window the generated alert rule does not query enough data for the
+// correlation to match correctly.
+func correlationWindowWarnings(rules []model.SigmaRule, timeWindow time.Duration) []string {
+	var warnings []string
+	for _, rule := range rules {
+		correlation, ok := rule.Correlation.(map[string]any)
+		if !ok {
+			continue
+		}
+		timespan, ok := correlation["timespan"].(string)
+		if !ok || timespan == "" {
+			continue
+		}
+		span, err := parseSigmaTimespan(timespan)
+		if err != nil {
+			continue
+		}
+		if span > timeWindow {
+			warnings = append(warnings, fmt.Sprintf("Sigma rule %q has a correlation timespan of %s, longer than the configured time window %s; the alert rule may not query enough data to correlate correctly", rule.Title, timespan, timeWindow))
+		}
+	}
+	return warnings
+}
+
+// parseSigmaTimespan parses a Sigma correlation timespan. Besides the units
+// supported by time.ParseDuration it accepts a day suffix ("1d"), which Sigma
+// rules commonly use.
+func parseSigmaTimespan(s string) (time.Duration, error) {
+	s = strings.TrimSpace(s)
+	if days, ok := strings.CutSuffix(s, "d"); ok {
+		n, err := strconv.Atoi(days)
+		if err != nil {
+			return 0, err
+		}
+		return time.Duration(n) * 24 * time.Hour, nil
+	}
+	return time.ParseDuration(s)
+}
+
 func (i *Integrator) ConvertToAlert(rule *model.ProvisionedAlertRule, queries []string, titles string, config model.ConversionConfig, conversionFile string, integrateFile string, conversionObject model.ConversionOutput) error {
 	datasource := shared.GetConfigValue(config.DataSource, i.config.ConversionDefaults.DataSource, "nil")
 	timewindow := shared.GetConfigValue(config.TimeWindow, i.config.ConversionDefaults.TimeWindow, "1m")
 	duration, err := time.ParseDuration(timewindow)
 	if err != nil {
 		return fmt.Errorf("error parsing time window: %v", err)
+	}
+
+	// Warn when a correlation rule's timespan needs more data than the
+	// configured query time window covers
+	for _, warning := range correlationWindowWarnings(conversionObject.Rules, duration) {
+		fmt.Printf("Warning: %s\n", warning)
 	}
 
 	lookback := shared.GetConfigValue(config.Lookback, i.config.ConversionDefaults.Lookback, "0s")
