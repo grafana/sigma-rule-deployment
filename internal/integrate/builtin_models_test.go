@@ -45,7 +45,11 @@ func TestBuiltinQueryModels(t *testing.T) {
 		dsAzureDataExpl: func(m map[string]any) any { return m["query"] },
 		dsSplunk:        func(m map[string]any) any { return m["query"] },
 		dsDatadog: func(m map[string]any) any {
-			return m["logsSearchQuery"].(map[string]any)["filter_query"]
+			search, ok := m["logsSearchQuery"].(map[string]any)
+			if !ok {
+				return nil
+			}
+			return search["filter_query"]
 		},
 	}
 	require.Len(t, queryField, len(builtinQueryModels), "every built-in model needs a query field check")
@@ -119,7 +123,8 @@ func TestTestQueryUsesBuiltinModels(t *testing.T) {
 			queries, ok := sent["queries"].([]any)
 			require.True(t, ok, "request should contain a queries array")
 			require.Len(t, queries, 1)
-			sentQuery := queries[0].(map[string]any)
+			sentQuery, ok := queries[0].(map[string]any)
+			require.True(t, ok, "the query should be an object")
 
 			// It should be the same model that the integrator puts in the alert rule
 			expected, err := createAlertQuery(query, "A", dsUID, model.RelativeTimeRange{},
