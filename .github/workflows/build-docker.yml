@@ -7,6 +7,13 @@ on:
   pull_request:
     branches:
       - main
+  # Only used by the notify-external-pr job below. Fork PRs get a read-only token
+  # under `pull_request`, so they cannot comment; `pull_request_target` runs in
+  # the base repo's context and can. Every other job skips this event, and no job
+  # ever checks out or runs the PR's code under it.
+  pull_request_target:
+    branches:
+      - main
   release:
     types:
       - published
@@ -16,6 +23,7 @@ permissions: {}
 jobs:
   build:
     name: "Build and Push Docker Image"
+    if: github.event_name != 'pull_request_target'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -119,6 +127,56 @@ jobs:
           tags: |
             ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:${{ github.event.release.tag_name }}
           push: true
+
+  notify-external-pr:
+    # Fork PRs don't get the integration test automatically, and nothing tells us
+    # that. Comment on the PR with what a maintainer needs to run it manually.
+    # SECURITY: runs with a write token under pull_request_target, so this job must
+    # never check out, build or execute PR code, and PR-controlled values must only
+    # reach the shell through env vars.
+    if: github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository
+    name: "Notify External PR"
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      pull-requests: write
+    steps:
+      - name: "Comment with manual integration test instructions"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # The build run is created by the separate `pull_request` event, so it may
+          # not exist yet. It appears (possibly awaiting approval for first-time
+          # contributors) within moments, so retry briefly.
+          BUILD_RUN_ID=""
+          for _ in $(seq 1 12); do
+            BUILD_RUN_ID=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow build-docker.yml \
+              --event pull_request --commit "$HEAD_SHA" --json databaseId --jq '.[0].databaseId // empty')
+            [ -n "$BUILD_RUN_ID" ] && break
+            sleep 10
+          done
+
+          if [ -n "$BUILD_RUN_ID" ]; then
+            RUN_LINE="Build run id: \`${BUILD_RUN_ID}\` ([run](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${BUILD_RUN_ID})). It must have completed successfully (approve it first if it is waiting on approval)."
+          else
+            RUN_LINE="The build run could not be found automatically; find the 'Build & Integration Test Image' run for \`${HEAD_SHA}\` on this PR's checks tab."
+          fi
+
+          BODY=$(cat <<EOF
+          @grafana/security-operations this PR is from a fork, so the integration tests do not run automatically.
+
+          1. Review the full diff first - the test executes this PR's container image with a Grafana service account token.
+          2. Run [External Fork PR Integration Test](https://github.com/grafana/sigma-rule-deployment-integration-test/actions/workflows/external-pr-integration-test.yml) ("Run workflow") with:
+             - \`pr_number\`: \`${PR_NUMBER}\`
+             - \`run_id\`: ${RUN_LINE}
+
+          Commit: \`${HEAD_SHA}\`. New commits need a re-review and a new run.
+          EOF
+          )
+
+          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body "$BODY"
 
   test-pr:
     # Prevent concurrent execution of integration tests to avoid multiple executions commiting to main simultaneously
