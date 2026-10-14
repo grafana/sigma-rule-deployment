@@ -184,8 +184,17 @@ func (h *HTTPDatasourceQuery) ExecuteQuery(
 		}
 		queryObj = json.RawMessage(queryBytes)
 	default:
-		// No default configuration for other datasource types
-		return nil, fmt.Errorf("unsupported datasource type: %s", datasource.Type)
+		// Use the built-in model for the datasource type, if there is one
+		builtinModel, ok := BuiltinQueryModel(datasource.Type)
+		if !ok {
+			// No default configuration for other datasource types
+			return nil, fmt.Errorf("unsupported datasource type: %s", datasource.Type)
+		}
+		escapedQuery, err := shared.EscapeQueryJSON(query)
+		if err != nil {
+			return nil, fmt.Errorf("failed to escape query: %v", err)
+		}
+		queryObj = json.RawMessage(fmt.Sprintf(builtinModel, refID, datasource.UID, escapedQuery))
 	}
 
 	// Create the request body with the query object

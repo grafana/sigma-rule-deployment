@@ -41,20 +41,45 @@ These Actions can convert rules using **any** Sigma backend and produce valid al
 
 Relevent conversion backends and data sources that can be used in Grafana include:
 
-| Sigma Backend                                                             | Data Source                                                                                     | Supported Integration Method |
-| ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ---------------------------- |
-| [Grafana Loki](https://github.com/grafana/pySigma-backend-loki)           | [Loki data source](https://grafana.com/docs/loki/latest/)                                       | Native                       |
-| [Elasticsearch](https://github.com/SigmaHQ/pySigma-backend-elasticsearch) | [Elasticsearch data source](https://grafana.com/docs/grafana/latest/datasources/elasticsearch/) | Native                       |
-| [Azure KQL](https://github.com/AttackIQ/pySigma-backend-kusto)            | [Azure Monitor data source](https://grafana.com/docs/grafana/latest/datasources/azure-monitor/) | Custom Model                 |
-| [Datadog](https://github.com/SigmaHQ/pySigma-backend-datadog)             | [Datadog data source](https://grafana.com/grafana/plugins/grafana-datadog-datasource/)          | Custom Model                 |
-| [QRadar AQL](https://github.com/IBM/pySigma-backend-QRadar-aql)           | [IBM Security QRadar data source](https://grafana.com/grafana/plugins/ibm-aql-datasource/)      | Custom Model                 |
-| [Opensearch](https://github.com/SigmaHQ/pySigma-backend-opensearch)       | [Opensearch data source](https://grafana.com/grafana/plugins/grafana-opensearch-datasource/)    | Custom Model                 |
-| [Splunk](https://github.com/SigmaHQ/pySigma-backend-splunk)               | [Splunk data source](https://grafana.com/grafana/plugins/grafana-splunk-datasource/)            | Custom Model                 |
-| [SQLite](https://github.com/SigmaHQ/pySigma-backend-sqlite)               | [SQLite data source](https://grafana.com/grafana/plugins/frser-sqlite-datasource/)              | Custom Model                 |
-| [SurrealQL](https://github.com/SigmaHQ/pySigma-backend-surrealql)         | [SurrealDB data source](https://grafana.com/grafana/plugins/grafana-surrealdb-datasource/)      | Custom Model                 |
+| Sigma Backend                                                                          | Data Source                                                                                                    | Supported Integration Method |
+| -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| [Grafana Loki](https://github.com/grafana/pySigma-backend-loki)                        | [Loki data source](https://grafana.com/docs/loki/latest/)                                                      | Native                       |
+| [Elasticsearch](https://github.com/SigmaHQ/pySigma-backend-elasticsearch)              | [Elasticsearch data source](https://grafana.com/docs/grafana/latest/datasources/elasticsearch/)                | Native                       |
+| [Azure KQL](https://github.com/AttackIQ/pySigma-backend-kusto)                         | [Azure Data Explorer data source](https://grafana.com/grafana/plugins/grafana-azure-data-explorer-datasource/) | Native                       |
+| [Azure KQL](https://github.com/AttackIQ/pySigma-backend-kusto)                         | [Azure Monitor data source](https://grafana.com/docs/grafana/latest/datasources/azure-monitor/)                | Custom Model                 |
+| [Datadog](https://github.com/SigmaHQ/pySigma-backend-datadog)                          | [Datadog data source](https://grafana.com/grafana/plugins/grafana-datadog-datasource/)                         | Native                       |
+| [Opensearch](https://github.com/SigmaHQ/pySigma-backend-opensearch)                    | [Opensearch data source](https://grafana.com/grafana/plugins/grafana-opensearch-datasource/)                   | Native                       |
+| [Splunk](https://github.com/SigmaHQ/pySigma-backend-splunk)                            | [Splunk data source](https://grafana.com/grafana/plugins/grafana-splunk-datasource/)                           | Native                       |
+| [SQLite](https://github.com/SigmaHQ/pySigma-backend-sqlite)                            | [SQLite data source](https://grafana.com/grafana/plugins/frser-sqlite-datasource/)                             | Native                       |
+| [SurrealQL](https://github.com/SigmaHQ/pySigma-backend-surrealql)                      | [SurrealDB data source](https://grafana.com/grafana/plugins/fiskaly-surrealdb-datasource/)                     | Native                       |
+| [ClickHouse](https://github.com/clicksiem/pySigma-backend-clickhouse)                  | [ClickHouse data source](https://grafana.com/grafana/plugins/grafana-clickhouse-datasource/)                   | Native                       |
+| [Quickwit](https://github.com/sifex/pySigma-backend-quickwit/)                         | [Quickwit data source](https://grafana.com/grafana/plugins/quickwit-quickwit-datasource/)                      | Native                       |
+| [Parseable](https://github.com/parseablehq/pySigma-backend-parseable)                  | [Parseable data source](https://grafana.com/grafana/plugins/parseable-parseable-datasource/)                   | Native                       |
+| [CrowdStrike LogScale](https://github.com/SigmaHQ/pySigma-backend-crowdstrike)         | [Falcon LogScale data source](https://grafana.com/grafana/plugins/grafana-falconlogscale-datasource/)          | Custom Model                 |
+| [SentinelOne PowerQuery](https://github.com/7RedViolin/pySigma-backend-sentinelone-pq) | [Dataset data source](https://grafana.com/grafana/plugins/sentinelone-dataset-datasource/)                     | Native                       |
 
-- **Native**: The data source plugin is supported by integrate action and the query model is generated automatically.
-- **Custom Model**: The data source plugin is supported by the integrate action but the query model must be passed as a custom model in the conversion configuration.
+- **Native**: The data source plugin is supported by the integrate action and the query model is generated automatically. Loki and Elasticsearch are selected by the `target` (or `data_source_type`) being `loki` or `elasticsearch`; the other native data sources are selected by setting `data_source_type` to the plugin's type ID, or by `target` where it is one of the names in the [table below](#native-query-models).
+- **Custom Model**: The data source plugin is supported by the integrate action but the query model must be passed as a custom model in the conversion configuration, as it needs a value specific to your environment (see [How can I use a custom query model for a data source?](#how-can-i-use-a-custom-query-model-for-a-data-source)).
+
+> [!NOTE]
+> Only the Loki and Elasticsearch models have been tested against live data sources. The other native models were derived from each plugin's source code and documentation, so please [raise an issue](https://github.com/grafana/sigma-rule-deployment/issues) if one doesn't work.
+
+#### Native query models
+
+| Data source         | `data_source_type`                       | Also selected by `target` | What the query needs to return                                                                                                                                   |
+| ------------------- | ---------------------------------------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Azure Data Explorer | `grafana-azure-data-explorer-datasource` |                           | A time series: KQL that ends `summarize ... by bin(<time>, <step>) \| order by <time> asc`. The data source must have a default database and cluster configured. |
+| Datadog             | `grafana-datadog-datasource`             | `datadog`                 | A [logs search](https://grafana.com/docs/plugins/grafana-datadog-datasource/latest/alerting/) in aggregate mode, returning the count of matching logs            |
+| OpenSearch          | `grafana-opensearch-datasource`          | `opensearch`              | A Lucene query; the model counts matching documents per date histogram bucket, using the data source's time field                                                |
+| Splunk              | `grafana-splunk-datasource`              | `splunk`                  | SPL that returns numeric values with a time field, e.g., `... \| timechart span=1m count`                                                                        |
+| SQLite              | `frser-sqlite-datasource`                | `sqlite`                  | SQL returning a column named `time` (Unix seconds) and a numeric column                                                                                          |
+| SurrealDB           | `fiskaly-surrealdb-datasource`           | `surrealql`               | SurrealQL run in raw mode. Alerting is not documented by the plugin, so test carefully                                                                           |
+| ClickHouse          | `grafana-clickhouse-datasource`          | `clickhouse`              | SQL returning a time series (using `$__timeFilter(col)`) or a single numeric value                                                                               |
+| Quickwit            | `quickwit-quickwit-datasource`           | `quickwit`                | A Lucene query; the model counts matching documents per date histogram bucket, using the index's timestamp field                                                 |
+| Parseable           | `parseable-parseable-datasource`         | `parseable`               | SQL returning a single numeric row, e.g., `SELECT COUNT(*) FROM "stream" WHERE ...`                                                                              |
+| Dataset             | `sentinelone-dataset-datasource`         | `sentinelone-pq`          | A PowerQuery returning a timestamp and numeric columns                                                                                                           |
+
+The `target` names are the Sigma backend names, so `kusto` (Azure KQL) is deliberately not listed, as it can be used with either Azure Monitor or Azure Data Explorer.
 
 ### Why can't I use log queries with alert rules?
 
@@ -103,6 +128,28 @@ Or for Elasticsearch:
 ```yaml
 query_model: '{"refId":"%s","datasource":{"type":"elasticsearch","uid":"%s"},"query":"%s","alias":"","metrics":[{"type":"count","id":"1"}],"bucketAggs":[{"type":"date_histogram","id":"2","settings":{"interval":"auto"}}],"intervalMs":2000,"maxDataPoints":1354,"timeField":"@timestamp"}'
 ```
+
+The query model is passed to `fmt.Sprintf`, so you can also use indexed verbs (`%[1]s` for the ref ID, `%[2]s` for the data source UID, `%[3]s` for the query) if a value needs repeating or you need a literal `%` (written `%%`).
+
+The data sources that are not natively supported because they need a value specific to your environment can be configured as follows, replacing the placeholders in angle brackets:
+
+- **Azure Monitor** (Log Analytics): `<RESOURCE_URI>` is the full Azure resource ID of the Log Analytics workspace, e.g., `/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.OperationalInsights/workspaces/<name>`. The KQL must aggregate by time, e.g., `summarize count() by bin(TimeGenerated, 1m)`
+
+  ```yaml
+  query_model: '{"refId":"%s","datasource":{"type":"grafana-azure-monitor-datasource","uid":"%s"},"queryType":"Azure Log Analytics","azureLogAnalytics":{"query":"%s","resultFormat":"time_series","resources":["<RESOURCE_URI>"],"dashboardTime":false}}'
+  ```
+
+- **Falcon LogScale**: `<REPOSITORY>` is the name of the LogScale repository or view to query. Unlike in the query editor, the data source's default repository is not used by alert rules
+
+  ```yaml
+  query_model: '{"refId":"%s","datasource":{"type":"grafana-falconlogscale-datasource","uid":"%s"},"queryType":"LQL","formatAs":"metrics","repository":"<REPOSITORY>","lsql":"%s"}'
+  ```
+
+- **Datadog metrics**: the native Datadog model runs a logs search, but if your query is a [Datadog metrics query](https://docs.datadoghq.com/metrics/) (e.g., `avg:system.cpu.user{*}`) use
+
+  ```yaml
+  query_model: '{"refId":"%s","datasource":{"type":"grafana-datadog-datasource","uid":"%s"},"queryType":"raw_query","rawQuery":true,"query":"%s"}'
+  ```
 
 Other than the `refId` and `datasource` (which are required by Grafana), the keys used for the query model are data source dependent. They can be identified by testing a query against the data source with the [Query inspector](https://grafana.com/docs/grafana/latest/explore/explore-inspector/) open, going to the Query tab, and examining the items used in the `request.data.queries` list.
 

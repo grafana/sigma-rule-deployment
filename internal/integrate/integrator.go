@@ -891,6 +891,89 @@ func isLokiMetricQuery(query string) bool {
 	return false
 }
 
+// Grafana data source plugin type IDs that have a built-in query model.
+const (
+	dsOpenSearch    = "grafana-opensearch-datasource"
+	dsQuickwit      = "quickwit-quickwit-datasource"
+	dsClickHouse    = "grafana-clickhouse-datasource"
+	dsParseable     = "parseable-parseable-datasource"
+	dsSQLite        = "frser-sqlite-datasource"
+	dsSurrealDB     = "fiskaly-surrealdb-datasource"
+	dsDataset       = "sentinelone-dataset-datasource"
+	dsAzureDataExpl = "grafana-azure-data-explorer-datasource"
+	dsSplunk        = "grafana-splunk-datasource"
+	dsDatadog       = "grafana-datadog-datasource"
+)
+
+// builtinQueryModels holds the query models for data source plugins whose model needs
+// nothing beyond the ref ID, data source UID and query. They are fmt.Sprintf templates
+// using the same argument order as a custom query_model, but with indexed verbs so a
+// value can be used more than once: %[1]s is the ref ID, %[2]s the data source UID and
+// %[3]s the JSON-escaped query.
+//
+// Plugins that need an instance-specific field in the model (e.g. Azure Monitor's
+// resources or Falcon LogScale's repository) can't have a built-in model and must
+// use a custom query_model.
+var builtinQueryModels = map[string]string{
+	// https://github.com/grafana/opensearch-datasource: a Lucene metric query counting
+	// documents per date histogram bucket, which is what alert rules need. The bucket's
+	// field is omitted so it falls back to the time field set on the data source.
+	dsOpenSearch: `{"refId":"%[1]s","datasource":{"type":"grafana-opensearch-datasource","uid":"%[2]s"},"queryType":"lucene","luceneQueryType":"Metric","query":"%[3]s","alias":"","metrics":[{"id":"1","type":"count"}],"bucketAggs":[{"id":"2","type":"date_histogram","settings":{"interval":"auto","min_doc_count":"0","trimEdges":"0"}}]}`,
+	// https://github.com/quickwit-oss/quickwit-datasource: shares the Elasticsearch-style
+	// model, and also falls back to the index's timestamp field.
+	dsQuickwit: `{"refId":"%[1]s","datasource":{"type":"quickwit-quickwit-datasource","uid":"%[2]s"},"query":"%[3]s","alias":"","metrics":[{"id":"1","type":"count"}],"bucketAggs":[{"id":"2","type":"date_histogram","settings":{"interval":"auto","min_doc_count":"0"}}]}`,
+	// https://github.com/grafana/clickhouse-datasource: the SQL editor model; format 0
+	// is time series. The backend only reads rawSql and format.
+	dsClickHouse: `{"refId":"%[1]s","datasource":{"type":"grafana-clickhouse-datasource","uid":"%[2]s"},"editorType":"sql","format":0,"queryType":"timeseries","rawSql":"%[3]s"}`,
+	// https://github.com/parseablehq/parseable-datasource: only queryText is required.
+	dsParseable: `{"refId":"%[1]s","datasource":{"type":"parseable-parseable-datasource","uid":"%[2]s"},"queryText":"%[3]s","queryLanguage":"sql"}`,
+	// https://github.com/fr-ser/grafana-sqlite-datasource: the backend runs queryText, but
+	// the editor shows rawQueryText, so both are set to the same query.
+	dsSQLite: `{"refId":"%[1]s","datasource":{"type":"frser-sqlite-datasource","uid":"%[2]s"},"queryType":"time series","queryText":"%[3]s","rawQueryText":"%[3]s","timeColumns":["time"]}`,
+	// https://github.com/fiskaly/grafana.surrealdb: raw mode, matching the plugin's
+	// provisioned example.
+	dsSurrealDB: `{"refId":"%[1]s","datasource":{"type":"fiskaly-surrealdb-datasource","uid":"%[2]s"},"mode":"raw","requery":true,"surql":"%[3]s"}`,
+	// https://github.com/scalyr/scalyr-grafana-datasource-plugin: a PowerQuery.
+	dsDataset: `{"refId":"%[1]s","datasource":{"type":"sentinelone-dataset-datasource","uid":"%[2]s"},"queryType":"Power Query","expression":"%[3]s"}`,
+	// https://github.com/grafana/azure-data-explorer-datasource: database and clusterUri
+	// are omitted so they fall back to the data source's defaults. resultFormat must be
+	// set, as the backend rejects an empty one.
+	dsAzureDataExpl: `{"refId":"%[1]s","datasource":{"type":"grafana-azure-data-explorer-datasource","uid":"%[2]s"},"queryType":"KQL","querySource":"raw","resultFormat":"time_series","query":"%[3]s"}`,
+	// Splunk: the backend runs the raw SPL in query; rawQuery keeps the model usable if it
+	// is opened in the query editor.
+	dsSplunk: `{"refId":"%[1]s","datasource":{"type":"grafana-splunk-datasource","uid":"%[2]s"},"query":"%[3]s","rawQuery":true}`,
+	// Datadog: a logs search in aggregate mode, as the Datadog backend generates log
+	// search syntax. Alert rules can't use the logs Search mode; aggregate mode with a
+	// total count returns a number.
+	dsDatadog: `{"refId":"%[1]s","datasource":{"type":"grafana-datadog-datasource","uid":"%[2]s"},"queryType":"logs","queryMode":"aggregate","logsSearchQuery":{"filter_query":"%[3]s","filter_indexes":["*"],"compute":[{"type":"total","aggregation":"count"}]}}`,
+}
+
+// targetAliases maps Sigma backend (target) names to the data source plugin they are
+// normally used with, so a conversion only needs data_source_type set when the target
+// name doesn't identify the data source. Targets that can run on several data sources
+// (e.g. kusto, which suits both Azure Monitor and Azure Data Explorer) are left out.
+var targetAliases = map[string]string{
+	"opensearch":     dsOpenSearch,
+	"quickwit":       dsQuickwit,
+	"clickhouse":     dsClickHouse,
+	"parseable":      dsParseable,
+	"sqlite":         dsSQLite,
+	"surrealql":      dsSurrealDB,
+	"sentinelone-pq": dsDataset,
+	"splunk":         dsSplunk,
+	"datadog":        dsDatadog,
+}
+
+// BuiltinQueryModel returns the built-in query model template for a data source type,
+// which may be a data source plugin type ID or one of the aliased Sigma target names.
+func BuiltinQueryModel(datasourceType string) (string, bool) {
+	if pluginType, ok := targetAliases[datasourceType]; ok {
+		datasourceType = pluginType
+	}
+	model, ok := builtinQueryModels[datasourceType]
+	return model, ok
+}
+
 // createAlertQuery creates an AlertQuery based on the target data source and configuration
 func createAlertQuery(query string, refID string, datasource string, timerange model.RelativeTimeRange, config model.ConversionConfig, defaultConf model.ConversionConfig) (model.AlertQuery, error) {
 	datasourceType := shared.GetConfigValue(config.DataSourceType, defaultConf.DataSourceType, shared.GetConfigValue(config.Target, defaultConf.Target, shared.Loki))
@@ -915,6 +998,8 @@ func createAlertQuery(query string, refID string, datasource string, timerange m
 		RelativeTimeRange: timerange,
 	}
 
+	builtinModel, hasBuiltinModel := BuiltinQueryModel(datasourceType)
+
 	// Populate the alert query model, first see if the user has provided a custom model
 	// else use defaults based on the target data source type
 	switch {
@@ -927,6 +1012,8 @@ func createAlertQuery(query string, refID string, datasource string, timerange m
 		// Based on the Elasticsearch data source plugin
 		// https://github.com/grafana/grafana/blob/main/public/app/plugins/datasource/elasticsearch/dataquery.gen.ts
 		alertQuery.Model = json.RawMessage(fmt.Sprintf(`{"refId":"%s","datasource":{"type":"elasticsearch","uid":"%s"},"query":"%s","alias":"","metrics":[{"type":"%s","id":"1"}],"bucketAggs":[{"type":"date_histogram","id":"2","settings":{"interval":"auto"}}],"intervalMs":2000,"maxDataPoints":1354,"timeField":"@timestamp"}`, refID, datasource, escapedQuery, elasticsearchMetricTypeCount))
+	case hasBuiltinModel:
+		alertQuery.Model = json.RawMessage(fmt.Sprintf(builtinModel, refID, datasource, escapedQuery))
 	default:
 		// try a basic query
 		fmt.Printf("WARNING: Using generic query model for the data source type %s; if these queries don't work, try configuring a custom query_model\n", datasourceType)
