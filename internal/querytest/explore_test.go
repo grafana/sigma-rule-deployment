@@ -202,3 +202,39 @@ func TestGenerateExploreLink(t *testing.T) {
 		})
 	}
 }
+
+func TestGenerateExploreLinkBuiltinModels(t *testing.T) {
+	const (
+		datasource = "ds-uid"
+		query      = `field="value"`
+	)
+	cases := map[string]string{
+		"grafana-azure-data-explorer-datasource": `"queryType":"KQL"`,
+		"grafana-clickhouse-datasource":          `"rawSql":"field=\"value\""`,
+		"grafana-datadog-datasource":             `"filter_query":"field=\"value\""`,
+		"grafana-opensearch-datasource":          `"luceneQueryType":"Metric"`,
+		"grafana-splunk-datasource":              `"rawQuery":true`,
+		"fiskaly-surrealdb-datasource":           `"surql":"field=\"value\""`,
+		"frser-sqlite-datasource":                `"rawQueryText":"field=\"value\""`,
+		"parseable-parseable-datasource":         `"queryLanguage":"sql"`,
+		"quickwit-quickwit-datasource":           `"date_histogram"`,
+		"sentinelone-dataset-datasource":         `"queryType":"Power Query"`,
+		// Sigma target names resolve to the same models
+		"splunk":     `"rawQuery":true`,
+		"opensearch": `"luceneQueryType":"Metric"`,
+	}
+
+	for datasourceType, want := range cases {
+		t.Run(datasourceType, func(t *testing.T) {
+			link, err := GenerateExploreLink(query, datasource, datasourceType, model.ConversionConfig{}, model.ConversionConfig{}, "https://grafana.example.com", "now-1h", "now", 1)
+			assert.NoError(t, err)
+
+			u, err := url.Parse(link)
+			assert.NoError(t, err)
+			panes := u.Query().Get("panes")
+			assert.Contains(t, panes, want)
+			assert.Contains(t, panes, `"refId":"A"`)
+			assert.Contains(t, panes, `"uid":"`+datasource+`"`)
+		})
+	}
+}
