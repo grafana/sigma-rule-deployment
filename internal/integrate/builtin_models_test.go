@@ -59,7 +59,7 @@ func TestBuiltinQueryModels(t *testing.T) {
 		for _, name := range names {
 			t.Run(name, func(t *testing.T) {
 				alertQuery, err := createAlertQuery(query, refID, uid, model.RelativeTimeRange{},
-					model.ConversionConfig{DataSourceType: name}, model.ConversionConfig{})
+					model.NamedConfigBlock{ConfigBlock: model.ConfigBlock{Integration: model.IntegrationConfig{DataSourceType: name}}}, model.ConfigBlock{})
 				require.NoError(t, err)
 
 				var got map[string]any
@@ -76,8 +76,8 @@ func TestBuiltinQueryModels(t *testing.T) {
 func TestBuiltinQueryModelPrecedence(t *testing.T) {
 	// A custom query_model always wins over a built-in one
 	alertQuery, err := createAlertQuery("q", "A0", "uid", model.RelativeTimeRange{},
-		model.ConversionConfig{DataSourceType: dsSplunk, QueryModel: `{"refId":"%s","datasource":{"uid":"%s"},"custom":"%s"}`},
-		model.ConversionConfig{})
+		model.NamedConfigBlock{ConfigBlock: model.ConfigBlock{Integration: model.IntegrationConfig{DataSourceType: dsSplunk, QueryModel: `{"refId":"%s","datasource":{"uid":"%s"},"custom":"%s"}`}}},
+		model.ConfigBlock{})
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"refId":"A0","datasource":{"uid":"uid"},"custom":"q"}`, string(alertQuery.Model))
 }
@@ -128,7 +128,7 @@ func TestTestQueryUsesBuiltinModels(t *testing.T) {
 
 			// It should be the same model that the integrator puts in the alert rule
 			expected, err := createAlertQuery(query, "A", dsUID, model.RelativeTimeRange{},
-				model.ConversionConfig{DataSourceType: pluginType}, model.ConversionConfig{})
+				model.NamedConfigBlock{ConfigBlock: model.ConfigBlock{Integration: model.IntegrationConfig{DataSourceType: pluginType}}}, model.ConfigBlock{})
 			require.NoError(t, err)
 			var expectedModel map[string]any
 			require.NoError(t, json.Unmarshal(expected.Model, &expectedModel))
