@@ -63,8 +63,7 @@ type deploymentConfig struct {
 	alertsToAdd     []string
 	alertsToRemove  []string
 	alertsToUpdate  []string
-	groupsIntervals map[string]int64
-	groupsFolders   map[string]string // rule group name -> its resolved folder UID, for per-group interval updates
+	groupsIntervals map[ruleGroup]int64 // interval per rule group; a group is identified by its folder and name
 	timeout         time.Duration
 }
 
@@ -304,7 +303,7 @@ func (d *Deployer) Deploy(ctx context.Context) ([]AlertDeployment, []AlertDeploy
 		d.client = client
 		for _, group := range groups {
 			// The folder comes from the alert itself, which may be a per-conversion folder_id override
-			if err := d.updateAlertGroupInterval(ctx, group.folderUID, group.name, d.config.groupsIntervals[group.name]); err != nil {
+			if err := d.updateAlertGroupInterval(ctx, group.folderUID, group.name, d.config.groupsIntervals[group]); err != nil {
 				return alertsCreated, alertsUpdated, alertsDeleted, err
 			}
 		}
@@ -376,8 +375,7 @@ func (d *Deployer) LoadConfig(_ context.Context) error {
 		alertPath:       filepath.Clean(configYAML.Folders.DeploymentPath),
 		orgID:           configYAML.Defaults.Integration.OrgID,
 		folderUID:       configYAML.Defaults.Integration.FolderID,
-		groupsIntervals: make(map[string]int64),
-		groupsFolders:   make(map[string]string),
+		groupsIntervals: make(map[ruleGroup]int64),
 		timeout:         defaultRequestTimeout,
 	}
 	d.config.folderOrgPairs = []folderOrg{{folderUID: d.config.folderUID, orgID: d.config.orgID}}
@@ -459,19 +457,16 @@ func (d *Deployer) LoadConfig(_ context.Context) error {
 		// to build the alert itself at integration time (internal/integrate/integrator.go),
 		// otherwise the deploy stage tracks the wrong rule group/folder/org for an alert and
 		// silently applies the wrong interval, or misses the alert during fresh-deploy cleanup.
-		ruleGroup := shared.GetConfigValue(config.Integration.RuleGroup, configYAML.Defaults.Integration.RuleGroup, "Default")
-		if _, ok := d.config.groupsIntervals[ruleGroup]; !ok {
-			d.config.groupsIntervals[ruleGroup] = int64(intervalDuration.Seconds())
-			log.Printf("Setting interval for rule group %s to %d", sanitizeForLog(ruleGroup), d.config.groupsIntervals[ruleGroup]) //nolint:gosec // G706: config.RuleGroup sanitized with sanitizeForLog before logging
-		} else if d.config.groupsIntervals[ruleGroup] != int64(intervalDuration.Seconds()) {
-			return fmt.Errorf("time window for rule group %s is different between conversion configs", ruleGroup)
-		}
-
+		groupName := shared.GetConfigValue(config.Integration.RuleGroup, configYAML.Defaults.Integration.RuleGroup, "Default")
 		folderUID := shared.GetConfigValue(config.Integration.FolderID, configYAML.Defaults.Integration.FolderID, "")
-		if existing, ok := d.config.groupsFolders[ruleGroup]; !ok {
-			d.config.groupsFolders[ruleGroup] = folderUID
-		} else if existing != folderUID {
-			return fmt.Errorf("folder ID for rule group %s is different between conversion configs", ruleGroup)
+		// Grafana identifies a rule group by its folder and name, so the same group name in
+		// different folders is a different group and may have its own interval
+		group := ruleGroup{folderUID: folderUID, name: groupName}
+		if _, ok := d.config.groupsIntervals[group]; !ok {
+			d.config.groupsIntervals[group] = int64(intervalDuration.Seconds())
+			log.Printf("Setting interval for rule group %s in folder %s to %d", sanitizeForLog(groupName), sanitizeForLog(folderUID), d.config.groupsIntervals[group]) //nolint:gosec // G706: group name and folder sanitized with sanitizeForLog before logging
+		} else if d.config.groupsIntervals[group] != int64(intervalDuration.Seconds()) {
+			return fmt.Errorf("time window for rule group %s in folder %s is different between conversion configs", groupName, folderUID)
 		}
 
 		orgID := shared.GetConfigValueInt64(config.Integration.OrgID, configYAML.Defaults.Integration.OrgID)

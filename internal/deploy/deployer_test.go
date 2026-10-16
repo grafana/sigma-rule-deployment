@@ -613,23 +613,15 @@ func TestLoadConfig(t *testing.T) {
 	}, d.config.alertsToUpdate)
 
 	// Test group intervals
-	expectedIntervals := map[string]int64{
-		"group1": 600,   // 10m in seconds
-		"group2": 3600,  // 1h in seconds
-		"group3": 21600, // 6h (default) in seconds
-		"group4": 300,   // 5m in seconds
+	// group4_config overrides folder_id/org_id per-conversion; the others fall back to Defaults.
+	expectedIntervals := map[ruleGroup]int64{
+		{folderUID: "abcdef123", name: "group1"}: 600,   // 10m in seconds
+		{folderUID: "abcdef123", name: "group2"}: 3600,  // 1h in seconds
+		{folderUID: "abcdef123", name: "group3"}: 21600, // 6h (default) in seconds
+		{folderUID: "other456", name: "group4"}:  300,   // 5m in seconds
 	}
 
 	assert.Equal(t, expectedIntervals, d.config.groupsIntervals)
-
-	// group4_config overrides folder_id/org_id per-conversion; the others fall back to Defaults.
-	expectedGroupsFolders := map[string]string{
-		"group1": "abcdef123",
-		"group2": "abcdef123",
-		"group3": "abcdef123",
-		"group4": "other456",
-	}
-	assert.Equal(t, expectedGroupsFolders, d.config.groupsFolders)
 	assert.ElementsMatch(t, []folderOrg{
 		{folderUID: "abcdef123", orgID: 23},
 		{folderUID: "other456", orgID: 99},
@@ -717,7 +709,7 @@ func TestDeployToMultipleGrafanaInstances(t *testing.T) {
 			alertPath:       tmpDir,
 			folderUID:       "folder1",
 			alertsToAdd:     []string{conv1File, conv2File},
-			groupsIntervals: map[string]int64{"group1": 300},
+			groupsIntervals: map[ruleGroup]int64{{folderUID: "folder1", name: "group1"}: 300},
 		},
 		clients: []*shared.GrafanaClient{
 			shared.NewGrafanaClient(server1.URL+"/", "my-test-token", "sigma-rule-deployment/deployer", defaultRequestTimeout),
@@ -996,10 +988,10 @@ func TestLoadConfigPerConversionInstancesAndTimeout(t *testing.T) {
 	assert.NotContains(t, d.perConversionClients, "conv_c")
 
 	// Verify per-config TimeWindow values were recorded correctly.
-	assert.Equal(t, map[string]int64{
-		"group_a": 300, // 5m
-		"group_b": 600, // 10m
-		"group_c": 900, // 15m
+	assert.Equal(t, map[ruleGroup]int64{
+		{folderUID: "default-folder", name: "group_a"}: 300, // 5m
+		{folderUID: "default-folder", name: "group_b"}: 600, // 10m
+		{folderUID: "default-folder", name: "group_c"}: 900, // 15m
 	}, d.config.groupsIntervals)
 
 	// Deploy all three alert files and verify routing: conv_a → serverA, conv_b → serverB, conv_c → default.
@@ -1306,10 +1298,11 @@ func TestDeployGroupIntervalUpdatesOnlyOnTouchedInstances(t *testing.T) {
 			d.config = deploymentConfig{
 				alertPath:   tmpDir,
 				alertsToAdd: files,
-				groupsIntervals: map[string]int64{
-					"group_x": 300,
-					"group_y": 300,
-					"shared":  300,
+				groupsIntervals: map[ruleGroup]int64{
+					{folderUID: "folder-x", name: "group_x"}: 300,
+					{folderUID: "folder-y", name: "group_y"}: 300,
+					{folderUID: "folder-x", name: "shared"}:  300,
+					{folderUID: "folder-y", name: "shared"}:  300,
 				},
 			}
 			d.clients = []*shared.GrafanaClient{newClient(serverX.URL)}
@@ -1579,4 +1572,35 @@ func TestFreshDeploySkipsInstancesNoConfigurationDeploysTo(t *testing.T) {
 	d.SetClient()
 	assert.NoError(t, d.ConfigFreshDeployment(ctx))
 	assert.Equal(t, 0, defaultRequests, "the default instance is not deployed to, so it must not be listed")
+}
+
+func TestLoadConfigRuleGroupIntervalsAreKeyedByFolder(t *testing.T) {
+	const header = "version: 2\nfolders:\n  deployment_path: \"./deployments\"\n" +
+		"defaults:\n  integration:\n    folder_id: folder-a\n    org_id: 1\n" +
+		"  deployment:\n    grafana_instance: https://myinstance.grafana.com\n"
+
+	t.Run("same group name in different folders may have different intervals", func(t *testing.T) {
+		writeTestDeployerConfig(t, header+
+			"configurations:\n"+
+			"  - name: conv_a\n    integration:\n      rule_group: shared\n      time_window: 5m\n"+
+			"  - name: conv_b\n    integration:\n      rule_group: shared\n      time_window: 10m\n      folder_id: folder-b\n")
+
+		d := NewDeployer()
+		assert.NoError(t, d.LoadConfig(context.Background()))
+		assert.Equal(t, map[ruleGroup]int64{
+			{folderUID: "folder-a", name: "shared"}: 300,
+			{folderUID: "folder-b", name: "shared"}: 600,
+		}, d.config.groupsIntervals)
+	})
+
+	t.Run("same group in the same folder must have the same interval", func(t *testing.T) {
+		writeTestDeployerConfig(t, header+
+			"configurations:\n"+
+			"  - name: conv_a\n    integration:\n      rule_group: shared\n      time_window: 5m\n"+
+			"  - name: conv_b\n    integration:\n      rule_group: shared\n      time_window: 10m\n")
+
+		d := NewDeployer()
+		err := d.LoadConfig(context.Background())
+		assert.ErrorContains(t, err, "time window for rule group shared in folder folder-a is different")
+	})
 }
