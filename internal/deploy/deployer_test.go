@@ -180,7 +180,7 @@ func TestUpdateAlert(t *testing.T) {
 			saToken:   "my-test-token",
 		},
 		client:         shared.NewGrafanaClient(server.URL+"/", "my-test-token", "sigma-rule-deployment/deployer", defaultRequestTimeout),
-		groupsToUpdate: map[string]bool{},
+		groupsToUpdate: map[*shared.GrafanaClient]map[ruleGroup]bool{},
 	}
 
 	// Update an alert
@@ -282,7 +282,7 @@ func TestCreateAlert(t *testing.T) {
 			saToken:   "my-test-token",
 		},
 		client:         shared.NewGrafanaClient(server.URL+"/", "my-test-token", "sigma-rule-deployment/deployer", defaultRequestTimeout),
-		groupsToUpdate: map[string]bool{},
+		groupsToUpdate: map[*shared.GrafanaClient]map[ruleGroup]bool{},
 	}
 
 	// Create an alert
@@ -736,7 +736,7 @@ func TestDeployToMultipleGrafanaInstances(t *testing.T) {
 			"conv1": {shared.NewGrafanaClient(server1.URL+"/", "my-test-token", "sigma-rule-deployment/deployer", 5*time.Second)},
 			"conv2": {shared.NewGrafanaClient(server2.URL+"/", "my-test-token", "sigma-rule-deployment/deployer", 30*time.Second)},
 		},
-		groupsToUpdate: map[string]bool{},
+		groupsToUpdate: map[*shared.GrafanaClient]map[ruleGroup]bool{},
 	}
 
 	created, updated, deleted, err := d.Deploy(ctx)
@@ -1213,4 +1213,122 @@ func TestDeployUsesPerConversionFolderForGroupIntervalUpdate(t *testing.T) {
 
 	assert.Contains(t, folderPaths, "/api/v1/provisioning/folder/default-folder/rule-groups/normal_group")
 	assert.Contains(t, folderPaths, "/api/v1/provisioning/folder/special-folder/rule-groups/special_group")
+}
+
+func TestDeployGroupIntervalUpdatesOnlyOnTouchedInstances(t *testing.T) {
+	// makeServer returns a mock Grafana that records the rule-group paths it is asked about.
+	// Rule groups it doesn't know about return 404, like a real instance that never received them.
+	makeServer := func(t *testing.T, knownGroups map[string]bool, groupGets *[]string) *httptest.Server {
+		t.Helper()
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			defer r.Body.Close()
+			body, _ := io.ReadAll(r.Body)
+			switch {
+			case strings.HasPrefix(r.URL.Path, alertingAPIPrefix) && r.Method == http.MethodPost:
+				w.WriteHeader(http.StatusCreated)
+				_, _ = w.Write(body)
+			case strings.HasPrefix(r.URL.Path, "/api/v1/provisioning/folder/") && r.Method == http.MethodGet:
+				*groupGets = append(*groupGets, r.URL.Path)
+				if !knownGroups[r.URL.Path] {
+					w.WriteHeader(http.StatusNotFound)
+					return
+				}
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte(`{"folderUID":"x","interval":300,"rules":[],"title":"x"}`))
+			default:
+				t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+				w.WriteHeader(http.StatusNotFound)
+			}
+		}))
+	}
+
+	const (
+		pathXGroup  = "/api/v1/provisioning/folder/folder-x/rule-groups/group_x"
+		pathYGroup  = "/api/v1/provisioning/folder/folder-y/rule-groups/group_y"
+		pathXShared = "/api/v1/provisioning/folder/folder-x/rule-groups/shared"
+		pathYShared = "/api/v1/provisioning/folder/folder-y/rule-groups/shared"
+	)
+
+	testCases := []struct {
+		name         string
+		alerts       map[string]string // file name -> alert JSON
+		wantXGets    []string
+		wantYGets    []string
+		xKnownGroups map[string]bool
+		yKnownGroups map[string]bool
+	}{
+		{
+			name: "alert only on the overridden instance does not query the default instance",
+			alerts: map[string]string{
+				"alert_rule_conv_y_rule_uid-y.json": `{"uid":"uid-y","title":"Y","folderUID":"folder-y","orgID":1,"ruleGroup":"group_y"}`,
+			},
+			yKnownGroups: map[string]bool{pathYGroup: true},
+			wantYGets:    []string{pathYGroup},
+		},
+		{
+			name: "each instance is only queried for its own groups",
+			alerts: map[string]string{
+				"alert_rule_conv_x_rule_uid-x.json": `{"uid":"uid-x","title":"X","folderUID":"folder-x","orgID":1,"ruleGroup":"group_x"}`,
+				"alert_rule_conv_y_rule_uid-y.json": `{"uid":"uid-y","title":"Y","folderUID":"folder-y","orgID":1,"ruleGroup":"group_y"}`,
+			},
+			xKnownGroups: map[string]bool{pathXGroup: true},
+			yKnownGroups: map[string]bool{pathYGroup: true},
+			wantXGets:    []string{pathXGroup},
+			wantYGets:    []string{pathYGroup},
+		},
+		{
+			name: "same group name on both instances is updated once on each",
+			alerts: map[string]string{
+				"alert_rule_conv_x_rule_uid-x.json": `{"uid":"uid-x","title":"X","folderUID":"folder-x","orgID":1,"ruleGroup":"shared"}`,
+				"alert_rule_conv_y_rule_uid-y.json": `{"uid":"uid-y","title":"Y","folderUID":"folder-y","orgID":1,"ruleGroup":"shared"}`,
+			},
+			xKnownGroups: map[string]bool{pathXShared: true},
+			yKnownGroups: map[string]bool{pathYShared: true},
+			wantXGets:    []string{pathXShared},
+			wantYGets:    []string{pathYShared},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			var xGets, yGets []string
+			serverX := makeServer(t, tc.xKnownGroups, &xGets)
+			defer serverX.Close()
+			serverY := makeServer(t, tc.yKnownGroups, &yGets)
+			defer serverY.Close()
+
+			tmpDir, err := os.MkdirTemp(".", "test-group-interval-*")
+			assert.NoError(t, err)
+			defer os.RemoveAll(tmpDir)
+
+			files := make([]string, 0, len(tc.alerts))
+			for name, content := range tc.alerts {
+				file := filepath.Join(tmpDir, name)
+				assert.NoError(t, os.WriteFile(file, []byte(content), 0o600))
+				files = append(files, file)
+			}
+
+			newClient := func(url string) *shared.GrafanaClient {
+				return shared.NewGrafanaClient(url+"/", "my-test-token", "sigma-rule-deployment/deployer", defaultRequestTimeout)
+			}
+			d := NewDeployer()
+			d.config = deploymentConfig{
+				alertPath:   tmpDir,
+				alertsToAdd: files,
+				groupsIntervals: map[string]int64{
+					"group_x": 300,
+					"group_y": 300,
+					"shared":  300,
+				},
+			}
+			d.clients = []*shared.GrafanaClient{newClient(serverX.URL)}
+			d.perConversionClients = map[string][]*shared.GrafanaClient{"conv_y": {newClient(serverY.URL)}}
+
+			_, _, _, err = d.Deploy(ctx) //nolint:dogsled
+			assert.NoError(t, err)
+			assert.ElementsMatch(t, tc.wantXGets, xGets, "rule-group requests to the default instance")
+			assert.ElementsMatch(t, tc.wantYGets, yGets, "rule-group requests to the overridden instance")
+		})
+	}
 }

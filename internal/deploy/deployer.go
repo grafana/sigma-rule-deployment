@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -33,6 +34,12 @@ type folderOrg struct {
 	orgID     int64
 }
 
+// ruleGroup identifies a rule group within a folder on a single Grafana instance.
+type ruleGroup struct {
+	folderUID string
+	name      string
+}
+
 // Structure to store the deployment config
 type deploymentConfig struct {
 	endpoints       []string
@@ -54,10 +61,10 @@ type deploymentConfig struct {
 
 type Deployer struct {
 	config               deploymentConfig
-	client               *shared.GrafanaClient              // current-operation client, set per-operation in Deploy
-	clients              []*shared.GrafanaClient            // all default Grafana clients
-	perConversionClients map[string][]*shared.GrafanaClient // per-conversion Grafana clients
-	groupsToUpdate       map[string]bool
+	client               *shared.GrafanaClient                        // current-operation client, set per-operation in Deploy
+	clients              []*shared.GrafanaClient                      // all default Grafana clients
+	perConversionClients map[string][]*shared.GrafanaClient           // per-conversion Grafana clients
+	groupsToUpdate       map[*shared.GrafanaClient]map[ruleGroup]bool // rule groups touched on each Grafana instance, for interval updates
 }
 
 // AlertDeployment identifies a deployed alert and its display title.
@@ -68,7 +75,7 @@ type AlertDeployment struct {
 
 func NewDeployer() *Deployer {
 	return &Deployer{
-		groupsToUpdate:       map[string]bool{},
+		groupsToUpdate:       map[*shared.GrafanaClient]map[ruleGroup]bool{},
 		perConversionClients: map[string][]*shared.GrafanaClient{},
 	}
 }
@@ -84,6 +91,18 @@ func (d *Deployer) clientsForAlertFile(filename string) []*shared.GrafanaClient 
 		}
 	}
 	return d.clients
+}
+
+// markGroupForUpdate records that the alert's rule group was touched on the current client,
+// so its interval is only checked on instances where the group can exist.
+func (d *Deployer) markGroupForUpdate(alert model.Alert) {
+	if d.groupsToUpdate == nil {
+		d.groupsToUpdate = map[*shared.GrafanaClient]map[ruleGroup]bool{}
+	}
+	if d.groupsToUpdate[d.client] == nil {
+		d.groupsToUpdate[d.client] = map[ruleGroup]bool{}
+	}
+	d.groupsToUpdate[d.client][ruleGroup{folderUID: alert.FolderUID, name: alert.RuleGroup}] = true
 }
 
 // allClients returns all unique clients across default and per-conversion clients.
@@ -209,18 +228,24 @@ func (d *Deployer) Deploy(ctx context.Context) ([]AlertDeployment, []AlertDeploy
 		}
 	}
 
-	// Process alert group interval updates across all Grafana instances
-	if len(d.groupsToUpdate) > 0 {
-		allClients := d.allClients()
-		for group := range d.groupsToUpdate {
-			// Use the folder this specific rule group resolved to (which may come from a
-			// per-conversion folder_id override), not just the global default folder.
-			folderUID := d.config.groupsFolders[group]
-			for _, client := range allClients {
-				d.client = client
-				if err := d.updateAlertGroupInterval(ctx, folderUID, group, d.config.groupsIntervals[group]); err != nil {
-					return alertsCreated, alertsUpdated, alertsDeleted, err
-				}
+	// Process alert group interval updates, only on the instances where each group was touched.
+	// allClients gives a stable client order; groups are sorted for deterministic requests and logs.
+	for _, client := range d.allClients() {
+		groups := make([]ruleGroup, 0, len(d.groupsToUpdate[client]))
+		for group := range d.groupsToUpdate[client] {
+			groups = append(groups, group)
+		}
+		sort.Slice(groups, func(i, j int) bool {
+			if groups[i].folderUID != groups[j].folderUID {
+				return groups[i].folderUID < groups[j].folderUID
+			}
+			return groups[i].name < groups[j].name
+		})
+		d.client = client
+		for _, group := range groups {
+			// The folder comes from the alert itself, which may be a per-conversion folder_id override
+			if err := d.updateAlertGroupInterval(ctx, group.folderUID, group.name, d.config.groupsIntervals[group.name]); err != nil {
+				return alertsCreated, alertsUpdated, alertsDeleted, err
 			}
 		}
 	}
@@ -488,7 +513,7 @@ func (d *Deployer) createAlert(ctx context.Context, content string, updateIfExis
 		return AlertDeployment{}, false, err
 	}
 	deployment := AlertDeployment{UID: alert.UID, Title: alert.Title}
-	d.groupsToUpdate[alert.RuleGroup] = true
+	d.markGroupForUpdate(alert)
 
 	// Prepare the request
 	res, err := d.client.PostRaw(ctx, "api/v1/provisioning/alert-rules", []byte(content))
@@ -566,7 +591,7 @@ func (d *Deployer) updateAlert(ctx context.Context, content string, createIfNotF
 		return AlertDeployment{}, false, err
 	}
 	deployment := AlertDeployment{UID: alert.UID, Title: alert.Title}
-	d.groupsToUpdate[alert.RuleGroup] = true
+	d.markGroupForUpdate(alert)
 
 	// Prepare the request
 	path := fmt.Sprintf("api/v1/provisioning/alert-rules/%s", alert.UID)
