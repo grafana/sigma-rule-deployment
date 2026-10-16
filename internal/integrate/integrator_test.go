@@ -327,7 +327,7 @@ func TestConvertToAlert(t *testing.T) {
 				TemplateAnnotations: map[string]string{
 					"severity": "{{ highestLevel . }}",
 				},
-				TemplateAllRules: true,
+				TemplateAllRules: new(true),
 			},
 			wantQueryText: "sum(count_over_time({job=`.+`} | json | test=`true`[$__auto]))",
 			wantDuration:  model.Duration(300 * time.Second),
@@ -371,7 +371,7 @@ func TestConvertToAlert(t *testing.T) {
 				TemplateLabels: map[string]string{
 					"Level": "{{ highestLevel . }}",
 				},
-				TemplateAllRules: false,
+				TemplateAllRules: new(false),
 			},
 			wantError: true,
 		},
@@ -399,9 +399,55 @@ func TestConvertToAlert(t *testing.T) {
 				TemplateAnnotations: map[string]string{
 					"severity": "{{ highestLevel . }}",
 				},
-				TemplateAllRules: false,
+				TemplateAllRules: new(false),
 			},
 			wantError: true,
+		},
+		{
+			name:       "per-config template_all_rules false overrides default true",
+			queries:    []string{"{job=`.+`} | json | test=`true`"},
+			titles:     "Template All Rules Override",
+			rule:       &model.ProvisionedAlertRule{UID: ""},
+			convObject: model.ConversionOutput{InputFile: "test_sigma_rule.yml", Rules: []model.SigmaRule{{Level: "low"}, {Level: "critical"}}},
+			convConfig: model.NamedConfigBlock{
+				Name: "conv",
+				ConfigBlock: model.ConfigBlock{
+					Conversion: model.ConversionConfig{Target: "loki"},
+					Integration: model.IntegrationConfig{
+						DataSource: "my_data_source", RuleGroup: "Every 5 Minutes", TimeWindow: "5m",
+						// Only the first rule is available to the templates, so .Level works on a single rule
+						TemplateLabels:   map[string]string{"Level": "{{ .Level }}"},
+						TemplateAllRules: new(false),
+					},
+				},
+			},
+			integratorConfig: model.IntegrationConfig{TemplateAllRules: new(true)},
+			wantQueryText:    "sum(count_over_time({job=`.+`} | json | test=`true`[$__auto]))",
+			wantDuration:     model.Duration(300 * time.Second),
+			wantLabels:       map[string]string{"Level": "low"},
+		},
+		{
+			name:       "per-config template_labels replace the default labels rather than merging",
+			queries:    []string{"{job=`.+`} | json | test=`true`"},
+			titles:     "Template Labels Replace",
+			rule:       &model.ProvisionedAlertRule{UID: ""},
+			convObject: model.ConversionOutput{InputFile: "test_sigma_rule.yml", Rules: []model.SigmaRule{{Level: "low"}}},
+			convConfig: model.NamedConfigBlock{
+				Name: "conv",
+				ConfigBlock: model.ConfigBlock{
+					Conversion: model.ConversionConfig{Target: "loki"},
+					Integration: model.IntegrationConfig{
+						DataSource: "my_data_source", RuleGroup: "Every 5 Minutes", TimeWindow: "5m",
+						TemplateLabels: map[string]string{"Team": "blue"},
+					},
+				},
+			},
+			integratorConfig: model.IntegrationConfig{
+				TemplateLabels: map[string]string{"Level": "{{ .Level }}", "Team": "default"},
+			},
+			wantQueryText: "sum(count_over_time({job=`.+`} | json | test=`true`[$__auto]))",
+			wantDuration:  model.Duration(300 * time.Second),
+			wantLabels:    map[string]string{"Team": "blue"},
 		},
 	}
 
@@ -527,7 +573,7 @@ func TestLoadConfig(t *testing.T) {
 						DataSource:  "grafanacloud-logs",
 						FolderID:    "XXXX",
 						OrgID:       1,
-						TestQueries: true,
+						TestQueries: new(true),
 						From:        "now-1h",
 						To:          "now",
 					},
@@ -571,7 +617,7 @@ func TestLoadConfig(t *testing.T) {
 						DataSource:  "grafanacloud-logs",
 						FolderID:    "XXXX",
 						OrgID:       1,
-						TestQueries: false,
+						TestQueries: new(false),
 						From:        "now-1h",
 						To:          "now",
 					},
@@ -616,7 +662,7 @@ func TestLoadConfig(t *testing.T) {
 						DataSourceType: "elasticsearch",
 						FolderID:       "XXXX",
 						OrgID:          1,
-						TestQueries:    true,
+						TestQueries:    new(true),
 						From:           "now-1h",
 						To:             "now",
 					},
@@ -659,7 +705,7 @@ func TestLoadConfig(t *testing.T) {
 						DataSourceType: "elasticsearch",
 						FolderID:       "XXXX",
 						OrgID:          1,
-						TestQueries:    true,
+						TestQueries:    new(true),
 						From:           "now-1h",
 						To:             "now",
 					},
@@ -701,7 +747,7 @@ func TestLoadConfig(t *testing.T) {
 						DataSource:  "grafanacloud-logs",
 						FolderID:    "XXXX",
 						OrgID:       1,
-						TestQueries: true,
+						TestQueries: new(true),
 						From:        "now-1h",
 						To:          "now",
 					},
@@ -745,7 +791,7 @@ func TestLoadConfig(t *testing.T) {
 						DataSource:  "grafanacloud-logs",
 						FolderID:    "XXXX",
 						OrgID:       1,
-						TestQueries: false,
+						TestQueries: new(false),
 						From:        "now-1h",
 						To:          "now",
 					},
@@ -789,7 +835,7 @@ func TestLoadConfig(t *testing.T) {
 						DataSource:  "grafanacloud-logs",
 						FolderID:    "XXXX",
 						OrgID:       1,
-						TestQueries: false,
+						TestQueries: new(false),
 						From:        "now-1h",
 						To:          "now",
 					},
@@ -798,7 +844,7 @@ func TestLoadConfig(t *testing.T) {
 					{
 						Name: "tested",
 						ConfigBlock: model.ConfigBlock{
-							Integration: model.IntegrationConfig{RuleGroup: "Every 5 Minutes", TimeWindow: "5m", TestQueries: true},
+							Integration: model.IntegrationConfig{RuleGroup: "Every 5 Minutes", TimeWindow: "5m", TestQueries: new(true)},
 						},
 					},
 					{
@@ -917,7 +963,7 @@ func TestTestQueriesEnabledForFile(t *testing.T) {
 	makeConfig := func(defaultsEnabled bool, cfgs ...model.NamedConfigBlock) model.Configuration {
 		return model.Configuration{
 			Defaults: model.ConfigBlock{
-				Integration: model.IntegrationConfig{TestQueries: defaultsEnabled},
+				Integration: model.IntegrationConfig{TestQueries: &defaultsEnabled},
 			},
 			Configurations: cfgs,
 		}
@@ -926,9 +972,13 @@ func TestTestQueriesEnabledForFile(t *testing.T) {
 		return model.NamedConfigBlock{
 			Name: name,
 			ConfigBlock: model.ConfigBlock{
-				Integration: model.IntegrationConfig{TestQueries: enabled},
+				Integration: model.IntegrationConfig{TestQueries: &enabled},
 			},
 		}
+	}
+	// A configuration that does not set test_queries, so it inherits the default
+	unsetCfg := func(name string) model.NamedConfigBlock {
+		return model.NamedConfigBlock{Name: name}
 	}
 
 	tests := []struct {
@@ -962,10 +1012,22 @@ func TestTestQueriesEnabledForFile(t *testing.T) {
 			want:     false,
 		},
 		{
-			name:     "defaults true, matching config has TestQueries false",
+			name:     "defaults true, matching config explicitly sets TestQueries false",
 			filename: "myconv_rule.json",
 			config:   makeConfig(true, namedCfg("myconv", false)),
+			want:     false,
+		},
+		{
+			name:     "defaults true, matching config does not set TestQueries",
+			filename: "myconv_rule.json",
+			config:   makeConfig(true, unsetCfg("myconv")),
 			want:     true,
+		},
+		{
+			name:     "defaults false, matching config does not set TestQueries",
+			filename: "myconv_rule.json",
+			config:   makeConfig(false, unsetCfg("myconv")),
+			want:     false,
 		},
 		{
 			name:     "prefix match is exact (underscore separator required)",
@@ -1536,7 +1598,7 @@ func TestRun(t *testing.T) {
 				},
 				Defaults: model.ConfigBlock{
 					Conversion:  model.ConversionConfig{Target: "loki"},
-					Integration: model.IntegrationConfig{DataSource: "test-datasource", FolderID: "test-folder", OrgID: 1, TestQueries: true, From: "now-1h", To: "now"},
+					Integration: model.IntegrationConfig{DataSource: "test-datasource", FolderID: "test-folder", OrgID: 1, TestQueries: new(true), From: "now-1h", To: "now"},
 					Deployment:  model.DeploymentConfig{GrafanaInstance: model.GrafanaInstances{"https://test.grafana.com"}, Timeout: "5s"},
 				},
 				Configurations: []model.NamedConfigBlock{
@@ -2138,11 +2200,11 @@ func TestIntegratorWithQueryTesting(t *testing.T) {
 						DataSource:       "test-loki-datasource",
 						FolderID:         "test-folder",
 						OrgID:            1,
-						TestQueries:      true,
+						TestQueries:      new(true),
 						From:             "now-1h",
 						To:               "now",
-						ShowLogLines:     tt.showLogLines,
-						ShowSampleValues: tt.showSampleValues,
+						ShowLogLines:     &tt.showLogLines,
+						ShowSampleValues: &tt.showSampleValues,
 					},
 					Deployment: model.DeploymentConfig{GrafanaInstance: model.GrafanaInstances{"https://test.grafana.com"}, Timeout: "5s"},
 				},
@@ -2360,7 +2422,7 @@ func TestIntegratorWithExploreLinkGeneration(t *testing.T) {
 						DataSourceType: tt.datasourceType,
 						FolderID:       "test-folder",
 						OrgID:          1,
-						TestQueries:    true,
+						TestQueries:    new(true),
 						From:           "now-1h",
 						To:             "now",
 					},
@@ -2519,6 +2581,72 @@ func TestCorrelationWindowWarnings(t *testing.T) {
 			for _, w := range warnings {
 				assert.Contains(t, w, "correlation timespan")
 			}
+		})
+	}
+}
+
+func TestAnyTestQueriesEnabled(t *testing.T) {
+	cfgWith := func(testQueries *bool) model.NamedConfigBlock {
+		return model.NamedConfigBlock{Name: "c", ConfigBlock: model.ConfigBlock{Integration: model.IntegrationConfig{TestQueries: testQueries}}}
+	}
+	withDefaults := func(testQueries *bool, cfgs ...model.NamedConfigBlock) model.Configuration {
+		return model.Configuration{
+			Defaults:       model.ConfigBlock{Integration: model.IntegrationConfig{TestQueries: testQueries}},
+			Configurations: cfgs,
+		}
+	}
+
+	assert.False(t, AnyTestQueriesEnabled(withDefaults(nil, cfgWith(nil))), "nothing set")
+	assert.True(t, AnyTestQueriesEnabled(withDefaults(nil, cfgWith(new(true)))), "enabled per configuration only")
+	assert.True(t, AnyTestQueriesEnabled(withDefaults(new(true), cfgWith(nil))), "enabled by default and inherited")
+	assert.False(t, AnyTestQueriesEnabled(withDefaults(new(true), cfgWith(new(false)))), "default true overridden by every configuration")
+	assert.True(t, AnyTestQueriesEnabled(withDefaults(new(true), cfgWith(new(false)), cfgWith(nil))), "one configuration still inherits the default")
+	assert.True(t, AnyTestQueriesEnabled(withDefaults(new(true))), "no configurations, enabled by default")
+}
+
+func TestLoadConfigContinueOnErrorEnvVar(t *testing.T) {
+	// env var, YAML defaults value -> expected defaults.integration.continue_on_error
+	cases := []struct {
+		name     string
+		env      *string
+		yamlLine string
+		want     *bool
+	}{
+		{name: "env true sets the default", env: new("true"), want: new(true)},
+		{name: "env false sets the default", env: new("false"), want: new(false)},
+		{name: "env overrides the YAML default", env: new("false"), yamlLine: "    continue_on_error: true\n", want: new(false)},
+		{name: "unset env keeps the YAML default", yamlLine: "    continue_on_error: true\n", want: new(true)},
+		{name: "unset env and unset YAML leaves it unset", want: nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			configFile, err := os.CreateTemp(".", "test_continue_on_error_*.yml")
+			require.NoError(t, err)
+			t.Cleanup(func() { os.Remove(configFile.Name()) })
+			deployDir, err := os.MkdirTemp(".", "test-continue-on-error-*")
+			require.NoError(t, err)
+			t.Cleanup(func() { os.RemoveAll(deployDir) })
+			_, err = configFile.WriteString("version: 2\nfolders:\n  conversion_path: conversions\n  deployment_path: \"" + deployDir + "\"\n" +
+				"defaults:\n  integration:\n    data_source: ds\n" + tc.yamlLine)
+			require.NoError(t, err)
+			require.NoError(t, configFile.Close())
+
+			t.Setenv("INTEGRATOR_CONFIG_PATH", configFile.Name())
+			t.Setenv("INTEGRATOR_GRAFANA_SA_TOKEN", "my-test-token")
+			t.Setenv("CHANGED_FILES", "")
+			t.Setenv("DELETED_FILES", "")
+			t.Setenv("MANUAL_FILES", "")
+			t.Setenv("ALL_RULES", "false")
+			t.Setenv("TEST_FILES", "")
+			if tc.env != nil {
+				t.Setenv("CONTINUE_ON_QUERY_TESTING_ERRORS", *tc.env)
+			} else {
+				t.Setenv("CONTINUE_ON_QUERY_TESTING_ERRORS", "")
+			}
+
+			i := NewIntegrator()
+			require.NoError(t, i.LoadConfig())
+			assert.Equal(t, tc.want, i.config.Defaults.Integration.ContinueOnError)
 		})
 	}
 }

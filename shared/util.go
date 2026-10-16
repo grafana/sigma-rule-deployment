@@ -100,6 +100,18 @@ func GetConfigValue(config, defaultConf, def string) string {
 	return def
 }
 
+// GetConfigBool returns config if it is set, otherwise defaultConf if it is set, otherwise false.
+// A set false in config overrides a true defaultConf.
+func GetConfigBool(config, defaultConf *bool) bool {
+	if config != nil {
+		return *config
+	}
+	if defaultConf != nil {
+		return *defaultConf
+	}
+	return false
+}
+
 // GetConfigValueInt64 returns config if non-zero, otherwise defaultVal.
 func GetConfigValueInt64(config, defaultVal int64) int64 {
 	if config != 0 {

@@ -2,6 +2,12 @@ version: 2
 folders:
   conversion_path: "./conversions"
   deployment_path: "./deployments"
+# Settings in `defaults` apply to every configuration. A setting in a configuration overrides the
+# matching default, with these rules:
+#  - text and number settings (e.g. rule_group, time_window, folder_id) replace the default
+#  - boolean settings (e.g. test_queries) replace the default when set, so `false` turns off a default of `true`
+#  - template_labels and template_annotations replace the default map entirely, they are NOT merged
+#    key by key, so repeat any default entries you want to keep (use `{}` to remove them all)
 defaults:
   conversion:
     target: loki
@@ -20,6 +26,9 @@ defaults:
     folder_id: XXXX
     org_id: 1
     test_queries: true # Whether to test the queries against the datasource
+    # show_log_lines: false # Whether to include log line content in the query test results
+    # show_sample_values: false # Whether to include sample label values in the query test results
+    # continue_on_error: false # Whether to carry on when query testing fails (the integrate action's continue_on_query_testing_errors input takes precedence)
     from: "now-1h"
     to: "now"
     template_labels:
@@ -53,6 +62,11 @@ configurations:
       encoding: utf-8
       pipelines:
         - pipelines/cloud/gcp/audit/gcp_kubernetes_audit_logs.yml
+    integration:
+      test_queries: false # Overrides the default of true for this configuration only
+      template_labels: # Replaces all of the default template_labels, so Product and Service are not set here
+        Level: "{{.Level}}"
+        Team: platform
   - name: okta_audit
     conversion:
       input: "rules/cloud/okta/*"

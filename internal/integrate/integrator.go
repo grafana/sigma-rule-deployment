@@ -157,7 +157,11 @@ func (i *Integrator) LoadConfig() error {
 	i.prettyPrint = strings.ToLower(os.Getenv("PRETTY_PRINT")) == TRUE
 	i.allRules = strings.ToLower(os.Getenv("ALL_RULES")) == TRUE
 
-	i.config.Defaults.Integration.ContinueOnError = strings.ToLower(os.Getenv("CONTINUE_ON_QUERY_TESTING_ERRORS")) == TRUE
+	// The action input is the workflow-level default, and so takes precedence over
+	// defaults.integration.continue_on_error; a configuration's own setting still overrides it
+	if v := os.Getenv("CONTINUE_ON_QUERY_TESTING_ERRORS"); v != "" {
+		i.config.Defaults.Integration.ContinueOnError = new(strings.ToLower(v) == TRUE)
+	}
 
 	if !filepath.IsLocal(i.config.Folders.ConversionPath) {
 		return fmt.Errorf("conversion path is not local: %s", i.config.Folders.ConversionPath)
@@ -752,9 +756,7 @@ func (i *Integrator) ConvertToAlert(rule *model.ProvisionedAlertRule, queries []
 	rule.Annotations["ConversionFile"] = conversionFile
 	rule.Annotations["DeploymentFile"] = integrateFile
 
-	// Additive: a per-conversion true can't be un-set by the (false) zero value, so either
-	// source enabling this turns it on, matching TestQueries/ContinueOnError/ShowLogLines/ShowSampleValues.
-	templateAllRules := i.config.Defaults.Integration.TemplateAllRules || cfg.Integration.TemplateAllRules
+	templateAllRules := shared.GetConfigBool(cfg.Integration.TemplateAllRules, i.config.Defaults.Integration.TemplateAllRules)
 	funcs := templateFuncs(templateAllRules)
 
 	templateAnnotations := i.config.Defaults.Integration.TemplateAnnotations
@@ -1035,15 +1037,12 @@ func createAlertQuery(query string, refID string, datasource string, timerange m
 
 // AnyTestQueriesEnabled returns true if the default config or any named configuration has TestQueries enabled.
 func AnyTestQueriesEnabled(config model.Configuration) bool {
-	if config.Defaults.Integration.TestQueries {
-		return true
-	}
 	for _, cfg := range config.Configurations {
-		if cfg.Integration.TestQueries {
+		if shared.GetConfigBool(cfg.Integration.TestQueries, config.Defaults.Integration.TestQueries) {
 			return true
 		}
 	}
-	return false
+	return len(config.Configurations) == 0 && shared.GetConfigBool(nil, config.Defaults.Integration.TestQueries)
 }
 
 // testQueriesEnabledForFile returns true if the file's associated configuration has TestQueries enabled.
@@ -1058,9 +1057,9 @@ func testQueriesEnabledForFile(filename string, config model.Configuration) bool
 	if name, ok := shared.MatchConfigName(filename, names); ok {
 		for _, cfg := range config.Configurations {
 			if cfg.Name == name {
-				return config.Defaults.Integration.TestQueries || cfg.Integration.TestQueries
+				return shared.GetConfigBool(cfg.Integration.TestQueries, config.Defaults.Integration.TestQueries)
 			}
 		}
 	}
-	return config.Defaults.Integration.TestQueries
+	return shared.GetConfigBool(nil, config.Defaults.Integration.TestQueries)
 }

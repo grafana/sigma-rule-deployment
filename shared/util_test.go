@@ -30,3 +30,25 @@ func TestMatchConfigName(t *testing.T) {
 		})
 	}
 }
+
+func TestGetConfigBool(t *testing.T) {
+	tests := []struct {
+		name       string
+		config     *bool
+		defaultVal *bool
+		want       bool
+	}{
+		{"both unset", nil, nil, false},
+		{"default only, true", nil, new(true), true},
+		{"default only, false", nil, new(false), false},
+		{"config true over unset default", new(true), nil, true},
+		{"config true over false default", new(true), new(false), true},
+		{"config false over true default", new(false), new(true), false},
+		{"config true over true default", new(true), new(true), true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, GetConfigBool(tt.config, tt.defaultVal))
+		})
+	}
+}

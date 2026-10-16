@@ -120,10 +120,10 @@ func TestRun(t *testing.T) {
 						DataSource:      "test-datasource",
 						FolderID:        "test-folder",
 						OrgID:           1,
-						TestQueries:     true,
+						TestQueries:     new(true),
 						From:            "now-1h",
 						To:              "now",
-						ContinueOnError: tt.continueOnErrors,
+						ContinueOnError: &tt.continueOnErrors,
 					},
 					Deployment: model.DeploymentConfig{
 						GrafanaInstance: model.GrafanaInstances{"https://test.grafana.com"},
@@ -384,7 +384,7 @@ func TestTestQueriesThrowsErrorWhenShowLogLinesIsTrueAndNoLogLines(t *testing.T)
 				OrgID:        1,
 				From:         "now-1h",
 				To:           "now",
-				ShowLogLines: true,
+				ShowLogLines: new(true),
 			},
 			Deployment: model.DeploymentConfig{
 				GrafanaInstance: model.GrafanaInstances{"https://test.grafana.com"},
@@ -554,7 +554,7 @@ func TestRunMultipleConfigurations(t *testing.T) {
 						DataSource:  "enabled-ds",
 						RuleGroup:   "Enabled Alerts",
 						TimeWindow:  "5m",
-						TestQueries: true,
+						TestQueries: new(true),
 					},
 					Deployment: model.DeploymentConfig{
 						GrafanaInstance: model.GrafanaInstances{"https://enabled.grafana.com"},
@@ -569,8 +569,8 @@ func TestRunMultipleConfigurations(t *testing.T) {
 						RuleGroup:       "Continue Alerts",
 						TimeWindow:      "10m",
 						From:            "now-6h",
-						TestQueries:     true,
-						ContinueOnError: true,
+						TestQueries:     new(true),
+						ContinueOnError: new(true),
 					},
 				},
 			},
@@ -580,7 +580,7 @@ func TestRunMultipleConfigurations(t *testing.T) {
 					Integration: model.IntegrationConfig{
 						DataSource:  "no-test-ds",
 						RuleGroup:   "No Test Alerts",
-						TestQueries: false,
+						TestQueries: new(false),
 					},
 				},
 			},
@@ -590,8 +590,8 @@ func TestRunMultipleConfigurations(t *testing.T) {
 					Integration: model.IntegrationConfig{
 						DataSource:   "show-lines-ds",
 						RuleGroup:    "Show Lines Alerts",
-						TestQueries:  true,
-						ShowLogLines: true,
+						TestQueries:  new(true),
+						ShowLogLines: new(true),
 					},
 					Deployment: model.DeploymentConfig{
 						Timeout: "30s",
@@ -604,8 +604,8 @@ func TestRunMultipleConfigurations(t *testing.T) {
 					Integration: model.IntegrationConfig{
 						DataSource:       "show-values-ds",
 						RuleGroup:        "Show Values Alerts",
-						TestQueries:      true,
-						ShowSampleValues: true,
+						TestQueries:      new(true),
+						ShowSampleValues: new(true),
 					},
 				},
 			},
@@ -634,10 +634,10 @@ func TestRunMultipleConfigurations(t *testing.T) {
 	integrate.DefaultDatasourceQuery = mock
 	defer func() { integrate.DefaultDatasourceQuery = originalDatasourceQuery }()
 
-	// Pass all files including conv_no_test — Run() must skip it based on TestQueries: false
+	// Pass all files including conv_no_test — Run() must skip it based on TestQueries: new(false)
 	queryTester := NewQueryTester(config, []string{enabledFile, continueFile, noTestFile, showLinesFile, showValuesFile}, 5*time.Second)
 	err = queryTester.Run()
-	// Should succeed because conv_continue has ContinueOnError: true
+	// Should succeed because conv_continue has ContinueOnError: new(true)
 	assert.NoError(t, err)
 
 	defaultTimeout := 5 * time.Second
@@ -822,7 +822,7 @@ func TestQueryTestingWithMultipleGrafanaInstances(t *testing.T) {
 				DataSource:  "default-ds",
 				From:        "now-1h",
 				To:          "now",
-				TestQueries: true,
+				TestQueries: new(true),
 			},
 			Deployment: model.DeploymentConfig{
 				GrafanaInstance: model.GrafanaInstances{"https://default1.grafana.com", "https://default2.grafana.com"},
@@ -926,4 +926,120 @@ func TestTestQueriesFailsWhenNoGrafanaInstanceResolves(t *testing.T) {
 
 	assert.ErrorContains(t, err, `configuration "test_conv" has no Grafana instance`)
 	assert.Empty(t, results)
+}
+
+// TestRunPerConfigurationBooleanOverridesOfTrueDefaults verifies that a configuration can
+// explicitly set a boolean setting to false to override a true default, and that a configuration
+// which does not set it inherits the default.
+func TestRunPerConfigurationBooleanOverridesOfTrueDefaults(t *testing.T) {
+	testDir := filepath.Join("testdata", "test_bool_overrides")
+	assert.NoError(t, os.MkdirAll(testDir, 0o755))
+	defer os.RemoveAll(testDir)
+
+	writeConvFile := func(name, query string) string {
+		data, _ := json.Marshal(model.ConversionOutput{
+			ConversionName: name,
+			Queries:        []string{query},
+			Rules:          []model.SigmaRule{{ID: "test-id", Title: "Test Rule"}},
+		})
+		path := filepath.Join(testDir, name+".json")
+		assert.NoError(t, os.WriteFile(path, data, 0o600))
+		return path
+	}
+	skipFile := writeConvFile("conv_skip", "{job=`skip`} | json")
+	strictFile := writeConvFile("conv_strict", "{job=`strict`} | json")
+	inheritFile := writeConvFile("conv_inherit", "{job=`inherit`} | json")
+	quietFile := writeConvFile("conv_quiet", "{job=`quiet`} | json")
+
+	newConfig := func(cfgs ...model.NamedConfigBlock) model.Configuration {
+		return model.Configuration{
+			Defaults: model.ConfigBlock{
+				Conversion: model.ConversionConfig{Target: "loki"},
+				Integration: model.IntegrationConfig{
+					DataSource:       "default-ds",
+					From:             "now-1h",
+					To:               "now",
+					TestQueries:      new(true),
+					ContinueOnError:  new(true),
+					ShowLogLines:     new(true),
+					ShowSampleValues: new(true),
+				},
+				Deployment: model.DeploymentConfig{GrafanaInstance: model.GrafanaInstances{"https://test.grafana.com"}},
+			},
+			Configurations: cfgs,
+		}
+	}
+	named := func(name string, integration model.IntegrationConfig) model.NamedConfigBlock {
+		integration.DataSource = name + "-ds"
+		return model.NamedConfigBlock{Name: name, ConfigBlock: model.ConfigBlock{Integration: integration}}
+	}
+	setup := func(t *testing.T) (*trackingDatasourceQuery, string) {
+		t.Helper()
+		outputFile, err := os.CreateTemp("", "github-output")
+		assert.NoError(t, err)
+		t.Cleanup(func() { os.Remove(outputFile.Name()) })
+		t.Setenv("GITHUB_OUTPUT", outputFile.Name())
+		resultsFile := filepath.Join(testDir, t.Name()+".json")
+		assert.NoError(t, os.MkdirAll(filepath.Dir(resultsFile), 0o755))
+		t.Setenv("TEST_QUERY_RESULTS_FILE", resultsFile)
+		t.Setenv("INTEGRATOR_GRAFANA_SA_TOKEN", "test-api-token")
+
+		mock := newTrackingDatasourceQuery()
+		original := integrate.DefaultDatasourceQuery
+		integrate.DefaultDatasourceQuery = mock
+		t.Cleanup(func() { integrate.DefaultDatasourceQuery = original })
+		return mock, resultsFile
+	}
+
+	t.Run("test_queries false skips a configuration when the default is true", func(t *testing.T) {
+		mock, _ := setup(t)
+		config := newConfig(
+			named("conv_skip", model.IntegrationConfig{TestQueries: new(false)}),
+			named("conv_inherit", model.IntegrationConfig{}),
+		)
+		assert.NoError(t, NewQueryTester(config, []string{skipFile, inheritFile}, 5*time.Second).Run())
+
+		queried := make([]string, 0, len(mock.calls))
+		for _, call := range mock.calls {
+			queried = append(queried, call.datasource)
+		}
+		assert.Equal(t, []string{"conv_inherit-ds"}, queried, "only the configuration inheriting test_queries is tested")
+	})
+
+	t.Run("continue_on_error false makes a failing configuration fatal when the default is true", func(t *testing.T) {
+		mock, _ := setup(t)
+		mock.AddMockError("{job=`strict`} | json", fmt.Errorf("simulated query error"))
+		mock.AddMockError("{job=`inherit`} | json", fmt.Errorf("simulated query error"))
+
+		strict := NewQueryTester(newConfig(named("conv_strict", model.IntegrationConfig{ContinueOnError: new(false)})), []string{strictFile}, 5*time.Second)
+		assert.ErrorContains(t, strict.Run(), "simulated query error")
+
+		inherit := NewQueryTester(newConfig(named("conv_inherit", model.IntegrationConfig{})), []string{inheritFile}, 5*time.Second)
+		assert.NoError(t, inherit.Run(), "a configuration that does not set continue_on_error inherits the default true")
+	})
+
+	t.Run("show_log_lines and show_sample_values false override true defaults", func(t *testing.T) {
+		_, resultsFile := setup(t)
+		config := newConfig(
+			named("conv_quiet", model.IntegrationConfig{ShowLogLines: new(false), ShowSampleValues: new(false)}),
+			named("conv_inherit", model.IntegrationConfig{}),
+		)
+		assert.NoError(t, NewQueryTester(config, []string{quietFile, inheritFile}, 5*time.Second).Run())
+
+		resultsJSON, err := os.ReadFile(resultsFile)
+		assert.NoError(t, err)
+		var allResults map[string][]model.QueryTestResult
+		assert.NoError(t, json.Unmarshal(resultsJSON, &allResults))
+
+		quiet := allResults[quietFile]
+		assert.Len(t, quiet, 1)
+		assert.NotContains(t, quiet[0].Stats.Fields, "body", "log line field should not be stored when show_log_lines is false")
+		for _, v := range quiet[0].Stats.Fields {
+			assert.Empty(t, v, "label values should be empty when show_sample_values is false")
+		}
+
+		inherited := allResults[inheritFile]
+		assert.Len(t, inherited, 1)
+		assert.Contains(t, inherited[0].Stats.Fields, "body", "log line field should be stored when inheriting show_log_lines true")
+	})
 }

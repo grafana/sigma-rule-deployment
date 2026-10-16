@@ -17,7 +17,7 @@ The Grafana Query Integrator action bridges the gap between converted Sigma rule
 | `all_rules`                        | Whether to integrate all rules                                                                       | No       | `false`               |
 | `changed_files_from_base`          | Whether to use the changed files from the base branch                                                | No       | `false`               |
 | `actions_username`                 | The username of the actions user                                                                     | No       | `github-actions[bot]` |
-| `continue_on_query_testing_errors` | Continue integration process even when query testing fails, but print errors and continue the action | No       | `true`                |
+| `continue_on_query_testing_errors` | Continue integration process even when query testing fails, but print errors and continue the action. This sets the default for `continue_on_error`, so it takes precedence over `defaults.integration.continue_on_error`, but a configuration's own `continue_on_error` still overrides it | No       | `true`                |
 
 ## Outputs
 

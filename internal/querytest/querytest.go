@@ -39,7 +39,7 @@ func (qt *QueryTester) Run() error {
 		conversionContent, err := shared.ReadLocalFile(inputFile)
 		if err != nil {
 			fmt.Printf("Error reading file %s: %v\n", inputFile, err)
-			if !qt.config.Defaults.Integration.ContinueOnError {
+			if !shared.GetConfigBool(nil, qt.config.Defaults.Integration.ContinueOnError) {
 				return err
 			}
 			continue
@@ -49,7 +49,7 @@ func (qt *QueryTester) Run() error {
 		err = json.Unmarshal([]byte(conversionContent), &conversionObject)
 		if err != nil {
 			fmt.Printf("Error unmarshalling conversion output for file %s: %v\n", inputFile, err)
-			if !qt.config.Defaults.Integration.ContinueOnError {
+			if !shared.GetConfigBool(nil, qt.config.Defaults.Integration.ContinueOnError) {
 				return fmt.Errorf("error unmarshalling conversion output: %v", err)
 			}
 			continue
@@ -68,13 +68,13 @@ func (qt *QueryTester) Run() error {
 			continue
 		}
 
-		// Skip if neither the default nor this configuration has TestQueries enabled
-		if !qt.config.Defaults.Integration.TestQueries && !cfg.Integration.TestQueries {
+		// Skip if TestQueries is not enabled for this configuration (its own setting, else the default)
+		if !shared.GetConfigBool(cfg.Integration.TestQueries, qt.config.Defaults.Integration.TestQueries) {
 			continue
 		}
 
-		// Per-configuration ContinueOnError overrides the global default (additive: either source enables it)
-		continueOnError := qt.config.Defaults.Integration.ContinueOnError || cfg.Integration.ContinueOnError
+		// Per-configuration ContinueOnError overrides the default
+		continueOnError := shared.GetConfigBool(cfg.Integration.ContinueOnError, qt.config.Defaults.Integration.ContinueOnError)
 
 		queries := conversionObject.Queries
 		if len(queries) == 0 {
@@ -177,8 +177,8 @@ func (qt *QueryTester) TestQueries(queries map[string]string, cfg model.NamedCon
 	}
 	saToken := os.Getenv("INTEGRATOR_GRAFANA_SA_TOKEN")
 	timeout := shared.ParseDurationOrDefault(cfg.Deployment.Timeout, qt.timeout)
-	showSampleValues := defaults.Integration.ShowSampleValues || cfg.Integration.ShowSampleValues
-	showLogLines := defaults.Integration.ShowLogLines || cfg.Integration.ShowLogLines
+	showSampleValues := shared.GetConfigBool(cfg.Integration.ShowSampleValues, defaults.Integration.ShowSampleValues)
+	showLogLines := shared.GetConfigBool(cfg.Integration.ShowLogLines, defaults.Integration.ShowLogLines)
 
 	// Sort refIDs to ensure consistent ordering
 	refIDs := make([]string, 0, len(queries))

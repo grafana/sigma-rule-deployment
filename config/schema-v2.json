@@ -42,7 +42,7 @@
         },
         "defaults": {
             "type": "object",
-            "description": "Default settings applied to all configurations unless overridden",
+            "description": "Default settings applied to all configurations unless overridden. A setting in a configuration overrides the matching default: text, number and boolean settings replace it (a boolean explicitly set to false turns off a default of true), and template_labels and template_annotations replace the default map as a whole rather than merging with it",
             "properties": {
                 "conversion": {
                     "$ref": "#/$defs/conversionConfig",
@@ -112,15 +112,15 @@
                                 }
                             }
                         ],
-                        "description": "Conversion settings for this configuration, merged with defaults"
+                        "description": "Conversion settings for this configuration. Any setting given here overrides the matching default"
                     },
                     "integration": {
                         "$ref": "#/$defs/integrationConfig",
-                        "description": "Integration settings for this configuration, merged with defaults"
+                        "description": "Integration settings for this configuration. Any setting given here overrides the matching default; a boolean set to false overrides a default of true, and template_labels and template_annotations replace the default map entirely (they are not merged)"
                     },
                     "deployment": {
                         "$ref": "#/$defs/deploymentConfig",
-                        "description": "Deployment settings for this configuration, merged with defaults"
+                        "description": "Deployment settings for this configuration. Any setting given here overrides the matching default"
                     }
                 },
                 "additionalProperties": false
@@ -352,8 +352,8 @@
                 },
                 "test_queries": {
                     "type": "boolean",
-                    "description": "Whether to test queries against the datasource before deployment",
-                    "default": true
+                    "description": "Whether to test queries against the datasource. Set to false in a configuration to skip testing for it when the default is true",
+                    "default": false
                 },
                 "from": {
                     "type": "string",
@@ -376,27 +376,32 @@
                 },
                 "show_log_lines": {
                     "type": "boolean",
-                    "description": "Whether to include log line content in query test results",
+                    "description": "Whether to include log line content in query test results. Set to false in a configuration to override a default of true",
                     "default": false
                 },
                 "show_sample_values": {
                     "type": "boolean",
-                    "description": "Whether to include sample label values in query test results",
+                    "description": "Whether to include sample label values in query test results. Set to false in a configuration to override a default of true",
+                    "default": false
+                },
+                "continue_on_error": {
+                    "type": "boolean",
+                    "description": "Whether to carry on when query testing fails, reporting the errors rather than failing the integration. Set to false in a configuration to override a default of true. The continue_on_query_testing_errors input of the integrate action sets the default, and takes precedence over this setting in defaults.integration",
                     "default": false
                 },
                 "template_annotations": {
                     "type": "object",
-                    "description": "Annotations to add to the alert rule, using text/template format strings",
+                    "description": "Annotations to add to the alert rule, using text/template format strings. When set in a configuration, they replace the default annotations entirely (they are not merged key by key); set to an empty object to remove the defaults",
                     "additionalProperties": {"type": "string"}
                 },
                 "template_labels": {
                     "type": "object",
-                    "description": "Labels to add to the alert rule, using text/template format strings",
+                    "description": "Labels to add to the alert rule, using text/template format strings. When set in a configuration, they replace the default labels entirely (they are not merged key by key); set to an empty object to remove the defaults",
                     "additionalProperties": {"type": "string"}
                 },
                 "template_all_rules": {
                     "type": "boolean",
-                    "description": "Whether to use all the rules in a Sigma rule file for templated annotations and labels, or just the first rule",
+                    "description": "Whether to use all the rules in a Sigma rule file for templated annotations and labels, or just the first rule. Set to false in a configuration to override a default of true",
                     "default": false
                 }
             },

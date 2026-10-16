@@ -170,6 +170,41 @@ The configuration file uses YAML format and includes sections for:
 - **Alert settings**: Configure folders, groups, intervals, and more (`integration`)
 - **Query models**: Customize the generated queries for your data source (`integration.query_model`)
 
+### How defaults and per-configuration overrides work
+
+A setting in a configuration overrides the matching setting in `defaults`. How the two are combined depends on the type of setting:
+
+| Type of setting | Examples | Behaviour in a configuration |
+| --- | --- | --- |
+| Text and numbers | `rule_group`, `time_window`, `folder_id`, `org_id`, `data_source`, `from`, `to` | Replaces the default. An empty value is treated as not set, so the default still applies |
+| Booleans | `test_queries`, `show_log_lines`, `show_sample_values`, `continue_on_error`, `template_all_rules` | Replaces the default when set, including `false` to turn off a default of `true`. When not set, the default applies, and if that is not set either the value is `false` |
+| Maps | `template_labels`, `template_annotations` | Replaces the default map **entirely**. The maps are not merged key by key, so repeat any default entries you want to keep. Use `{}` to remove all the defaults |
+
+For example, with these settings, `okta_audit` skips query testing and gets only the labels `Level` and `Team` (it does not get the default `Product` label), whereas `gcp_k8s` keeps all the defaults:
+
+```yaml
+defaults:
+  integration:
+    test_queries: true
+    template_labels:
+      Level: "{{.Level}}"
+      Product: "{{.Logsource.Product}}"
+configurations:
+  - name: gcp_k8s
+    conversion:
+      input: "rules/gcp/*"
+  - name: okta_audit
+    conversion:
+      input: "rules/okta/*"
+    integration:
+      test_queries: false # overrides the default, so queries for this configuration are not tested
+      template_labels:
+        Level: "{{.Level}}"
+        Team: identity
+```
+
+The `continue_on_query_testing_errors` input of the integrate action sets the default for `continue_on_error`, and so takes precedence over `defaults.integration.continue_on_error`. A configuration's own `continue_on_error` still overrides it.
+
 ## Step 6: Set Up GitHub Actions Workflows
 
 GitHub Actions workflows automate the entire process of validating, converting, and deploying your Sigma rules. You'll need to create three workflows:

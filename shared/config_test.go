@@ -42,3 +42,34 @@ func TestLoadConfigFromFile_WrongVersion(t *testing.T) {
 		assert.Contains(t, err.Error(), "only version 2 is supported")
 	}
 }
+
+func TestLoadConfigFromFile_BooleanSettingsDistinguishUnsetFromFalse(t *testing.T) {
+	path := writeConfigFile(t, `version: 2
+defaults:
+  integration:
+    test_queries: true
+configurations:
+  - name: explicit_false
+    integration:
+      test_queries: false
+      template_all_rules: false
+  - name: unset
+`)
+	cfg, err := LoadConfigFromFile(path)
+	require.NoError(t, err)
+	require.Len(t, cfg.Configurations, 2)
+
+	require.NotNil(t, cfg.Defaults.Integration.TestQueries)
+	assert.True(t, *cfg.Defaults.Integration.TestQueries)
+
+	explicit := cfg.Configurations[0].Integration
+	require.NotNil(t, explicit.TestQueries)
+	assert.False(t, *explicit.TestQueries)
+	require.NotNil(t, explicit.TemplateAllRules)
+	assert.False(t, *explicit.TemplateAllRules)
+
+	unset := cfg.Configurations[1].Integration
+	assert.Nil(t, unset.TestQueries)
+	assert.Nil(t, unset.ShowLogLines)
+	assert.Nil(t, unset.ContinueOnError)
+}
