@@ -265,10 +265,6 @@
                     "type": "boolean",
                     "description": "Enable verbose output"
                 },
-                "data_source_type": {
-                    "$ref": "#/$defs/backendType",
-                    "description": "Data source type for conversions"
-                },
                 "required_rule_fields": {
                     "type": "array",
                     "description": "A list of the Sigma rule fields to include in the converter output files",
@@ -337,7 +333,15 @@
                 },
                 "data_source": {
                     "type": "string",
-                    "description": "Grafana data source identifier, overrides the conversion-level data_source for this configuration"
+                    "description": "The UID of the Grafana data source to query"
+                },
+                "data_source_type": {
+                    "type": "string",
+                    "description": "The data source plugin type ID (e.g. grafana-opensearch-datasource), or a Sigma target name that identifies one, used to choose the built-in query model. If unspecified, the conversion target is used",
+                    "examples": [
+                        "elasticsearch",
+                        "grafana-splunk-datasource"
+                    ]
                 },
                 "query_model": {
                     "type": "string",

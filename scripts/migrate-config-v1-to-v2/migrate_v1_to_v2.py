@@ -18,12 +18,12 @@ _CONVERSION_FIELDS = {
     "target", "format", "skip_unsupported", "fail_unsupported", "file_pattern",
     "encoding", "pipeline_check", "without_pipeline", "pipelines", "filters",
     "backend_options", "correlation_method", "json_indent", "verbose",
-    "data_source_type", "required_rule_fields",
+    "required_rule_fields",
 }
 
 # Fields from a v1 conversion item (or conversion_defaults) that move to integration in v2
 _INTEGRATION_FIELDS_FROM_CONVERSION = {
-    "rule_group", "time_window", "lookback", "data_source", "query_model",
+    "rule_group", "time_window", "lookback", "data_source", "data_source_type", "query_model",
 }
 
 

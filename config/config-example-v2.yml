@@ -14,6 +14,7 @@ defaults:
       - author
   integration:
     data_source: grafanacloud-logs # The UID of a data source
+    # data_source_type: elasticsearch # The data source plugin type, to select a built-in query model. Defaults to the conversion target
     rule_group: Every 5 Minutes
     time_window: 5m
     folder_id: XXXX

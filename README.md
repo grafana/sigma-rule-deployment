@@ -59,7 +59,7 @@ Relevent conversion backends and data sources that can be used in Grafana includ
 | [CrowdStrike LogScale](https://github.com/SigmaHQ/pySigma-backend-crowdstrike)         | [Falcon LogScale data source](https://grafana.com/grafana/plugins/grafana-falconlogscale-datasource/)          | Custom Model                 |
 | [SentinelOne PowerQuery](https://github.com/7RedViolin/pySigma-backend-sentinelone-pq) | [Dataset data source](https://grafana.com/grafana/plugins/sentinelone-dataset-datasource/)                     | Native                       |
 
-- **Native**: The data source plugin is supported by the integrate action and the query model is generated automatically. Loki and Elasticsearch are selected by the `target` (or `data_source_type`) being `loki` or `elasticsearch`; the other native data sources are selected by setting `data_source_type` to the plugin's type ID, or by `target` where it is one of the names in the [table below](#native-query-models).
+- **Native**: The data source plugin is supported by the integrate action and the query model is generated automatically. Loki and Elasticsearch are selected by the `target` (or `integration.data_source_type`) being `loki` or `elasticsearch`; the other native data sources are selected by setting `integration.data_source_type` to the plugin's type ID, or by `target` where it is one of the names in the [table below](#native-query-models).
 - **Custom Model**: The data source plugin is supported by the integrate action but the query model must be passed as a custom model in the conversion configuration, as it needs a value specific to your environment (see [How can I use a custom query model for a data source?](#how-can-i-use-a-custom-query-model-for-a-data-source)).
 
 > [!NOTE]
@@ -67,7 +67,7 @@ Relevent conversion backends and data sources that can be used in Grafana includ
 
 #### Native query models
 
-| Data source         | `data_source_type`                       | Also selected by `target` | What the query needs to return                                                                                                                                   |
+| Data source         | `integration.data_source_type`           | Also selected by `target` | What the query needs to return                                                                                                                                   |
 | ------------------- | ---------------------------------------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Azure Data Explorer | `grafana-azure-data-explorer-datasource` |                           | A time series: KQL that ends `summarize ... by bin(<time>, <step>) \| order by <time> asc`. The data source must have a default database and cluster configured. |
 | Datadog             | `grafana-datadog-datasource`             | `datadog`                 | A [logs search](https://grafana.com/docs/plugins/grafana-datadog-datasource/latest/alerting/) in aggregate mode, returning the count of matching logs            |

@@ -172,3 +172,24 @@ def test_no_defaults_when_absent():
 def test_configurations_key_present():
     result = migrate(_V1_MINIMAL)
     assert "configurations" in result
+
+
+def test_data_source_type_moves_to_integration_defaults():
+    v1 = {
+        "conversion_defaults": {"target": "loki", "data_source_type": "elasticsearch"},
+        "conversions": [{"name": "a", "input": "rules/*"}],
+    }
+    result = migrate(v1)
+    assert result["defaults"]["integration"]["data_source_type"] == "elasticsearch"
+    assert "data_source_type" not in result["defaults"]["conversion"]
+
+
+def test_data_source_type_moves_to_integration_per_configuration():
+    v1 = {
+        "conversions": [
+            {"name": "a", "input": "rules/*", "data_source_type": "grafana-splunk-datasource"},
+        ],
+    }
+    config = migrate(v1)["configurations"][0]
+    assert config["integration"]["data_source_type"] == "grafana-splunk-datasource"
+    assert "data_source_type" not in config["conversion"]
