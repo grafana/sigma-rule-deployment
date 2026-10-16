@@ -176,9 +176,9 @@ A setting in a configuration overrides the matching setting in `defaults`. How t
 
 | Type of setting | Examples | Behaviour in a configuration |
 | --- | --- | --- |
-| Text and numbers | `rule_group`, `time_window`, `folder_id`, `org_id`, `data_source`, `from`, `to` | Replaces the default. An empty value is treated as not set, so the default still applies |
+| Text and numbers | `rule_group`, `time_window`, `folder_id`, `org_id`, `data_source`, `from`, `to`, `json_indent` | Replaces the default. An empty text value is treated as not set, so the default still applies, but a `json_indent` of `0` is a real value that overrides the default |
 | Booleans | `test_queries`, `show_log_lines`, `show_sample_values`, `continue_on_error`, `template_all_rules` | Replaces the default when set, including `false` to turn off a default of `true`. When not set, the default applies, and if that is not set either the value is `false` |
-| Maps | `template_labels`, `template_annotations` | Replaces the default map **entirely**. The maps are not merged key by key, so repeat any default entries you want to keep. Use `{}` to remove all the defaults |
+| Lists and maps | `pipelines`, `filters`, `backend_options`, `required_rule_fields`, `template_labels`, `template_annotations` | Replaces the default **entirely**. They are not merged, so repeat any default entries you want to keep. Use `[]` or `{}` to remove the default altogether; leaving the key out keeps it |
 
 For example, with these settings, `okta_audit` skips query testing and gets only the labels `Level` and `Team` (it does not get the default `Product` label), whereas `gcp_k8s` keeps all the defaults:
 

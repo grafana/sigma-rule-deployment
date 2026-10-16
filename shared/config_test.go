@@ -73,3 +73,29 @@ configurations:
 	assert.Nil(t, unset.ShowLogLines)
 	assert.Nil(t, unset.ContinueOnError)
 }
+
+func TestLoadConfigFromFile_SkipUnsupportedIsBoolean(t *testing.T) {
+	path := writeConfigFile(t, "version: 2\ndefaults:\n  conversion:\n    skip_unsupported: true\nconfigurations:\n  - name: a\n    conversion:\n      skip_unsupported: false\n  - name: b\n")
+	cfg, err := LoadConfigFromFile(path)
+	require.NoError(t, err)
+	require.NotNil(t, cfg.Defaults.Conversion.SkipUnsupported)
+	assert.True(t, *cfg.Defaults.Conversion.SkipUnsupported)
+	require.NotNil(t, cfg.Configurations[0].Conversion.SkipUnsupported)
+	assert.False(t, *cfg.Configurations[0].Conversion.SkipUnsupported)
+	assert.Nil(t, cfg.Configurations[1].Conversion.SkipUnsupported)
+
+	// A quoted string is not a boolean, matching the schema
+	path = writeConfigFile(t, "version: 2\ndefaults:\n  conversion:\n    skip_unsupported: \"true\"\n")
+	_, err = LoadConfigFromFile(path)
+	assert.Error(t, err)
+}
+
+func TestLoadConfigFromFile_EmptyTemplateMapIsNotNil(t *testing.T) {
+	// An explicitly empty map must stay distinguishable from an unset one, as it replaces the defaults' map
+	path := writeConfigFile(t, "version: 2\nconfigurations:\n  - name: empty\n    integration:\n      template_labels: {}\n  - name: unset\n")
+	cfg, err := LoadConfigFromFile(path)
+	require.NoError(t, err)
+	assert.NotNil(t, cfg.Configurations[0].Integration.TemplateLabels)
+	assert.Empty(t, cfg.Configurations[0].Integration.TemplateLabels)
+	assert.Nil(t, cfg.Configurations[1].Integration.TemplateLabels)
+}

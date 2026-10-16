@@ -42,11 +42,12 @@
         },
         "defaults": {
             "type": "object",
-            "description": "Default settings applied to all configurations unless overridden. A setting in a configuration overrides the matching default: text, number and boolean settings replace it (a boolean explicitly set to false turns off a default of true), and template_labels and template_annotations replace the default map as a whole rather than merging with it",
+            "description": "Default settings applied to all configurations unless overridden. A setting in a configuration overrides the matching default: text, number and boolean settings replace it (a boolean explicitly set to false turns off a default of true), and lists and maps (pipelines, filters, backend_options, required_rule_fields, template_labels, template_annotations) replace the default as a whole rather than merging with it. Setting a list or map to an empty value (`[]` or `{}`) removes the default; leaving it out keeps the default",
             "properties": {
                 "conversion": {
                     "$ref": "#/$defs/conversionConfig",
-                    "description": "Default conversion settings"
+                    "description": "Default conversion settings",
+                    "unevaluatedProperties": false
                 },
                 "integration": {
                     "$ref": "#/$defs/integrationConfig",
@@ -112,6 +113,7 @@
                                 }
                             }
                         ],
+                        "unevaluatedProperties": false,
                         "description": "Conversion settings for this configuration. Any setting given here overrides the matching default"
                     },
                     "integration": {
@@ -131,8 +133,9 @@
     "$defs": {
         "timeWindow": {
             "type": "string",
-            "pattern": "^[0-9]+[smhd]$",
-            "description": "Time duration with units (s=seconds, m=minutes, h=hours, d=days)"
+            "minLength": 1,
+            "pattern": "^([0-9]+d)?([0-9]+(\\.[0-9]+)?(ns|us|ms|s|m|h))*$",
+            "description": "Time duration made up of numbers with units (d=days, h=hours, m=minutes, s=seconds, ms, us, ns), days first, e.g. 30s, 5m, 1h30m, 1d or 1d12h"
         },
         "urlPattern": {
             "type": "string",
@@ -151,7 +154,8 @@
         },
         "lookback": {
             "type": "string",
-            "pattern": "^[0-9]+[smhd]$",
+            "minLength": 1,
+            "pattern": "^([0-9]+d)?([0-9]+(\\.[0-9]+)?(ns|us|ms|s|m|h))*$",
             "description": "The period to lookback for data, accounts for ingestion delay in some log sources"
         },
         "conversionConfig": {
@@ -267,7 +271,7 @@
                 },
                 "required_rule_fields": {
                     "type": "array",
-                    "description": "A list of the Sigma rule fields to include in the converter output files",
+                    "description": "A list of the Sigma rule fields to include in the converter output files. An empty list includes the whole rule, so in a configuration it removes a default list",
                     "items": {
                         "type": "string",
                         "examples": [
@@ -288,7 +292,7 @@
             "properties": {
                 "folder_id": {
                     "$ref": "#/$defs/grafanaId",
-                    "description": "Grafana folder ID where alerts will be created",
+                    "description": "Grafana folder ID where alerts will be created. Every configuration must resolve one, either here or from defaults.integration (the integrate action fails otherwise)",
                     "examples": [
                         "my48wfae9ojcgw",
                         "XXXX"
@@ -296,7 +300,7 @@
                 },
                 "org_id": {
                     "type": "integer",
-                    "description": "Grafana organization ID",
+                    "description": "Grafana organization ID. Every configuration must resolve one, either here or from defaults.integration (the integrate action fails otherwise)",
                     "minimum": 1,
                     "examples": [
                         1

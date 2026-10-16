@@ -9,7 +9,6 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"text/template"
 	"time"
@@ -168,6 +167,10 @@ func (i *Integrator) LoadConfig() error {
 	}
 	if !filepath.IsLocal(i.config.Folders.DeploymentPath) {
 		return fmt.Errorf("deployment path is not local: %s", i.config.Folders.DeploymentPath)
+	}
+
+	if err := validateAlertDestinations(i.config); err != nil {
+		return err
 	}
 
 	fmt.Printf("Conversion path: %s\nDeployment path: %s\n", i.config.Folders.ConversionPath, i.config.Folders.DeploymentPath)
@@ -633,25 +636,35 @@ func correlationWindowWarnings(rules []model.SigmaRule, timeWindow time.Duration
 	return warnings
 }
 
-// parseSigmaTimespan parses a Sigma correlation timespan. Besides the units
-// supported by time.ParseDuration it accepts a day suffix ("1d"), which Sigma
-// rules commonly use.
+// parseSigmaTimespan parses a Sigma correlation timespan, which commonly uses a day suffix ("1d")
 func parseSigmaTimespan(s string) (time.Duration, error) {
-	s = strings.TrimSpace(s)
-	if days, ok := strings.CutSuffix(s, "d"); ok {
-		n, err := strconv.Atoi(days)
-		if err != nil {
-			return 0, err
+	return shared.ParseDuration(strings.TrimSpace(s))
+}
+
+// validateAlertDestinations checks that every configuration resolves a folder_id and an org_id, from
+// its own integration settings or from the defaults. The schema can't require them, as they may be set
+// in either place, but without them the alert rules would be generated for no folder or organisation,
+// and only fail later when they are deployed.
+func validateAlertDestinations(config model.Configuration) error {
+	var problems []string
+	for _, cfg := range config.Configurations {
+		if shared.GetConfigValue(cfg.Integration.FolderID, config.Defaults.Integration.FolderID, "") == "" {
+			problems = append(problems, fmt.Sprintf("configuration %q has no folder_id", cfg.Name))
 		}
-		return time.Duration(n) * 24 * time.Hour, nil
+		if shared.GetConfigValueInt64(cfg.Integration.OrgID, config.Defaults.Integration.OrgID) == 0 {
+			problems = append(problems, fmt.Sprintf("configuration %q has no org_id", cfg.Name))
+		}
 	}
-	return time.ParseDuration(s)
+	if len(problems) > 0 {
+		return fmt.Errorf("%s: set folder_id and org_id in defaults.integration or in the configuration's integration block", strings.Join(problems, ", "))
+	}
+	return nil
 }
 
 func (i *Integrator) ConvertToAlert(rule *model.ProvisionedAlertRule, queries []string, titles string, cfg model.NamedConfigBlock, conversionFile string, integrateFile string, conversionObject model.ConversionOutput) error {
 	datasource := shared.GetConfigValue(cfg.Integration.DataSource, i.config.Defaults.Integration.DataSource, "nil")
 	timewindow := shared.GetConfigValue(cfg.Integration.TimeWindow, i.config.Defaults.Integration.TimeWindow, "1m")
-	duration, err := time.ParseDuration(timewindow)
+	duration, err := shared.ParseDuration(timewindow)
 	if err != nil {
 		return fmt.Errorf("error parsing time window: %v", err)
 	}
@@ -663,7 +676,7 @@ func (i *Integrator) ConvertToAlert(rule *model.ProvisionedAlertRule, queries []
 	}
 
 	lookback := shared.GetConfigValue(cfg.Integration.Lookback, i.config.Defaults.Integration.Lookback, "0s")
-	lookbackDuration, err := time.ParseDuration(lookback)
+	lookbackDuration, err := shared.ParseDuration(lookback)
 	if err != nil {
 		return fmt.Errorf("error parsing lookback: %v", err)
 	}

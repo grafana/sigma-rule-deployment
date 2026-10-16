@@ -46,6 +46,17 @@ def _read_existing_output(output_file: Path) -> dict[str, Any] | None:
         return None
 
 
+def _setting(conversion: dict[str, Any], key: str, default: Any) -> Any:
+    """Return a configuration's own value for a setting, or the default if the key is unset.
+
+    An empty value that is set (e.g. `pipelines: []`) overrides the default rather than falling
+    back to it, so a configuration can switch off a default list, map or number. A null value
+    (e.g. `pipelines:` with nothing after it) counts as unset.
+    """
+    value = conversion.get(key)
+    return default if value is None else value
+
+
 def _manual_is_set(value: Any) -> bool:
     """Return True if a decoded `manual` value marks a file as manually maintained.
 
@@ -327,7 +338,7 @@ def convert_rules(
             print("Converting all discovered rules")
 
         # Verify that all pipeline files are relative to the repository root (GITHUB_WORKSPACE)
-        for pipeline in (conversion.get("pipelines") or default_pipelines):
+        for pipeline in _setting(conversion, "pipelines", default_pipelines):
             if Path(pipeline).is_absolute():
                 raise ValueError(
                     "Pipeline file path must be relative to the project root"
@@ -337,7 +348,7 @@ def convert_rules(
 
         pipelines = []
         any_pipeline_changed = False
-        for pipeline in (conversion.get("pipelines") or default_pipelines):
+        for pipeline in _setting(conversion, "pipelines", default_pipelines):
             if is_path(pipeline, file_pattern):
                 pipeline_path = path_prefix / Path(pipeline)
                 pipelines.append(f"--pipeline={pipeline_path}")
@@ -389,7 +400,7 @@ def convert_rules(
                         else []
                     )
                 ),
-                *[f"--filter={f}" for f in (conversion.get("filters") or default_filters)],
+                *[f"--filter={f}" for f in _setting(conversion, "filters", default_filters)],
                 "--file-pattern",
                 file_pattern,
                 "--output",
@@ -398,8 +409,8 @@ def convert_rules(
                 encoding,
                 *[
                     f"--backend-option={k}={v}"
-                    for k, v in (
-                        conversion.get("backend_options") or default_backend_options
+                    for k, v in _setting(
+                        conversion, "backend_options", default_backend_options
                     ).items()
                 ],
                 *(
@@ -421,17 +432,8 @@ def convert_rules(
                         else []
                     )
                 ),
-                *(
-                    [
-                        "--json-indent",
-                        str(conversion.get("json_indent")),
-                    ]
-                    if conversion.get("json_indent")
-                    else [
-                        "--json-indent",
-                        str(default_json_indent),
-                    ]
-                ),
+                "--json-indent",
+                str(_setting(conversion, "json_indent", default_json_indent)),
                 *(["--verbose"] if conversion.get("verbose", verbose) else []),
                 input_file,
             ]
@@ -469,7 +471,9 @@ def convert_rules(
                     continue
 
                 # Filter the rules to only include the required fields, if empty, return the full rule dictionaries
-                required_rule_fields = conversion.get("required_rule_fields") or default_required_rule_fields
+                required_rule_fields = _setting(
+                    conversion, "required_rule_fields", default_required_rule_fields
+                )
 
                 # Create the output data structure
                 output_data = {

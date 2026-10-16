@@ -404,6 +404,21 @@ func TestConvertToAlert(t *testing.T) {
 			wantError: true,
 		},
 		{
+			name:    "time window and lookback accept a day unit",
+			queries: []string{"{job=`.+`} | json | test=`true`"},
+			titles:  "Days",
+			rule:    &model.ProvisionedAlertRule{UID: ""},
+			convConfig: model.NamedConfigBlock{
+				Name: "conv",
+				ConfigBlock: model.ConfigBlock{
+					Conversion:  model.ConversionConfig{Target: "loki"},
+					Integration: model.IntegrationConfig{DataSource: "my_data_source", RuleGroup: "Daily", TimeWindow: "1d", Lookback: "1h"},
+				},
+			},
+			wantQueryText: "sum(count_over_time({job=`.+`} | json | test=`true`[$__auto]))",
+			wantDuration:  model.Duration(25 * time.Hour),
+		},
+		{
 			name:       "per-config template_all_rules false overrides default true",
 			queries:    []string{"{job=`.+`} | json | test=`true`"},
 			titles:     "Template All Rules Override",
@@ -566,7 +581,7 @@ func TestLoadConfig(t *testing.T) {
 					Conversion: model.ConversionConfig{
 						Target:          "loki",
 						Format:          "default",
-						SkipUnsupported: "true",
+						SkipUnsupported: new(true),
 						FilePattern:     "*.yml",
 					},
 					Integration: model.IntegrationConfig{
@@ -610,7 +625,7 @@ func TestLoadConfig(t *testing.T) {
 					Conversion: model.ConversionConfig{
 						Target:          "loki",
 						Format:          "default",
-						SkipUnsupported: "true",
+						SkipUnsupported: new(true),
 						FilePattern:     "*.yml",
 					},
 					Integration: model.IntegrationConfig{
@@ -654,7 +669,7 @@ func TestLoadConfig(t *testing.T) {
 					Conversion: model.ConversionConfig{
 						Target:          "esql",
 						Format:          "default",
-						SkipUnsupported: "true",
+						SkipUnsupported: new(true),
 						FilePattern:     "*.yml",
 					},
 					Integration: model.IntegrationConfig{
@@ -697,7 +712,7 @@ func TestLoadConfig(t *testing.T) {
 					Conversion: model.ConversionConfig{
 						Target:          "esql",
 						Format:          "default",
-						SkipUnsupported: "true",
+						SkipUnsupported: new(true),
 						FilePattern:     "*.yml",
 					},
 					Integration: model.IntegrationConfig{
@@ -740,7 +755,7 @@ func TestLoadConfig(t *testing.T) {
 					Conversion: model.ConversionConfig{
 						Target:          "loki",
 						Format:          "default",
-						SkipUnsupported: "true",
+						SkipUnsupported: new(true),
 						FilePattern:     "*.yml",
 					},
 					Integration: model.IntegrationConfig{
@@ -784,7 +799,7 @@ func TestLoadConfig(t *testing.T) {
 					Conversion: model.ConversionConfig{
 						Target:          "loki",
 						Format:          "default",
-						SkipUnsupported: "true",
+						SkipUnsupported: new(true),
 						FilePattern:     "*.yml",
 					},
 					Integration: model.IntegrationConfig{
@@ -828,7 +843,7 @@ func TestLoadConfig(t *testing.T) {
 					Conversion: model.ConversionConfig{
 						Target:          "loki",
 						Format:          "default",
-						SkipUnsupported: "true",
+						SkipUnsupported: new(true),
 						FilePattern:     "*.yml",
 					},
 					Integration: model.IntegrationConfig{
@@ -2647,6 +2662,75 @@ func TestLoadConfigContinueOnErrorEnvVar(t *testing.T) {
 			i := NewIntegrator()
 			require.NoError(t, i.LoadConfig())
 			assert.Equal(t, tc.want, i.config.Defaults.Integration.ContinueOnError)
+		})
+	}
+}
+
+func TestLoadConfigRequiresResolvableFolderAndOrg(t *testing.T) {
+	tests := []struct {
+		name      string
+		defaults  string // lines under defaults.integration
+		configs   string // the configurations list items
+		wantError []string
+	}{
+		{
+			name:     "set in defaults",
+			defaults: "    folder_id: XXXX\n    org_id: 1\n",
+			configs:  "  - name: a\n    conversion:\n      input: x\n",
+		},
+		{
+			name:     "set only per configuration",
+			defaults: "    data_source: ds\n",
+			configs:  "  - name: a\n    conversion:\n      input: x\n    integration:\n      folder_id: F\n      org_id: 2\n",
+		},
+		{
+			name:     "configuration overrides the defaults",
+			defaults: "    folder_id: XXXX\n    org_id: 1\n",
+			configs:  "  - name: a\n    conversion:\n      input: x\n    integration:\n      folder_id: F\n      org_id: 2\n",
+		},
+		{
+			name:      "nothing set anywhere",
+			defaults:  "    data_source: ds\n",
+			configs:   "  - name: a\n    conversion:\n      input: x\n",
+			wantError: []string{`configuration "a" has no folder_id`, `configuration "a" has no org_id`},
+		},
+		{
+			name:      "only the configuration without a destination is reported",
+			defaults:  "    data_source: ds\n",
+			configs:   "  - name: ok\n    conversion:\n      input: x\n    integration:\n      folder_id: F\n      org_id: 2\n  - name: missing_org\n    conversion:\n      input: y\n    integration:\n      folder_id: F\n",
+			wantError: []string{`configuration "missing_org" has no org_id`},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			configFile, err := os.CreateTemp(".", "test_destination_*.yml")
+			require.NoError(t, err)
+			t.Cleanup(func() { os.Remove(configFile.Name()) })
+			deployDir, err := os.MkdirTemp(".", "test-destination-*")
+			require.NoError(t, err)
+			t.Cleanup(func() { os.RemoveAll(deployDir) })
+			_, err = configFile.WriteString("version: 2\nfolders:\n  conversion_path: conversions\n  deployment_path: \"" + deployDir + "\"\n" +
+				"defaults:\n  integration:\n" + tc.defaults + "configurations:\n" + tc.configs)
+			require.NoError(t, err)
+			require.NoError(t, configFile.Close())
+
+			t.Setenv("INTEGRATOR_CONFIG_PATH", configFile.Name())
+			t.Setenv("INTEGRATOR_GRAFANA_SA_TOKEN", "my-test-token")
+			t.Setenv("CHANGED_FILES", "")
+			t.Setenv("DELETED_FILES", "")
+			t.Setenv("MANUAL_FILES", "")
+			t.Setenv("ALL_RULES", "false")
+			t.Setenv("TEST_FILES", "")
+
+			err = NewIntegrator().LoadConfig()
+			if len(tc.wantError) == 0 {
+				require.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			for _, want := range tc.wantError {
+				assert.ErrorContains(t, err, want)
+			}
 		})
 	}
 }

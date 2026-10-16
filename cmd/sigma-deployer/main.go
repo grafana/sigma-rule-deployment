@@ -57,7 +57,7 @@ func main() {
 			// Parse timeout from configuration
 			timeoutDuration := 10 * time.Second // Default timeout
 			if config.Defaults.Deployment.Timeout != "" {
-				parsedTimeout, err := time.ParseDuration(config.Defaults.Deployment.Timeout)
+				parsedTimeout, err := shared.ParseDuration(config.Defaults.Deployment.Timeout)
 				if err != nil {
 					fmt.Printf("Warning: Invalid timeout format in config, using default: %v\n", err)
 				} else {

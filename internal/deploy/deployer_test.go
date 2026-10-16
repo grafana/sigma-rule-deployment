@@ -1604,3 +1604,18 @@ func TestLoadConfigRuleGroupIntervalsAreKeyedByFolder(t *testing.T) {
 		assert.ErrorContains(t, err, "time window for rule group shared in folder folder-a is different")
 	})
 }
+
+func TestLoadConfigAcceptsDaysInTimeWindowAndTimeout(t *testing.T) {
+	writeTestDeployerConfig(t, "version: 2\nfolders:\n  deployment_path: \"./deployments\"\n"+
+		"defaults:\n  integration:\n    folder_id: f\n    org_id: 1\n    time_window: 1d\n"+
+		"  deployment:\n    grafana_instance: https://myinstance.grafana.com\n    timeout: 1d\n"+
+		"configurations:\n  - name: a\n    integration:\n      rule_group: g\n  - name: b\n    integration:\n      rule_group: h\n      time_window: 1d12h\n")
+
+	d := NewDeployer()
+	assert.NoError(t, d.LoadConfig(context.Background()))
+	assert.Equal(t, 24*time.Hour, d.config.timeout)
+	assert.Equal(t, map[ruleGroup]int64{
+		{folderUID: "f", name: "g"}: 86400,
+		{folderUID: "f", name: "h"}: 129600,
+	}, d.config.groupsIntervals)
+}

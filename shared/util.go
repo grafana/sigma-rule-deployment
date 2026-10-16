@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -120,12 +122,46 @@ func GetConfigValueInt64(config, defaultVal int64) int64 {
 	return defaultVal
 }
 
-// ParseDurationOrDefault parses s as a duration, returning defaultVal if s is empty or invalid.
+// ParseDuration parses a duration as time.ParseDuration does, and additionally accepts a leading whole
+// number of days ("1d", "2d12h"), which time.ParseDuration doesn't support. A day is 24 hours.
+// Days must come first and be unsigned, so "1h1d" and "-1d" are rejected.
+func ParseDuration(s string) (time.Duration, error) {
+	end := 0
+	for end < len(s) && s[end] >= '0' && s[end] <= '9' {
+		end++
+	}
+	if end == 0 || end >= len(s) || s[end] != 'd' {
+		return time.ParseDuration(s)
+	}
+	days, err := strconv.ParseInt(s[:end], 10, 64)
+	if err != nil || days > int64(math.MaxInt64/(24*time.Hour)) {
+		return 0, fmt.Errorf("invalid duration %q: too many days", s)
+	}
+	total := time.Duration(days) * 24 * time.Hour
+	rest := s[end+1:]
+	if rest == "" {
+		return total, nil
+	}
+	remainder, err := time.ParseDuration(rest)
+	if err != nil {
+		return 0, fmt.Errorf("invalid duration %q: %w", s, err)
+	}
+	// time.ParseDuration accepts a sign, which would be meaningless after the days
+	if rest[0] == '-' || rest[0] == '+' {
+		return 0, fmt.Errorf("invalid duration %q", s)
+	}
+	if total > math.MaxInt64-remainder {
+		return 0, fmt.Errorf("invalid duration %q: overflows", s)
+	}
+	return total + remainder, nil
+}
+
+// ParseDurationOrDefault parses s as a duration (see ParseDuration), returning defaultVal if s is empty or invalid.
 func ParseDurationOrDefault(s string, defaultVal time.Duration) time.Duration {
 	if s == "" {
 		return defaultVal
 	}
-	if d, err := time.ParseDuration(s); err == nil {
+	if d, err := ParseDuration(s); err == nil {
 		return d
 	}
 	return defaultVal

@@ -6,8 +6,9 @@ folders:
 # matching default, with these rules:
 #  - text and number settings (e.g. rule_group, time_window, folder_id) replace the default
 #  - boolean settings (e.g. test_queries) replace the default when set, so `false` turns off a default of `true`
-#  - template_labels and template_annotations replace the default map entirely, they are NOT merged
-#    key by key, so repeat any default entries you want to keep (use `{}` to remove them all)
+#  - lists and maps (pipelines, filters, backend_options, required_rule_fields, template_labels and
+#    template_annotations) replace the default entirely, they are NOT merged, so repeat any default
+#    entries you want to keep. Use `[]` or `{}` to remove the default altogether; leaving the key out keeps it
 defaults:
   conversion:
     target: loki

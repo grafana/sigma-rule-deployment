@@ -6,7 +6,7 @@ defaults:
   conversion:
     target: loki
     format: default
-    skip_unsupported: "true"
+    skip_unsupported: true
     file_pattern: "*.yml"
   integration:
     data_source: grafanacloud-logs
@@ -14,6 +14,8 @@ defaults:
     org_id: 1
 configurations:
   - name: conv
+    conversion:
+      input: "rules/*"
     integration:
       rule_group: Every 5 Minutes
       time_window: 5m

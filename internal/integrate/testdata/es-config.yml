@@ -6,7 +6,7 @@ defaults:
   conversion:
     target: esql
     format: default
-    skip_unsupported: "true"
+    skip_unsupported: true
     file_pattern: "*.yml"
   integration:
     data_source: grafanacloud-es-logs
@@ -16,18 +16,26 @@ defaults:
     test_queries: true
 configurations:
   - name: conv1
+    conversion:
+      input: "rules/*"
     integration:
       rule_group: Every 5 Minutes
       time_window: 5m
   - name: conv2
+    conversion:
+      input: "rules/*"
     integration:
       rule_group: Every 10 Minutes
       time_window: 10m
   - name: conv3
+    conversion:
+      input: "rules/*"
     integration:
       rule_group: Every 30 Minutes
       time_window: 30m
   - name: conv4
+    conversion:
+      input: "rules/*"
     integration:
       rule_group: Every 20 Minutes
       time_window: 20m

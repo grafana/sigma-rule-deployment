@@ -62,7 +62,7 @@ type ConversionConfig struct {
 	// Sigma conversion settings
 	Target          string   `yaml:"target"`
 	Format          string   `yaml:"format"`
-	SkipUnsupported string   `yaml:"skip_unsupported"`
+	SkipUnsupported *bool    `yaml:"skip_unsupported,omitempty"`
 	FilePattern     string   `yaml:"file_pattern"`
 	Pipeline        []string `yaml:"pipelines"`
 	// Templating settings

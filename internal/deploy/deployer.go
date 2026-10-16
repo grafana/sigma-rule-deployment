@@ -382,7 +382,7 @@ func (d *Deployer) LoadConfig(_ context.Context) error {
 
 	// Parse timeout if provided
 	if configYAML.Defaults.Deployment.Timeout != "" {
-		parsedTimeout, err := time.ParseDuration(configYAML.Defaults.Deployment.Timeout)
+		parsedTimeout, err := shared.ParseDuration(configYAML.Defaults.Deployment.Timeout)
 		if err != nil {
 			log.Printf("Warning: Invalid timeout format in config, using default: %v\n", err)
 		} else {
@@ -411,7 +411,7 @@ func (d *Deployer) LoadConfig(_ context.Context) error {
 		timeout := d.config.timeout
 		hasTimeout := false
 		if cfg.Deployment.Timeout != "" {
-			if parsedTimeout, err := time.ParseDuration(cfg.Deployment.Timeout); err != nil {
+			if parsedTimeout, err := shared.ParseDuration(cfg.Deployment.Timeout); err != nil {
 				log.Printf("Warning: Invalid timeout format for configuration %s, using default: %v\n", sanitizeForLog(cfg.Name), err) //nolint:gosec // G706: cfg.Name sanitized with sanitizeForLog before logging
 			} else {
 				timeout = parsedTimeout
@@ -448,7 +448,7 @@ func (d *Deployer) LoadConfig(_ context.Context) error {
 		if config.Integration.TimeWindow != "" {
 			interval = config.Integration.TimeWindow
 		}
-		intervalDuration, err := time.ParseDuration(interval)
+		intervalDuration, err := shared.ParseDuration(interval)
 		log.Printf("Interval duration from %s: %d", sanitizeForLog(interval), int64(intervalDuration.Seconds())) //nolint:gosec // G706: interval sanitized with sanitizeForLog before logging
 		if err != nil || int64(intervalDuration.Seconds()) <= 0 {
 			return fmt.Errorf("error parsing time window %s: %v", interval, err)

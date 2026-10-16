@@ -2,6 +2,7 @@ package shared
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -51,4 +52,38 @@ func TestGetConfigBool(t *testing.T) {
 			assert.Equal(t, tt.want, GetConfigBool(tt.config, tt.defaultVal))
 		})
 	}
+}
+
+func TestParseDuration(t *testing.T) {
+	const day = 24 * time.Hour
+	valid := map[string]time.Duration{
+		"30s":    30 * time.Second,
+		"5m":     5 * time.Minute,
+		"1h30m":  90 * time.Minute,
+		"1.5h":   90 * time.Minute,
+		"500ms":  500 * time.Millisecond,
+		"1d":     day,
+		"7d":     7 * day,
+		"0d":     0,
+		"1d12h":  day + 12*time.Hour,
+		"2d1h5s": 2*day + time.Hour + 5*time.Second,
+	}
+	for in, want := range valid {
+		t.Run("valid "+in, func(t *testing.T) {
+			got, err := ParseDuration(in)
+			assert.NoError(t, err)
+			assert.Equal(t, want, got)
+		})
+	}
+
+	invalid := []string{"", "d", "1", "x", "1x", "1h1d", "-1d", "1d-1h", "1d+1h", "1.5d", "1dd", "1d1d", "99999999999999999999d", "9999999d"}
+	for _, in := range invalid {
+		t.Run("invalid "+in, func(t *testing.T) {
+			_, err := ParseDuration(in)
+			assert.Error(t, err)
+		})
+	}
+
+	assert.Equal(t, day, ParseDurationOrDefault("1d", time.Second), "ParseDurationOrDefault supports days")
+	assert.Equal(t, time.Second, ParseDurationOrDefault("bogus", time.Second))
 }

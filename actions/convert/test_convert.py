@@ -21,7 +21,7 @@ def mock_config():
                 "conversion": {
                     "target": "loki",
                     "format": "default",
-                    "skip_unsupported": "true",
+                    "skip_unsupported": True,
                     "file_pattern": "*.yml",
                 },
             },
@@ -49,7 +49,7 @@ def mock_config_with_correlation_rule():
                 "conversion": {
                     "target": "loki",
                     "format": "default",
-                    "skip_unsupported": "true",
+                    "skip_unsupported": True,
                     "file_pattern": "*.yml",
                     "encoding": "utf-8",
                 },
@@ -78,7 +78,7 @@ def mock_config_two_groups():
                 "conversion": {
                     "target": "loki",
                     "format": "default",
-                    "skip_unsupported": "true",
+                    "skip_unsupported": True,
                     "file_pattern": "*.yml",
                 },
             },
@@ -570,7 +570,7 @@ def test_convert_rules_required_rule_fields_per_conversion(temp_workspace):
                 "conversion": {
                     "target": "loki",
                     "format": "default",
-                    "skip_unsupported": "true",
+                    "skip_unsupported": True,
                     "file_pattern": "*.yml",
                     "required_rule_fields": ["title", "level", "description"],
                 },
@@ -1812,7 +1812,7 @@ def test_convert_rules_default_change_reconverts_all_groups(temp_workspace):
                     # sigma-cli invocation for both groups actually succeeds.
                     "target": "text_query_test",
                     "format": "default",
-                    "skip_unsupported": "true",
+                    "skip_unsupported": True,
                     "file_pattern": "*.yml",
                 },
             },
@@ -1825,7 +1825,7 @@ def test_convert_rules_default_change_reconverts_all_groups(temp_workspace):
                 "conversion": {
                     "target": "loki",
                     "format": "default",
-                    "skip_unsupported": "true",
+                    "skip_unsupported": True,
                     "file_pattern": "*.yml",
                 },
             },
@@ -2041,3 +2041,132 @@ def test_convert_rules_dropped_input_entry_respects_manual_flag(
     )
 
     assert manual_output.read_text() == manual_content
+
+
+def _recorded_invoke_args(temp_workspace, default_conversion, conversion):
+    """Run convert_rules with a mocked sigma-cli and return the args it was invoked with."""
+    config = DynaconfDict(
+        {
+            "version": 2,
+            "defaults": {"conversion": {"target": "loki", "file_pattern": "*.yml", **default_conversion}},
+            "configurations": [
+                {"name": "test_conversion", "conversion": {"input": ["rules/*.yml"], **conversion}}
+            ],
+        }
+    )
+    with patch("click.testing.CliRunner.invoke") as mock_invoke:
+        mock_result = MagicMock()
+        mock_result.exception = None
+        mock_result.exc_info = None
+        mock_result.exit_code = 0
+        mock_result.stdout = "Parsing Sigma rules\n"
+        mock_invoke.return_value = mock_result
+        convert_rules(config=config, path_prefix=temp_workspace, all_rules=True)
+    assert mock_invoke.call_count == 1
+    return mock_invoke.call_args[1]["args"]
+
+
+def _flag_values(args, prefix):
+    return [a for a in args if a.startswith(prefix)]
+
+
+def test_conversion_list_and_map_settings_inherit_defaults_when_unset(temp_workspace):
+    args = _recorded_invoke_args(
+        temp_workspace,
+        {
+            "pipelines": ["pipelines/default.yml"],
+            "filters": ["default_filter"],
+            "backend_options": {"opt": "default"},
+            "json_indent": 4,
+        },
+        {},
+    )
+    assert _flag_values(args, "--pipeline=") == [f"--pipeline={temp_workspace}/pipelines/default.yml"]
+    assert _flag_values(args, "--filter=") == ["--filter=default_filter"]
+    assert _flag_values(args, "--backend-option=") == ["--backend-option=opt=default"]
+    assert args[args.index("--json-indent") + 1] == "4"
+
+
+def test_conversion_values_replace_defaults(temp_workspace):
+    args = _recorded_invoke_args(
+        temp_workspace,
+        {
+            "pipelines": ["pipelines/default.yml"],
+            "filters": ["default_filter"],
+            "backend_options": {"opt": "default", "other": "default"},
+            "json_indent": 4,
+        },
+        {
+            "pipelines": ["pipelines/own.yml"],
+            "filters": ["own_filter"],
+            "backend_options": {"opt": "own"},
+            "json_indent": 2,
+        },
+    )
+    assert _flag_values(args, "--pipeline=") == [f"--pipeline={temp_workspace}/pipelines/own.yml"]
+    assert _flag_values(args, "--filter=") == ["--filter=own_filter"]
+    # Maps are replaced, not merged key by key
+    assert _flag_values(args, "--backend-option=") == ["--backend-option=opt=own"]
+    assert args[args.index("--json-indent") + 1] == "2"
+
+
+def test_conversion_empty_values_override_defaults(temp_workspace):
+    """An explicitly empty list, map or zero switches off the default instead of falling back to it."""
+    args = _recorded_invoke_args(
+        temp_workspace,
+        {
+            "pipelines": ["pipelines/default.yml"],
+            "filters": ["default_filter"],
+            "backend_options": {"opt": "default"},
+            "json_indent": 4,
+        },
+        {"pipelines": [], "filters": [], "backend_options": {}, "json_indent": 0},
+    )
+    assert _flag_values(args, "--pipeline=") == []
+    assert _flag_values(args, "--filter=") == []
+    assert _flag_values(args, "--backend-option=") == []
+    assert args[args.index("--json-indent") + 1] == "0"
+
+
+def test_conversion_null_values_inherit_defaults(temp_workspace):
+    """A key with no value (YAML null) counts as unset."""
+    args = _recorded_invoke_args(
+        temp_workspace,
+        {"pipelines": ["pipelines/default.yml"], "filters": ["default_filter"], "backend_options": {"opt": "default"}},
+        {"pipelines": None, "filters": None, "backend_options": None},
+    )
+    assert _flag_values(args, "--pipeline=") == [f"--pipeline={temp_workspace}/pipelines/default.yml"]
+    assert _flag_values(args, "--filter=") == ["--filter=default_filter"]
+    assert _flag_values(args, "--backend-option=") == ["--backend-option=opt=default"]
+
+
+def test_convert_rules_empty_required_rule_fields_overrides_default(temp_workspace):
+    """required_rule_fields: [] in a configuration keeps the whole rule, rather than the default's fields."""
+    config = DynaconfDict(
+        {
+            "version": 2,
+            "defaults": {
+                "conversion": {
+                    "target": "loki",
+                    "format": "default",
+                    "skip_unsupported": True,
+                    "file_pattern": "*.yml",
+                    "required_rule_fields": ["title"],
+                },
+            },
+            "configurations": [
+                {
+                    "name": "test_conversion",
+                    "conversion": {"input": ["rules/*.yml"], "required_rule_fields": []},
+                }
+            ],
+        }
+    )
+    convert_rules(config=config, path_prefix=temp_workspace, all_rules=True)
+
+    output_file = temp_workspace / "conversions" / "test_conversion_test.json"
+    assert output_file.exists()
+    data = json.loads(output_file.read_bytes())
+    assert len(data["rules"]) == 1
+    assert list(data["rules"][0].keys()) != ["title"], "the default's required fields must not be applied"
+    assert "title" in data["rules"][0] and len(data["rules"][0]) > 1

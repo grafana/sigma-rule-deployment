@@ -1,5 +1,6 @@
 version: 2
 folders:
+  conversion_path: "./conversions"
   deployment_path: "./deployments"
 defaults:
   integration:
@@ -9,18 +10,26 @@ defaults:
     grafana_instance: https://myinstance.grafana.com
 configurations:
   - name: group1_config
+    conversion:
+      input: "rules/*"
     integration:
       rule_group: "group1"
       time_window: "10m"
   - name: group2_config
+    conversion:
+      input: "rules/*"
     integration:
       rule_group: "group2"
       time_window: "1h"
   - name: group3_config
+    conversion:
+      input: "rules/*"
     integration:
       rule_group: "group3"
       time_window: "6h"
   - name: group4_config
+    conversion:
+      input: "rules/*"
     integration:
       rule_group: "group4"
       time_window: "5m"
