@@ -123,14 +123,19 @@ Create a configuration file (typically named `config.yml`) in your repository. T
 ![Config file example](assets/Config.png "Config File")
 
 **Pro tip**: Start with a sample configuration and customize it for your environment. You can find example configurations in the repository:
-- [config-example.yml](config/config-example.yml) - Complete example with comments
-- [schema.json](config/schema.json) - Configuration schema for validation
+- [config-example-v2.yml](config/config-example-v2.yml) - Complete example with comments
+- [schema-v2.json](config/schema-v2.json) - Configuration schema for validation
+
+> [!NOTE]
+> The v1 configuration format (`conversion_defaults`, `conversions`) is deprecated and no longer supported by the Actions. If you have an existing v1 file, use the [migration script](scripts/migrate-config-v1-to-v2/README.md) to convert it to v2.
 
 The configuration file uses YAML format and includes sections for:
-- **Conversions**: Define which rules to convert and how
-- **Data sources**: Specify which Grafana data source to use
-- **Alert settings**: Configure folders, groups, intervals, and more
-- **Query models**: Customize the generated queries for your data source
+- **Folders**: Where converted rules and deployed alert files are stored
+- **Defaults**: Settings shared by every configuration, split into `conversion`, `integration` and `deployment` blocks
+- **Configurations**: One entry per set of rules to convert, each with its own `conversion` settings (input files, pipelines, backend options) and optional `integration` and `deployment` overrides
+- **Data sources**: Specify which Grafana data source to use (`integration.data_source`)
+- **Alert settings**: Configure folders, groups, intervals, and more (`integration`)
+- **Query models**: Customize the generated queries for your data source (`integration.query_model`)
 
 ## Step 6: Set Up GitHub Actions Workflows
 
@@ -239,7 +244,7 @@ Congratulations! 🎉 You've completed the basic setup. Here's what you should d
 ## Additional Resources
 
 - [Main README](README.md) - Comprehensive documentation
-- [Configuration Schema](config/schema.json) - Detailed configuration options
+- [Configuration Schema](config/schema-v2.json) - Detailed configuration options
 - [SigmaHQ Documentation](https://sigmahq.io/) - Sigma rule specification
 - [Grafana Alerting Documentation](https://grafana.com/docs/grafana/latest/alerting/) - Learn about Grafana alerting
 

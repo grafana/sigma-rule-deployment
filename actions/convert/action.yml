@@ -83,8 +83,11 @@ runs:
         # Diff Commands are constructed in conversion to discover the change for the **inputs** into the conversion process. This means that changes to the configuration or rules will
         # be registered as changed files, **but** changes to the output file will not register a change and will cause the conversion to pass but not run.
 
-        ACMR_DIFF_COMMAND="git diff ${PREVIOUS_REF} --name-only --diff-filter=ACMR -- '${CONFIG_PATH}' $(yq -r "[.conversions.[].input] | flatten | unique | [\"':(glob)\" + .[] + \"'\"] | join(\" \")" ${CONFIG_PATH}) $(yq -r "[.conversions.[].pipelines] | flatten | unique | [\"':(glob)\" + .[] + \"'\"] | join(\" \")" ${CONFIG_PATH})"
-        D_DIFF_COMMAND="git diff ${PREVIOUS_REF} --name-only --diff-filter=D -- '${CONFIG_PATH}' $(yq -r "[.conversions.[].input] | flatten | unique | [\"':(glob)\" + .[] + \"'\"] | join(\" \")" ${CONFIG_PATH}) $(yq -r "[.conversions.[].pipelines] | flatten | unique | [\"':(glob)\" + .[] + \"'\"] | join(\" \")" ${CONFIG_PATH})"
+        # v2 config: inputs are set per configuration, pipelines can be set in defaults and per configuration
+        PATHSPECS=$(yq -r "[(.configurations[].conversion.input, .defaults.conversion.pipelines, .configurations[].conversion.pipelines) | select(. != null)] | flatten | unique | [\"':(glob)\" + .[] + \"'\"] | join(\" \")" "${CONFIG_PATH}")
+
+        ACMR_DIFF_COMMAND="git diff ${PREVIOUS_REF} --name-only --diff-filter=ACMR -- '${CONFIG_PATH}' ${PATHSPECS}"
+        D_DIFF_COMMAND="git diff ${PREVIOUS_REF} --name-only --diff-filter=D -- '${CONFIG_PATH}' ${PATHSPECS}"
 
         # We want to only include the input files in the lists of changed and deleted files
         CHANGED_FILES=$(eval $ACMR_DIFF_COMMAND)

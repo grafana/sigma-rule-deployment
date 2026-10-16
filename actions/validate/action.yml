@@ -39,6 +39,7 @@ runs:
         INPUTS_V2_SCHEMA_FILE: ${{ inputs.v2_schema_file }}
         INPUTS_V1_SCHEMA_FILE: ${{ inputs.v1_schema_file }}
         GH_TOKEN: ${{ inputs.github_token }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
       run: |
         WORKSPACE_REAL=$(realpath "$GITHUB_WORKSPACE")
 
@@ -128,7 +129,7 @@ runs:
               echo ""
               echo "</details>"
             } > "$COMMENT_FILE"
-            gh pr comment HEAD --body-file "$COMMENT_FILE" --repo "$GITHUB_REPOSITORY"
+            gh pr comment "$PR_NUMBER" --body-file "$COMMENT_FILE" --repo "$GITHUB_REPOSITORY"
             rm "$COMMENT_FILE"
           else
             echo "--- Suggested v2 configuration ---"

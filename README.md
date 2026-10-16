@@ -22,9 +22,10 @@ Automate the conversion, testing, and deployment of [Sigma rules](https://sigmah
      - Alerting: Rules Writer
      - Alerting: Set provisioning status
      - Data sources: Reader
-3. Create a configuration file that defines one or more conversions and add it to the repository
-   - See the sample [configuration file](config/config-example.yml)
-   - See also the [configuration file schema](config/schema.json) for more details
+3. Create a configuration file that defines one or more configurations and add it to the repository
+   - See the sample [configuration file](config/config-example-v2.yml)
+   - See also the [configuration file schema](config/schema-v2.json) for more details
+   - The v1 configuration format is deprecated and no longer supported by the Actions. If you have a v1 file, use the [migration script](scripts/migrate-config-v1-to-v2/README.md) to convert it to v2
 4. Add a workflow to run the conversion/integration Actions on a PR commit or issue comment
    - See the reusable workflow [convert-integrate.yml](.github/workflows/convert-integrate.yml)
 5. Add a workflow to run the deployment Action on a push to main
@@ -111,7 +112,7 @@ SELECT COUNT(*) FROM A
 
 ### How can I use a custom query model for a data source?
 
-To ensure the data source plugin can execute your queries, you may need to provide a bespoke `query_model` in the conversion configuration. You do this by specifing a [fmt.Sprintf](https://pkg.go.dev/fmt#pkg-overview) formatted JSON string, which receives the following arguments:
+To ensure the data source plugin can execute your queries, you may need to provide a bespoke `query_model` in the `integration` section of the configuration (either in `defaults.integration` or in a configuration's own `integration` block). You do this by specifing a [fmt.Sprintf](https://pkg.go.dev/fmt#pkg-overview) formatted JSON string, which receives the following arguments:
 
 1. the ref ID for the query
 2. the UID for the data source
@@ -160,7 +161,7 @@ The main restriction are they need to be valid Sigma rules, including the `id` a
 > [!IMPORTANT]
 > The [Sigma Rules Validator](https://github.com/SigmaHQ/sigma-rules-validator) action does not currently work with multiple documents in a single YAML and hence we recommend storing such rules in a separate directory from the Sigma rules. More info can be found [here](./actions/sigma-validation/README.md)
 
-### What value should be provided for the `data_source` field in the `conversion` settings?
+### What value should be provided for the `data_source` field in the `integration` settings?
 
 This should be the UID (Unique IDentifier) of the data source, not the data source name. You can find the UID for a data source by opening the Explore page, selecting the relevant data source, and examining the page URL for the text `"datasource":"XXX"` - that value (i.e., `XXX`) is the UID.
 
