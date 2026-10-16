@@ -64,6 +64,7 @@ type Deployer struct {
 	client               *shared.GrafanaClient                        // current-operation client, set per-operation in Deploy
 	clients              []*shared.GrafanaClient                      // all default Grafana clients
 	perConversionClients map[string][]*shared.GrafanaClient           // per-conversion Grafana clients
+	configNames          []string                                     // every configuration name, to resolve which config an alert file belongs to
 	groupsToUpdate       map[*shared.GrafanaClient]map[ruleGroup]bool // rule groups touched on each Grafana instance, for interval updates
 }
 
@@ -82,11 +83,17 @@ func NewDeployer() *Deployer {
 
 // clientsForAlertFile returns the appropriate GrafanaClients for the given alert file,
 // based on the conversion name prefix in the filename. Falls back to d.clients.
+// The owning configuration is the longest matching name across all configurations, not just
+// those with a grafana_instance override, so "aws_cloudtrail" files never go to "aws" clients.
 func (d *Deployer) clientsForAlertFile(filename string) []*shared.GrafanaClient {
 	base := filepath.Base(filename)
 	name := strings.TrimPrefix(base, "alert_rule_")
-	for convName, clients := range d.perConversionClients {
-		if strings.HasPrefix(name, convName+"_") {
+	names := append([]string(nil), d.configNames...)
+	for convName := range d.perConversionClients {
+		names = append(names, convName)
+	}
+	if convName, ok := shared.MatchConfigName(name, names); ok {
+		if clients, ok := d.perConversionClients[convName]; ok {
 			return clients
 		}
 	}
@@ -340,7 +347,9 @@ func (d *Deployer) LoadConfig(_ context.Context) error {
 
 	// Build per-conversion clients for configurations that override the grafana_instance
 	d.perConversionClients = make(map[string][]*shared.GrafanaClient)
+	d.configNames = make([]string, 0, len(configYAML.Configurations))
 	for _, cfg := range configYAML.Configurations {
+		d.configNames = append(d.configNames, cfg.Name)
 		if len(cfg.Deployment.GrafanaInstance) > 0 {
 			timeout := shared.ParseDurationOrDefault(cfg.Deployment.Timeout, d.config.timeout)
 			clients := make([]*shared.GrafanaClient, 0, len(cfg.Deployment.GrafanaInstance))

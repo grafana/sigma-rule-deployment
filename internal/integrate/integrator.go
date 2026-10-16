@@ -213,12 +213,12 @@ func (i *Integrator) LoadConfig() error {
 		if newUpdatedFiles, err = filterFilesInDir(changedFiles, i.config.Folders.ConversionPath); err != nil {
 			return err
 		}
-		for _, path := range testFiles {
-			relpath, err := filepath.Rel(i.config.Folders.ConversionPath, path)
-			if err != nil {
-				return fmt.Errorf("error checking file path %s: %v", path, err)
-			}
-			if relpath == filepath.Base(path) && testQueriesEnabledForFile(filepath.Base(path), i.config) {
+		testCandidates, err := filterFilesInDir(testFiles, i.config.Folders.ConversionPath)
+		if err != nil {
+			return err
+		}
+		for _, path := range testCandidates {
+			if testQueriesEnabledForFile(filepath.Base(path), i.config) {
 				filesToBeTested = append(filesToBeTested, path)
 			}
 		}
@@ -1047,12 +1047,19 @@ func AnyTestQueriesEnabled(config model.Configuration) bool {
 }
 
 // testQueriesEnabledForFile returns true if the file's associated configuration has TestQueries enabled.
-// Files are matched to configurations by the "{configName}_" filename prefix.
+// Files are matched to configurations by the "{configName}_" filename prefix, taking the longest
+// matching name when one configuration name is a prefix of another.
 // Falls back to the default TestQueries setting if no named configuration matches.
 func testQueriesEnabledForFile(filename string, config model.Configuration) bool {
+	names := make([]string, 0, len(config.Configurations))
 	for _, cfg := range config.Configurations {
-		if strings.HasPrefix(filename, cfg.Name+"_") {
-			return config.Defaults.Integration.TestQueries || cfg.Integration.TestQueries
+		names = append(names, cfg.Name)
+	}
+	if name, ok := shared.MatchConfigName(filename, names); ok {
+		for _, cfg := range config.Configurations {
+			if cfg.Name == name {
+				return config.Defaults.Integration.TestQueries || cfg.Integration.TestQueries
+			}
 		}
 	}
 	return config.Defaults.Integration.TestQueries

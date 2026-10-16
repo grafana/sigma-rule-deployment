@@ -1332,3 +1332,46 @@ func TestDeployGroupIntervalUpdatesOnlyOnTouchedInstances(t *testing.T) {
 		})
 	}
 }
+
+func TestClientsForAlertFileOverlappingConfigNames(t *testing.T) {
+	newClient := func(url string) *shared.GrafanaClient {
+		return shared.NewGrafanaClient(url, "my-test-token", "sigma-rule-deployment/deployer", defaultRequestTimeout)
+	}
+	defaultClient := newClient("http://default.example/")
+	awsClient := newClient("http://aws.example/")
+	cloudtrailClient := newClient("http://cloudtrail.example/")
+
+	t.Run("longer config without override is not routed to a shorter config's instance", func(t *testing.T) {
+		d := &Deployer{
+			clients:              []*shared.GrafanaClient{defaultClient},
+			configNames:          []string{"aws", "aws_cloudtrail"},
+			perConversionClients: map[string][]*shared.GrafanaClient{"aws": {awsClient}},
+		}
+		assert.Equal(t, []*shared.GrafanaClient{defaultClient}, d.clientsForAlertFile("alert_rule_aws_cloudtrail_rule_uid1.json"))
+		assert.Equal(t, []*shared.GrafanaClient{awsClient}, d.clientsForAlertFile("alert_rule_aws_other_rule_uid2.json"))
+	})
+
+	t.Run("result does not depend on map iteration order when both configs have overrides", func(t *testing.T) {
+		d := &Deployer{
+			clients:     []*shared.GrafanaClient{defaultClient},
+			configNames: []string{"aws", "aws_cloudtrail"},
+			perConversionClients: map[string][]*shared.GrafanaClient{
+				"aws":            {awsClient},
+				"aws_cloudtrail": {cloudtrailClient},
+			},
+		}
+		for range 50 {
+			assert.Equal(t, []*shared.GrafanaClient{cloudtrailClient}, d.clientsForAlertFile("alert_rule_aws_cloudtrail_rule_uid1.json"))
+			assert.Equal(t, []*shared.GrafanaClient{awsClient}, d.clientsForAlertFile("alert_rule_aws_other_rule_uid2.json"))
+		}
+	})
+
+	t.Run("unknown config falls back to default clients", func(t *testing.T) {
+		d := &Deployer{
+			clients:              []*shared.GrafanaClient{defaultClient},
+			configNames:          []string{"aws"},
+			perConversionClients: map[string][]*shared.GrafanaClient{"aws": {awsClient}},
+		}
+		assert.Equal(t, []*shared.GrafanaClient{defaultClient}, d.clientsForAlertFile("alert_rule_okta_rule_uid3.json"))
+	})
+}

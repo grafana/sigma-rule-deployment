@@ -118,3 +118,18 @@ func ParseDurationOrDefault(s string, defaultVal time.Duration) time.Duration {
 	}
 	return defaultVal
 }
+
+// MatchConfigName returns the configuration name that owns filename, which must start with
+// "{name}_". When several names match (e.g. "aws" and "aws_cloudtrail" for
+// "aws_cloudtrail_rule.json") the longest wins, so the result doesn't depend on ordering.
+// Pass every configuration name, not just those with overrides, so a longer name without
+// overrides isn't mistaken for a shorter one that has them.
+func MatchConfigName(filename string, names []string) (string, bool) {
+	best, found := "", false
+	for _, name := range names {
+		if strings.HasPrefix(filename, name+"_") && (!found || len(name) > len(best)) {
+			best, found = name, true
+		}
+	}
+	return best, found
+}

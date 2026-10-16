@@ -14,6 +14,7 @@ import (
 	"github.com/grafana/sigma-rule-deployment/internal/model"
 	"github.com/grafana/sigma-rule-deployment/shared"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestConvertToAlert(t *testing.T) {
@@ -884,6 +885,34 @@ func TestLoadConfig(t *testing.T) {
 	defer os.Unsetenv("ALL_RULES")
 }
 
+func TestLoadConfigIgnoresEmptyTestFilesWithDotConversionPath(t *testing.T) {
+	configFile, err := os.CreateTemp(".", "test_dot_conversion_path_*.yml")
+	require.NoError(t, err)
+	t.Cleanup(func() { os.Remove(configFile.Name()) })
+	deployDir, err := os.MkdirTemp(".", "test-dot-conversion-path-*")
+	require.NoError(t, err)
+	t.Cleanup(func() { os.RemoveAll(deployDir) })
+
+	_, err = configFile.WriteString("version: 2\nfolders:\n  conversion_path: \".\"\n  deployment_path: \"" + deployDir + "\"\n" +
+		"defaults:\n  integration:\n    data_source: ds\n    folder_id: XXXX\n    org_id: 1\n    test_queries: true\n")
+	require.NoError(t, err)
+	require.NoError(t, configFile.Close())
+
+	t.Setenv("INTEGRATOR_CONFIG_PATH", configFile.Name())
+	t.Setenv("INTEGRATOR_GRAFANA_SA_TOKEN", "my-test-token")
+	t.Setenv("CHANGED_FILES", "")
+	t.Setenv("DELETED_FILES", "")
+	t.Setenv("MANUAL_FILES", "")
+	t.Setenv("ALL_RULES", "false")
+	// An unset TEST_FILES splits into a single empty entry, which must not be treated as a file
+	t.Setenv("TEST_FILES", "")
+
+	i := NewIntegrator()
+	require.NoError(t, i.LoadConfig())
+	assert.Empty(t, i.testFiles)
+	assert.Empty(t, i.addedFiles)
+}
+
 func TestTestQueriesEnabledForFile(t *testing.T) {
 	makeConfig := func(defaultsEnabled bool, cfgs ...model.NamedConfigBlock) model.Configuration {
 		return model.Configuration{
@@ -943,6 +972,24 @@ func TestTestQueriesEnabledForFile(t *testing.T) {
 			filename: "myconvmore_rule.json",
 			config:   makeConfig(false, namedCfg("myconv", true)),
 			want:     false,
+		},
+		{
+			name:     "longest matching name wins when one name prefixes another (shorter listed first)",
+			filename: "web_proxy_rule.json",
+			config:   makeConfig(false, namedCfg("web", false), namedCfg("web_proxy", true)),
+			want:     true,
+		},
+		{
+			name:     "longest matching name wins when one name prefixes another (longer listed first)",
+			filename: "web_proxy_rule.json",
+			config:   makeConfig(false, namedCfg("web_proxy", false), namedCfg("web", true)),
+			want:     false,
+		},
+		{
+			name:     "shorter name still matches its own files",
+			filename: "web_rule.json",
+			config:   makeConfig(false, namedCfg("web", true), namedCfg("web_proxy", false)),
+			want:     true,
 		},
 	}
 
