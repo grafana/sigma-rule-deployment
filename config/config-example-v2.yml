@@ -1,0 +1,83 @@
+version: 2
+folders:
+  conversion_path: "./conversions"
+  deployment_path: "./deployments"
+# Settings in `defaults` apply to every configuration. A setting in a configuration overrides the
+# matching default, with these rules:
+#  - text and number settings (e.g. rule_group, time_window, folder_id) replace the default
+#  - boolean settings (e.g. test_queries) replace the default when set, so `false` turns off a default of `true`
+#  - lists and maps (pipelines, filters, backend_options, required_rule_fields, template_labels and
+#    template_annotations) replace the default entirely, they are NOT merged, so repeat any default
+#    entries you want to keep. Use `[]` or `{}` to remove the default altogether; leaving the key out keeps it
+defaults:
+  conversion:
+    target: loki
+    format: default
+    skip_unsupported: true
+    file_pattern: "*.yml"
+    required_rule_fields:
+      - level
+      - logsource
+      - author
+  integration:
+    data_source: grafanacloud-logs # The UID of a data source
+    # data_source_type: elasticsearch # The data source plugin type, to select a built-in query model. Defaults to the conversion target
+    rule_group: Every 5 Minutes
+    time_window: 5m
+    folder_id: XXXX
+    org_id: 1
+    test_queries: true # Whether to test the queries against the datasource
+    # show_log_lines: false # Whether to include log line content in the query test results
+    # show_sample_values: false # Whether to include sample label values in the query test results
+    # continue_on_error: false # Whether to carry on when query testing fails (the integrate action's continue_on_query_testing_errors input takes precedence)
+    from: "now-1h"
+    to: "now"
+    template_labels:
+      Level: "{{.Level}}"
+      Product: "{{.Logsource.Product}}"
+      Service: "{{.Logsource.Service}}"
+    template_annotations:
+      Author: "{{.Author}}"
+    template_all_rules: false
+  deployment:
+    grafana_instance: https://myinstance.grafana.com
+    timeout: 10s # HTTP request timeout for testing queries
+configurations:
+  - name: aws_cloudtrail
+    conversion:
+      input: "rules/cloud/aws/cloudtrail/*"
+      backend_options:
+        case_sensitive: true
+      pipelines:
+        - pipelines/cloud/aws/cloudtrail/filter_permitted_aws_accounts.yml
+        - pipelines/datasources/aws_cloudtrail.yml
+    integration:
+      rule_group: Cloudtrail
+      time_window: 30m
+    deployment:
+      grafana_instance: https://myawsinstance.grafana.com
+  - name: gcp_k8s
+    conversion:
+      input: "rules/cloud/kubernetes/audit/*"
+      pipeline_check: false
+      encoding: utf-8
+      pipelines:
+        - pipelines/cloud/gcp/audit/gcp_kubernetes_audit_logs.yml
+    integration:
+      test_queries: false # Overrides the default of true for this configuration only
+      template_labels: # Replaces all of the default template_labels, so Product and Service are not set here
+        Level: "{{.Level}}"
+        Team: platform
+  - name: okta_audit
+    conversion:
+      input: "rules/cloud/okta/*"
+      backend_options:
+        case_sensitive: false
+        add_line_filters: true
+      pipelines:
+        - loki_okta_system_log
+    integration:
+      rule_group: Every 1 Hour
+      time_window: 1h
+      data_source: okta-loki
+      query_model: '{"refId":"%s","datasource":{"type":"loki","uid":"%s"},"query":"%s"}' # A custom query model

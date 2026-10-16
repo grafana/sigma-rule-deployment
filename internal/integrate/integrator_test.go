@@ -14,6 +14,7 @@ import (
 	"github.com/grafana/sigma-rule-deployment/internal/model"
 	"github.com/grafana/sigma-rule-deployment/shared"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestConvertToAlert(t *testing.T) {
@@ -22,7 +23,7 @@ func TestConvertToAlert(t *testing.T) {
 		queries                []string
 		rule                   *model.ProvisionedAlertRule
 		titles                 string
-		convConfig             model.ConversionConfig
+		convConfig             model.NamedConfigBlock
 		integratorConfig       model.IntegrationConfig
 		convObject             model.ConversionOutput
 		wantQueryText          string
@@ -34,11 +35,17 @@ func TestConvertToAlert(t *testing.T) {
 		wantCombinerExpression string
 	}{
 		{
-			name:          "value_count correlation metric query is not wrapped",
-			queries:       []string{testValueCountMetricQuery},
-			titles:        "GitHub Repository Zip Download Threshold by Actor",
-			rule:          &model.ProvisionedAlertRule{UID: "9e2532c1"},
-			convConfig:    model.ConversionConfig{Name: "github_audits_5m", Target: testLokiTarget, DataSource: testGrafanaCloudLogsDS, RuleGroup: "github-audits-5m", TimeWindow: "5m"},
+			name:    "value_count correlation metric query is not wrapped",
+			queries: []string{testValueCountMetricQuery},
+			titles:  "GitHub Repository Zip Download Threshold by Actor",
+			rule:    &model.ProvisionedAlertRule{UID: "9e2532c1"},
+			convConfig: model.NamedConfigBlock{
+				Name: "github_audits_5m",
+				ConfigBlock: model.ConfigBlock{
+					Conversion:  model.ConversionConfig{Target: testLokiTarget},
+					Integration: model.IntegrationConfig{DataSource: testGrafanaCloudLogsDS, RuleGroup: "github-audits-5m", TimeWindow: "5m"},
+				},
+			},
 			wantQueryText: "count without (event_repo) (sum by (event_actor, event_repo)",
 			wantDuration:  model.Duration(300 * time.Second),
 			wantError:     false,
@@ -50,12 +57,12 @@ func TestConvertToAlert(t *testing.T) {
 			rule: &model.ProvisionedAlertRule{
 				UID: "5c1c217a",
 			},
-			convConfig: model.ConversionConfig{
-				Name:       "conv",
-				Target:     "loki",
-				DataSource: "my_data_source",
-				RuleGroup:  "Every 5 Minutes",
-				TimeWindow: "5m",
+			convConfig: model.NamedConfigBlock{
+				Name: "conv",
+				ConfigBlock: model.ConfigBlock{
+					Conversion:  model.ConversionConfig{Target: "loki"},
+					Integration: model.IntegrationConfig{DataSource: "my_data_source", RuleGroup: "Every 5 Minutes", TimeWindow: "5m"},
+				},
 			},
 			wantQueryText: "sum(count_over_time({job=`.+`} | json | test=`true`[$__auto]))",
 			wantDuration:  model.Duration(300 * time.Second),
@@ -68,13 +75,12 @@ func TestConvertToAlert(t *testing.T) {
 			rule: &model.ProvisionedAlertRule{
 				UID: "3bb06d82",
 			},
-			convConfig: model.ConversionConfig{
-				Name:           "conv",
-				Target:         "esql",
-				DataSource:     "my_es_data_source",
-				RuleGroup:      "Every 5 Minutes",
-				TimeWindow:     "5m",
-				DataSourceType: "elasticsearch",
+			convConfig: model.NamedConfigBlock{
+				Name: "conv",
+				ConfigBlock: model.ConfigBlock{
+					Conversion:  model.ConversionConfig{Target: "esql"},
+					Integration: model.IntegrationConfig{DataSource: "my_es_data_source", RuleGroup: "Every 5 Minutes", TimeWindow: "5m", DataSourceType: "elasticsearch"},
+				},
 			},
 			wantQueryText: `from * | where eventSource==\"kms.amazonaws.com\" and eventName==\"CreateGrant\"`,
 			wantDuration:  model.Duration(300 * time.Second),
@@ -87,8 +93,10 @@ func TestConvertToAlert(t *testing.T) {
 			rule: &model.ProvisionedAlertRule{
 				UID: "5c1c217a",
 			},
-			convConfig: model.ConversionConfig{
-				TimeWindow: "1y",
+			convConfig: model.NamedConfigBlock{
+				ConfigBlock: model.ConfigBlock{
+					Integration: model.IntegrationConfig{TimeWindow: "1y"},
+				},
 			},
 			wantDuration: 0, // invalid time window, expect no value
 			wantError:    true,
@@ -100,8 +108,10 @@ func TestConvertToAlert(t *testing.T) {
 			rule: &model.ProvisionedAlertRule{
 				UID: "f4c34eae-c7c3-4891-8965-08a01e8286b8",
 			},
-			convConfig: model.ConversionConfig{
-				TimeWindow: "1y",
+			convConfig: model.NamedConfigBlock{
+				ConfigBlock: model.ConfigBlock{
+					Integration: model.IntegrationConfig{TimeWindow: "1y"},
+				},
 			},
 			wantDuration: 0, // invalid time window, expect no value
 			wantError:    true,
@@ -113,12 +123,12 @@ func TestConvertToAlert(t *testing.T) {
 			rule: &model.ProvisionedAlertRule{
 				UID: "multi-test",
 			},
-			convConfig: model.ConversionConfig{
-				Name:       "conv",
-				Target:     "loki",
-				DataSource: "test_ds",
-				RuleGroup:  "Every 5 Minutes",
-				TimeWindow: "5m",
+			convConfig: model.NamedConfigBlock{
+				Name: "conv",
+				ConfigBlock: model.ConfigBlock{
+					Conversion:  model.ConversionConfig{Target: "loki"},
+					Integration: model.IntegrationConfig{DataSource: "test_ds", RuleGroup: "Every 5 Minutes", TimeWindow: "5m"},
+				},
 			},
 			wantQueryText:          "sum(count_over_time({job=`.+`} | json | test=`true`[$__auto]))",
 			wantDuration:           model.Duration(5 * time.Minute),
@@ -149,12 +159,12 @@ func TestConvertToAlert(t *testing.T) {
 			name:    "process changed queries",
 			queries: []string{`{job=".+"} | json | test="true"`},
 			titles:  "New Alert Rule Title", // This should *not* be ignored
-			convConfig: model.ConversionConfig{
-				Name:       "conv",
-				Target:     "loki",
-				DataSource: "my_data_source",
-				RuleGroup:  "Every Minute",
-				TimeWindow: "1m",
+			convConfig: model.NamedConfigBlock{
+				Name: "conv",
+				ConfigBlock: model.ConfigBlock{
+					Conversion:  model.ConversionConfig{Target: "loki"},
+					Integration: model.IntegrationConfig{DataSource: "my_data_source", RuleGroup: "Every Minute", TimeWindow: "1m"},
+				},
 			},
 			rule: &model.ProvisionedAlertRule{
 				UID:   "5c1c217a",
@@ -182,13 +192,12 @@ func TestConvertToAlert(t *testing.T) {
 			rule: &model.ProvisionedAlertRule{
 				UID: "5c1c217a",
 			},
-			convConfig: model.ConversionConfig{
-				Name:       "conv",
-				Target:     "custom",
-				DataSource: "my_custom_data_source",
-				RuleGroup:  "Every Hour",
-				TimeWindow: "1h",
-				QueryModel: `{"refId":"%s","datasource":{"type":"custom","uid":"%s"},"queryString":"(%s)"}`,
+			convConfig: model.NamedConfigBlock{
+				Name: "conv",
+				ConfigBlock: model.ConfigBlock{
+					Conversion:  model.ConversionConfig{Target: "custom"},
+					Integration: model.IntegrationConfig{DataSource: "my_custom_data_source", RuleGroup: "Every Hour", TimeWindow: "1h", QueryModel: `{"refId":"%s","datasource":{"type":"custom","uid":"%s"},"queryString":"(%s)"}`},
+				},
 			},
 			wantQueryText: "(DO MY QUERY)",
 			wantDuration:  model.Duration(1 * time.Hour),
@@ -201,12 +210,12 @@ func TestConvertToAlert(t *testing.T) {
 			rule: &model.ProvisionedAlertRule{
 				UID: "5c1c217a",
 			},
-			convConfig: model.ConversionConfig{
-				Name:       "conv",
-				Target:     "generic",
-				DataSource: "generic_uid",
-				RuleGroup:  "Every 30 Minutes",
-				TimeWindow: "30m",
+			convConfig: model.NamedConfigBlock{
+				Name: "conv",
+				ConfigBlock: model.ConfigBlock{
+					Conversion:  model.ConversionConfig{Target: "generic"},
+					Integration: model.IntegrationConfig{DataSource: "generic_uid", RuleGroup: "Every 30 Minutes", TimeWindow: "30m"},
+				},
 			},
 			wantQueryText: `"DO MY QUERY"`,
 			wantDuration:  model.Duration(30 * time.Minute),
@@ -219,13 +228,12 @@ func TestConvertToAlert(t *testing.T) {
 			rule: &model.ProvisionedAlertRule{
 				UID: "5c1c217a",
 			},
-			convConfig: model.ConversionConfig{
-				Name:       "conv",
-				Target:     "loki",
-				DataSource: "my_data_source",
-				RuleGroup:  "Every 5 Minutes",
-				TimeWindow: "5m",
-				Lookback:   "2m",
+			convConfig: model.NamedConfigBlock{
+				Name: "conv",
+				ConfigBlock: model.ConfigBlock{
+					Conversion:  model.ConversionConfig{Target: "loki"},
+					Integration: model.IntegrationConfig{DataSource: "my_data_source", RuleGroup: "Every 5 Minutes", TimeWindow: "5m", Lookback: "2m"},
+				},
 			},
 			wantQueryText: "sum(count_over_time({job=`.+`} | json | test=`true`[$__auto]))",
 			wantDuration:  model.Duration(7 * time.Minute), // 5m + 2m lookback = 7m
@@ -249,12 +257,12 @@ func TestConvertToAlert(t *testing.T) {
 					},
 				},
 			},
-			convConfig: model.ConversionConfig{
-				Name:       "conv",
-				Target:     "loki",
-				DataSource: "my_data_source",
-				RuleGroup:  "Every 5 Minutes",
-				TimeWindow: "5m",
+			convConfig: model.NamedConfigBlock{
+				Name: "conv",
+				ConfigBlock: model.ConfigBlock{
+					Conversion:  model.ConversionConfig{Target: "loki"},
+					Integration: model.IntegrationConfig{DataSource: "my_data_source", RuleGroup: "Every 5 Minutes", TimeWindow: "5m"},
+				},
 			},
 			integratorConfig: model.IntegrationConfig{
 				TemplateLabels: map[string]string{
@@ -305,12 +313,12 @@ func TestConvertToAlert(t *testing.T) {
 					{Level: "medium"},
 				},
 			},
-			convConfig: model.ConversionConfig{
-				Name:       "conv",
-				Target:     "loki",
-				DataSource: "my_data_source",
-				RuleGroup:  "Every 5 Minutes",
-				TimeWindow: "5m",
+			convConfig: model.NamedConfigBlock{
+				Name: "conv",
+				ConfigBlock: model.ConfigBlock{
+					Conversion:  model.ConversionConfig{Target: "loki"},
+					Integration: model.IntegrationConfig{DataSource: "my_data_source", RuleGroup: "Every 5 Minutes", TimeWindow: "5m"},
+				},
 			},
 			integratorConfig: model.IntegrationConfig{
 				TemplateLabels: map[string]string{
@@ -319,7 +327,7 @@ func TestConvertToAlert(t *testing.T) {
 				TemplateAnnotations: map[string]string{
 					"severity": "{{ highestLevel . }}",
 				},
-				TemplateAllRules: true,
+				TemplateAllRules: new(true),
 			},
 			wantQueryText: "sum(count_over_time({job=`.+`} | json | test=`true`[$__auto]))",
 			wantDuration:  model.Duration(300 * time.Second),
@@ -352,18 +360,18 @@ func TestConvertToAlert(t *testing.T) {
 					{Level: "critical"},
 				},
 			},
-			convConfig: model.ConversionConfig{
-				Name:       "conv",
-				Target:     "loki",
-				DataSource: "my_data_source",
-				RuleGroup:  "Every 5 Minutes",
-				TimeWindow: "5m",
+			convConfig: model.NamedConfigBlock{
+				Name: "conv",
+				ConfigBlock: model.ConfigBlock{
+					Conversion:  model.ConversionConfig{Target: "loki"},
+					Integration: model.IntegrationConfig{DataSource: "my_data_source", RuleGroup: "Every 5 Minutes", TimeWindow: "5m"},
+				},
 			},
 			integratorConfig: model.IntegrationConfig{
 				TemplateLabels: map[string]string{
 					"Level": "{{ highestLevel . }}",
 				},
-				TemplateAllRules: false,
+				TemplateAllRules: new(false),
 			},
 			wantError: true,
 		},
@@ -380,27 +388,88 @@ func TestConvertToAlert(t *testing.T) {
 					{Level: "critical"},
 				},
 			},
-			convConfig: model.ConversionConfig{
-				Name:       "conv",
-				Target:     "loki",
-				DataSource: "my_data_source",
-				RuleGroup:  "Every 5 Minutes",
-				TimeWindow: "5m",
+			convConfig: model.NamedConfigBlock{
+				Name: "conv",
+				ConfigBlock: model.ConfigBlock{
+					Conversion:  model.ConversionConfig{Target: "loki"},
+					Integration: model.IntegrationConfig{DataSource: "my_data_source", RuleGroup: "Every 5 Minutes", TimeWindow: "5m"},
+				},
 			},
 			integratorConfig: model.IntegrationConfig{
 				TemplateAnnotations: map[string]string{
 					"severity": "{{ highestLevel . }}",
 				},
-				TemplateAllRules: false,
+				TemplateAllRules: new(false),
 			},
 			wantError: true,
+		},
+		{
+			name:    "time window and lookback accept a day unit",
+			queries: []string{"{job=`.+`} | json | test=`true`"},
+			titles:  "Days",
+			rule:    &model.ProvisionedAlertRule{UID: ""},
+			convConfig: model.NamedConfigBlock{
+				Name: "conv",
+				ConfigBlock: model.ConfigBlock{
+					Conversion:  model.ConversionConfig{Target: "loki"},
+					Integration: model.IntegrationConfig{DataSource: "my_data_source", RuleGroup: "Daily", TimeWindow: "1d", Lookback: "1h"},
+				},
+			},
+			wantQueryText: "sum(count_over_time({job=`.+`} | json | test=`true`[$__auto]))",
+			wantDuration:  model.Duration(25 * time.Hour),
+		},
+		{
+			name:       "per-config template_all_rules false overrides default true",
+			queries:    []string{"{job=`.+`} | json | test=`true`"},
+			titles:     "Template All Rules Override",
+			rule:       &model.ProvisionedAlertRule{UID: ""},
+			convObject: model.ConversionOutput{InputFile: "test_sigma_rule.yml", Rules: []model.SigmaRule{{Level: "low"}, {Level: "critical"}}},
+			convConfig: model.NamedConfigBlock{
+				Name: "conv",
+				ConfigBlock: model.ConfigBlock{
+					Conversion: model.ConversionConfig{Target: "loki"},
+					Integration: model.IntegrationConfig{
+						DataSource: "my_data_source", RuleGroup: "Every 5 Minutes", TimeWindow: "5m",
+						// Only the first rule is available to the templates, so .Level works on a single rule
+						TemplateLabels:   map[string]string{"Level": "{{ .Level }}"},
+						TemplateAllRules: new(false),
+					},
+				},
+			},
+			integratorConfig: model.IntegrationConfig{TemplateAllRules: new(true)},
+			wantQueryText:    "sum(count_over_time({job=`.+`} | json | test=`true`[$__auto]))",
+			wantDuration:     model.Duration(300 * time.Second),
+			wantLabels:       map[string]string{"Level": "low"},
+		},
+		{
+			name:       "per-config template_labels replace the default labels rather than merging",
+			queries:    []string{"{job=`.+`} | json | test=`true`"},
+			titles:     "Template Labels Replace",
+			rule:       &model.ProvisionedAlertRule{UID: ""},
+			convObject: model.ConversionOutput{InputFile: "test_sigma_rule.yml", Rules: []model.SigmaRule{{Level: "low"}}},
+			convConfig: model.NamedConfigBlock{
+				Name: "conv",
+				ConfigBlock: model.ConfigBlock{
+					Conversion: model.ConversionConfig{Target: "loki"},
+					Integration: model.IntegrationConfig{
+						DataSource: "my_data_source", RuleGroup: "Every 5 Minutes", TimeWindow: "5m",
+						TemplateLabels: map[string]string{"Team": "blue"},
+					},
+				},
+			},
+			integratorConfig: model.IntegrationConfig{
+				TemplateLabels: map[string]string{"Level": "{{ .Level }}", "Team": "default"},
+			},
+			wantQueryText: "sum(count_over_time({job=`.+`} | json | test=`true`[$__auto]))",
+			wantDuration:  model.Duration(300 * time.Second),
+			wantLabels:    map[string]string{"Team": "blue"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			i := NewIntegrator()
-			i.config.IntegratorConfig = tt.integratorConfig
+			i.config.Defaults.Integration = tt.integratorConfig
 			err := i.ConvertToAlert(tt.rule, tt.queries, tt.titles, tt.convConfig, "test_conversion_file.json", "test_integrate_file.json", tt.convObject)
 			if tt.wantError {
 				assert.NotNil(t, err)
@@ -412,8 +481,8 @@ func TestConvertToAlert(t *testing.T) {
 				} else {
 					assert.Contains(t, string(tt.rule.Data[0].Model), tt.wantQueryText)
 					assert.Equal(t, tt.wantDuration, tt.rule.Data[0].RelativeTimeRange.From)
-					assert.Equal(t, tt.convConfig.RuleGroup, tt.rule.RuleGroup)
-					assert.Equal(t, tt.convConfig.DataSource, tt.rule.Data[0].DatasourceUID)
+					assert.Equal(t, tt.convConfig.Integration.RuleGroup, tt.rule.RuleGroup)
+					assert.Equal(t, tt.convConfig.Integration.DataSource, tt.rule.Data[0].DatasourceUID)
 					assert.Equal(t, tt.titles, tt.rule.Title)
 
 					if tt.wantCombinerExpression != "" {
@@ -421,8 +490,8 @@ func TestConvertToAlert(t *testing.T) {
 						assert.Contains(t, combinerModel, tt.wantCombinerExpression)
 					}
 
-					if tt.convConfig.Lookback != "" {
-						lookbackDuration, err := time.ParseDuration(tt.convConfig.Lookback)
+					if tt.convConfig.Integration.Lookback != "" {
+						lookbackDuration, err := time.ParseDuration(tt.convConfig.Integration.Lookback)
 						assert.NoError(t, err)
 						expectedTo := model.Duration(lookbackDuration)
 						assert.Equal(t, tt.wantDuration, tt.rule.Data[0].RelativeTimeRange.From, "From should match expected duration (time window + lookback)")
@@ -503,30 +572,34 @@ func TestLoadConfig(t *testing.T) {
 			testFiles:  "testdata/conv.json testdata/conv2.json",
 			allRules:   false,
 			expConfig: model.Configuration{
+				Version: 2,
 				Folders: model.FoldersConfig{
 					ConversionPath: "./testdata",
 					DeploymentPath: "./testdata",
 				},
-				ConversionDefaults: model.ConversionConfig{
-					Target:          "loki",
-					Format:          "default",
-					SkipUnsupported: "true",
-					FilePattern:     "*.yml",
-					DataSource:      "grafanacloud-logs",
-				},
-				Conversions: []model.ConversionConfig{
-					{
-						Name:       "conv",
-						RuleGroup:  "Every 5 Minutes",
-						TimeWindow: "5m",
+				Defaults: model.ConfigBlock{
+					Conversion: model.ConversionConfig{
+						Target:          "loki",
+						Format:          "default",
+						SkipUnsupported: new(true),
+						FilePattern:     "*.yml",
+					},
+					Integration: model.IntegrationConfig{
+						DataSource:  "grafanacloud-logs",
+						FolderID:    "XXXX",
+						OrgID:       1,
+						TestQueries: new(true),
+						From:        "now-1h",
+						To:          "now",
 					},
 				},
-				IntegratorConfig: model.IntegrationConfig{
-					FolderID:    "XXXX",
-					OrgID:       1,
-					From:        "now-1h",
-					To:          "now",
-					TestQueries: true,
+				Configurations: []model.NamedConfigBlock{
+					{
+						Name: "conv",
+						ConfigBlock: model.ConfigBlock{
+							Integration: model.IntegrationConfig{RuleGroup: "Every 5 Minutes", TimeWindow: "5m"},
+						},
+					},
 				},
 			},
 			expAdd:    []string{"testdata/conv.json"},
@@ -543,30 +616,34 @@ func TestLoadConfig(t *testing.T) {
 			testFiles:  "testdata/conv.json testdata/conv2.json",
 			allRules:   false,
 			expConfig: model.Configuration{
+				Version: 2,
 				Folders: model.FoldersConfig{
 					ConversionPath: "./testdata",
 					DeploymentPath: "./testdata",
 				},
-				ConversionDefaults: model.ConversionConfig{
-					Target:          "loki",
-					Format:          "default",
-					SkipUnsupported: "true",
-					FilePattern:     "*.yml",
-					DataSource:      "grafanacloud-logs",
-				},
-				Conversions: []model.ConversionConfig{
-					{
-						Name:       "conv",
-						RuleGroup:  "Every 5 Minutes",
-						TimeWindow: "5m",
+				Defaults: model.ConfigBlock{
+					Conversion: model.ConversionConfig{
+						Target:          "loki",
+						Format:          "default",
+						SkipUnsupported: new(true),
+						FilePattern:     "*.yml",
+					},
+					Integration: model.IntegrationConfig{
+						DataSource:  "grafanacloud-logs",
+						FolderID:    "XXXX",
+						OrgID:       1,
+						TestQueries: new(false),
+						From:        "now-1h",
+						To:          "now",
 					},
 				},
-				IntegratorConfig: model.IntegrationConfig{
-					FolderID:    "XXXX",
-					OrgID:       1,
-					From:        "now-1h",
-					To:          "now",
-					TestQueries: false,
+				Configurations: []model.NamedConfigBlock{
+					{
+						Name: "conv",
+						ConfigBlock: model.ConfigBlock{
+							Integration: model.IntegrationConfig{RuleGroup: "Every 5 Minutes", TimeWindow: "5m"},
+						},
+					},
 				},
 			},
 			expAdd:    []string{"testdata/conv.json"},
@@ -583,46 +660,33 @@ func TestLoadConfig(t *testing.T) {
 			testFiles:  "testdata/conv1.json testdata/conv3.json",
 			allRules:   false,
 			expConfig: model.Configuration{
+				Version: 2,
 				Folders: model.FoldersConfig{
 					ConversionPath: "./testdata",
 					DeploymentPath: "./testdata",
 				},
-				ConversionDefaults: model.ConversionConfig{
-					Target:          "esql",
-					Format:          "default",
-					SkipUnsupported: "true",
-					FilePattern:     "*.yml",
-					DataSource:      "grafanacloud-es-logs",
-					DataSourceType:  "elasticsearch",
-				},
-				Conversions: []model.ConversionConfig{
-					{
-						Name:       "conv1",
-						RuleGroup:  "Every 5 Minutes",
-						TimeWindow: "5m",
+				Defaults: model.ConfigBlock{
+					Conversion: model.ConversionConfig{
+						Target:          "esql",
+						Format:          "default",
+						SkipUnsupported: new(true),
+						FilePattern:     "*.yml",
 					},
-					{
-						Name:       "conv2",
-						RuleGroup:  "Every 10 Minutes",
-						TimeWindow: "10m",
-					},
-					{
-						Name:       "conv3",
-						RuleGroup:  "Every 30 Minutes",
-						TimeWindow: "30m",
-					},
-					{
-						Name:       "conv4",
-						RuleGroup:  "Every 20 Minutes",
-						TimeWindow: "20m",
+					Integration: model.IntegrationConfig{
+						DataSource:     "grafanacloud-es-logs",
+						DataSourceType: "elasticsearch",
+						FolderID:       "XXXX",
+						OrgID:          1,
+						TestQueries:    new(true),
+						From:           "now-1h",
+						To:             "now",
 					},
 				},
-				IntegratorConfig: model.IntegrationConfig{
-					FolderID:    "XXXX",
-					OrgID:       1,
-					From:        "now-1h",
-					To:          "now",
-					TestQueries: true,
+				Configurations: []model.NamedConfigBlock{
+					{Name: "conv1", ConfigBlock: model.ConfigBlock{Integration: model.IntegrationConfig{RuleGroup: "Every 5 Minutes", TimeWindow: "5m"}}},
+					{Name: "conv2", ConfigBlock: model.ConfigBlock{Integration: model.IntegrationConfig{RuleGroup: "Every 10 Minutes", TimeWindow: "10m"}}},
+					{Name: "conv3", ConfigBlock: model.ConfigBlock{Integration: model.IntegrationConfig{RuleGroup: "Every 30 Minutes", TimeWindow: "30m"}}},
+					{Name: "conv4", ConfigBlock: model.ConfigBlock{Integration: model.IntegrationConfig{RuleGroup: "Every 20 Minutes", TimeWindow: "20m"}}},
 				},
 			},
 			expAdd:    []string{"testdata/conv1.json", "testdata/conv3.json"},
@@ -639,46 +703,33 @@ func TestLoadConfig(t *testing.T) {
 			testFiles:  "testdata/conv1.json",
 			allRules:   false,
 			expConfig: model.Configuration{
+				Version: 2,
 				Folders: model.FoldersConfig{
 					ConversionPath: "./testdata",
 					DeploymentPath: "./testdata",
 				},
-				ConversionDefaults: model.ConversionConfig{
-					Target:          "esql",
-					Format:          "default",
-					SkipUnsupported: "true",
-					FilePattern:     "*.yml",
-					DataSource:      "grafanacloud-es-logs",
-					DataSourceType:  "elasticsearch",
-				},
-				Conversions: []model.ConversionConfig{
-					{
-						Name:       "conv1",
-						RuleGroup:  "Every 5 Minutes",
-						TimeWindow: "5m",
+				Defaults: model.ConfigBlock{
+					Conversion: model.ConversionConfig{
+						Target:          "esql",
+						Format:          "default",
+						SkipUnsupported: new(true),
+						FilePattern:     "*.yml",
 					},
-					{
-						Name:       "conv2",
-						RuleGroup:  "Every 10 Minutes",
-						TimeWindow: "10m",
-					},
-					{
-						Name:       "conv3",
-						RuleGroup:  "Every 30 Minutes",
-						TimeWindow: "30m",
-					},
-					{
-						Name:       "conv4",
-						RuleGroup:  "Every 20 Minutes",
-						TimeWindow: "20m",
+					Integration: model.IntegrationConfig{
+						DataSource:     "grafanacloud-es-logs",
+						DataSourceType: "elasticsearch",
+						FolderID:       "XXXX",
+						OrgID:          1,
+						TestQueries:    new(true),
+						From:           "now-1h",
+						To:             "now",
 					},
 				},
-				IntegratorConfig: model.IntegrationConfig{
-					FolderID:    "XXXX",
-					OrgID:       1,
-					From:        "now-1h",
-					To:          "now",
-					TestQueries: true,
+				Configurations: []model.NamedConfigBlock{
+					{Name: "conv1", ConfigBlock: model.ConfigBlock{Integration: model.IntegrationConfig{RuleGroup: "Every 5 Minutes", TimeWindow: "5m"}}},
+					{Name: "conv2", ConfigBlock: model.ConfigBlock{Integration: model.IntegrationConfig{RuleGroup: "Every 10 Minutes", TimeWindow: "10m"}}},
+					{Name: "conv3", ConfigBlock: model.ConfigBlock{Integration: model.IntegrationConfig{RuleGroup: "Every 30 Minutes", TimeWindow: "30m"}}},
+					{Name: "conv4", ConfigBlock: model.ConfigBlock{Integration: model.IntegrationConfig{RuleGroup: "Every 20 Minutes", TimeWindow: "20m"}}},
 				},
 			},
 			expAdd:    []string{"testdata/conv1.json", "testdata/conv3.json"},
@@ -695,35 +746,39 @@ func TestLoadConfig(t *testing.T) {
 			testFiles:  "",
 			allRules:   true,
 			expConfig: model.Configuration{
+				Version: 2,
 				Folders: model.FoldersConfig{
 					ConversionPath: "./testdata",
 					DeploymentPath: "./testdata",
 				},
-				ConversionDefaults: model.ConversionConfig{
-					Target:          "loki",
-					Format:          "default",
-					SkipUnsupported: "true",
-					FilePattern:     "*.yml",
-					DataSource:      "grafanacloud-logs",
-				},
-				Conversions: []model.ConversionConfig{
-					{
-						Name:       "conv",
-						RuleGroup:  "Every 5 Minutes",
-						TimeWindow: "5m",
+				Defaults: model.ConfigBlock{
+					Conversion: model.ConversionConfig{
+						Target:          "loki",
+						Format:          "default",
+						SkipUnsupported: new(true),
+						FilePattern:     "*.yml",
+					},
+					Integration: model.IntegrationConfig{
+						DataSource:  "grafanacloud-logs",
+						FolderID:    "XXXX",
+						OrgID:       1,
+						TestQueries: new(true),
+						From:        "now-1h",
+						To:          "now",
 					},
 				},
-				IntegratorConfig: model.IntegrationConfig{
-					FolderID:    "XXXX",
-					OrgID:       1,
-					From:        "now-1h",
-					To:          "now",
-					TestQueries: true,
+				Configurations: []model.NamedConfigBlock{
+					{
+						Name: "conv",
+						ConfigBlock: model.ConfigBlock{
+							Integration: model.IntegrationConfig{RuleGroup: "Every 5 Minutes", TimeWindow: "5m"},
+						},
+					},
 				},
 			},
-			expAdd:    []string{"testdata/config.yml", "testdata/es-config.yml", "testdata/no-test-config.yml", "testdata/non-local-conv-config.yml", "testdata/non-local-deploy-config.yml", "testdata/sample_rule.json"},
+			expAdd:    []string{"testdata/config.yml", "testdata/es-config.yml", "testdata/no-test-config.yml", "testdata/non-local-conv-config.yml", "testdata/non-local-deploy-config.yml", "testdata/per-config-test-queries.yml", "testdata/sample_rule.json", "testdata/tested_rule.json", "testdata/untested_rule.json"},
 			expDel:    []string{},
-			expTest:   []string{"testdata/config.yml", "testdata/es-config.yml", "testdata/no-test-config.yml", "testdata/non-local-conv-config.yml", "testdata/non-local-deploy-config.yml", "testdata/sample_rule.json"},
+			expTest:   []string{"testdata/config.yml", "testdata/es-config.yml", "testdata/no-test-config.yml", "testdata/non-local-conv-config.yml", "testdata/non-local-deploy-config.yml", "testdata/per-config-test-queries.yml", "testdata/sample_rule.json", "testdata/tested_rule.json", "testdata/untested_rule.json"},
 			wantError: false,
 		},
 		{
@@ -735,35 +790,89 @@ func TestLoadConfig(t *testing.T) {
 			testFiles:  "",
 			allRules:   true,
 			expConfig: model.Configuration{
+				Version: 2,
 				Folders: model.FoldersConfig{
 					ConversionPath: "./testdata",
 					DeploymentPath: "./testdata",
 				},
-				ConversionDefaults: model.ConversionConfig{
-					Target:          "loki",
-					Format:          "default",
-					SkipUnsupported: "true",
-					FilePattern:     "*.yml",
-					DataSource:      "grafanacloud-logs",
-				},
-				Conversions: []model.ConversionConfig{
-					{
-						Name:       "conv",
-						RuleGroup:  "Every 5 Minutes",
-						TimeWindow: "5m",
+				Defaults: model.ConfigBlock{
+					Conversion: model.ConversionConfig{
+						Target:          "loki",
+						Format:          "default",
+						SkipUnsupported: new(true),
+						FilePattern:     "*.yml",
+					},
+					Integration: model.IntegrationConfig{
+						DataSource:  "grafanacloud-logs",
+						FolderID:    "XXXX",
+						OrgID:       1,
+						TestQueries: new(false),
+						From:        "now-1h",
+						To:          "now",
 					},
 				},
-				IntegratorConfig: model.IntegrationConfig{
-					FolderID:    "XXXX",
-					OrgID:       1,
-					From:        "now-1h",
-					To:          "now",
-					TestQueries: false,
+				Configurations: []model.NamedConfigBlock{
+					{
+						Name: "conv",
+						ConfigBlock: model.ConfigBlock{
+							Integration: model.IntegrationConfig{RuleGroup: "Every 5 Minutes", TimeWindow: "5m"},
+						},
+					},
 				},
 			},
-			expAdd:    []string{"testdata/config.yml", "testdata/es-config.yml", "testdata/no-test-config.yml", "testdata/non-local-conv-config.yml", "testdata/non-local-deploy-config.yml", "testdata/sample_rule.json"},
+			expAdd:    []string{"testdata/config.yml", "testdata/es-config.yml", "testdata/no-test-config.yml", "testdata/non-local-conv-config.yml", "testdata/non-local-deploy-config.yml", "testdata/per-config-test-queries.yml", "testdata/sample_rule.json", "testdata/tested_rule.json", "testdata/untested_rule.json"},
 			expDel:    []string{},
 			expTest:   []string{},
+			wantError: false,
+		},
+		{
+			name:       "load all files when ALL_RULES is true, per-config TestQueries respected",
+			configPath: "testdata/per-config-test-queries.yml",
+			token:      "my-test-token",
+			changed:    "",
+			deleted:    "",
+			testFiles:  "",
+			allRules:   true,
+			expConfig: model.Configuration{
+				Version: 2,
+				Folders: model.FoldersConfig{
+					ConversionPath: "./testdata",
+					DeploymentPath: "./testdata",
+				},
+				Defaults: model.ConfigBlock{
+					Conversion: model.ConversionConfig{
+						Target:          "loki",
+						Format:          "default",
+						SkipUnsupported: new(true),
+						FilePattern:     "*.yml",
+					},
+					Integration: model.IntegrationConfig{
+						DataSource:  "grafanacloud-logs",
+						FolderID:    "XXXX",
+						OrgID:       1,
+						TestQueries: new(false),
+						From:        "now-1h",
+						To:          "now",
+					},
+				},
+				Configurations: []model.NamedConfigBlock{
+					{
+						Name: "tested",
+						ConfigBlock: model.ConfigBlock{
+							Integration: model.IntegrationConfig{RuleGroup: "Every 5 Minutes", TimeWindow: "5m", TestQueries: new(true)},
+						},
+					},
+					{
+						Name: "untested",
+						ConfigBlock: model.ConfigBlock{
+							Integration: model.IntegrationConfig{RuleGroup: "Every 5 Minutes", TimeWindow: "5m"},
+						},
+					},
+				},
+			},
+			expAdd:    []string{"testdata/config.yml", "testdata/es-config.yml", "testdata/no-test-config.yml", "testdata/non-local-conv-config.yml", "testdata/non-local-deploy-config.yml", "testdata/per-config-test-queries.yml", "testdata/sample_rule.json", "testdata/tested_rule.json", "testdata/untested_rule.json"},
+			expDel:    []string{},
+			expTest:   []string{"testdata/tested_rule.json"},
 			wantError: false,
 		},
 
@@ -835,6 +944,138 @@ func TestLoadConfig(t *testing.T) {
 	defer os.Unsetenv("DELETED_FILES")
 	defer os.Unsetenv("TEST_FILES")
 	defer os.Unsetenv("ALL_RULES")
+}
+
+func TestLoadConfigIgnoresEmptyTestFilesWithDotConversionPath(t *testing.T) {
+	configFile, err := os.CreateTemp(".", "test_dot_conversion_path_*.yml")
+	require.NoError(t, err)
+	t.Cleanup(func() { os.Remove(configFile.Name()) })
+	deployDir, err := os.MkdirTemp(".", "test-dot-conversion-path-*")
+	require.NoError(t, err)
+	t.Cleanup(func() { os.RemoveAll(deployDir) })
+
+	_, err = configFile.WriteString("version: 2\nfolders:\n  conversion_path: \".\"\n  deployment_path: \"" + deployDir + "\"\n" +
+		"defaults:\n  integration:\n    data_source: ds\n    folder_id: XXXX\n    org_id: 1\n    test_queries: true\n")
+	require.NoError(t, err)
+	require.NoError(t, configFile.Close())
+
+	t.Setenv("INTEGRATOR_CONFIG_PATH", configFile.Name())
+	t.Setenv("INTEGRATOR_GRAFANA_SA_TOKEN", "my-test-token")
+	t.Setenv("CHANGED_FILES", "")
+	t.Setenv("DELETED_FILES", "")
+	t.Setenv("MANUAL_FILES", "")
+	t.Setenv("ALL_RULES", "false")
+	// An unset TEST_FILES splits into a single empty entry, which must not be treated as a file
+	t.Setenv("TEST_FILES", "")
+
+	i := NewIntegrator()
+	require.NoError(t, i.LoadConfig())
+	assert.Empty(t, i.testFiles)
+	assert.Empty(t, i.addedFiles)
+}
+
+func TestTestQueriesEnabledForFile(t *testing.T) {
+	makeConfig := func(defaultsEnabled bool, cfgs ...model.NamedConfigBlock) model.Configuration {
+		return model.Configuration{
+			Defaults: model.ConfigBlock{
+				Integration: model.IntegrationConfig{TestQueries: &defaultsEnabled},
+			},
+			Configurations: cfgs,
+		}
+	}
+	namedCfg := func(name string, enabled bool) model.NamedConfigBlock {
+		return model.NamedConfigBlock{
+			Name: name,
+			ConfigBlock: model.ConfigBlock{
+				Integration: model.IntegrationConfig{TestQueries: &enabled},
+			},
+		}
+	}
+	// A configuration that does not set test_queries, so it inherits the default
+	unsetCfg := func(name string) model.NamedConfigBlock {
+		return model.NamedConfigBlock{Name: name}
+	}
+
+	tests := []struct {
+		name     string
+		filename string
+		config   model.Configuration
+		want     bool
+	}{
+		{
+			name:     "defaults true, no named config match",
+			filename: "unrelated.json",
+			config:   makeConfig(true, namedCfg("myconv", false)),
+			want:     true,
+		},
+		{
+			name:     "defaults false, no named config match",
+			filename: "unrelated.json",
+			config:   makeConfig(false, namedCfg("myconv", true)),
+			want:     false,
+		},
+		{
+			name:     "defaults false, matching config has TestQueries true",
+			filename: "myconv_rule.json",
+			config:   makeConfig(false, namedCfg("myconv", true)),
+			want:     true,
+		},
+		{
+			name:     "defaults false, matching config has TestQueries false",
+			filename: "myconv_rule.json",
+			config:   makeConfig(false, namedCfg("myconv", false)),
+			want:     false,
+		},
+		{
+			name:     "defaults true, matching config explicitly sets TestQueries false",
+			filename: "myconv_rule.json",
+			config:   makeConfig(true, namedCfg("myconv", false)),
+			want:     false,
+		},
+		{
+			name:     "defaults true, matching config does not set TestQueries",
+			filename: "myconv_rule.json",
+			config:   makeConfig(true, unsetCfg("myconv")),
+			want:     true,
+		},
+		{
+			name:     "defaults false, matching config does not set TestQueries",
+			filename: "myconv_rule.json",
+			config:   makeConfig(false, unsetCfg("myconv")),
+			want:     false,
+		},
+		{
+			name:     "prefix match is exact (underscore separator required)",
+			filename: "myconvmore_rule.json",
+			config:   makeConfig(false, namedCfg("myconv", true)),
+			want:     false,
+		},
+		{
+			name:     "longest matching name wins when one name prefixes another (shorter listed first)",
+			filename: "web_proxy_rule.json",
+			config:   makeConfig(false, namedCfg("web", false), namedCfg("web_proxy", true)),
+			want:     true,
+		},
+		{
+			name:     "longest matching name wins when one name prefixes another (longer listed first)",
+			filename: "web_proxy_rule.json",
+			config:   makeConfig(false, namedCfg("web_proxy", false), namedCfg("web", true)),
+			want:     false,
+		},
+		{
+			name:     "shorter name still matches its own files",
+			filename: "web_rule.json",
+			config:   makeConfig(false, namedCfg("web", true), namedCfg("web_proxy", false)),
+			want:     true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := testQueriesEnabledForFile(tt.filename, tt.config)
+			assert.Equal(t, tt.want, got)
+		})
+	}
 }
 
 func TestDoConversions(t *testing.T) {
@@ -917,20 +1158,17 @@ func TestDoConversions(t *testing.T) {
 					ConversionPath: convPath,
 					DeploymentPath: deployPath,
 				},
-				ConversionDefaults: model.ConversionConfig{
-					Target:     "loki",
-					DataSource: "test-datasource",
+				Defaults: model.ConfigBlock{
+					Conversion:  model.ConversionConfig{Target: "loki"},
+					Integration: model.IntegrationConfig{DataSource: "test-datasource", FolderID: "test-folder", OrgID: 1},
 				},
-				Conversions: []model.ConversionConfig{
+				Configurations: []model.NamedConfigBlock{
 					{
-						Name:       "test_conv",
-						RuleGroup:  "Test Rules",
-						TimeWindow: "5m",
+						Name: "test_conv",
+						ConfigBlock: model.ConfigBlock{
+							Integration: model.IntegrationConfig{RuleGroup: "Test Rules", TimeWindow: "5m"},
+						},
 					},
-				},
-				IntegratorConfig: model.IntegrationConfig{
-					FolderID: "test-folder",
-					OrgID:    1,
 				},
 			}
 
@@ -992,6 +1230,148 @@ func TestDoConversions(t *testing.T) {
 	}
 }
 
+func TestDoConversionsMultipleConfigurations(t *testing.T) {
+	// Two conversions with entirely different datasources, folder IDs, org IDs, and rule groups.
+	// Verifies that per-configuration integration settings are applied independently.
+	testDir := filepath.Join("testdata", "test_do_conversions_multi")
+	err := os.MkdirAll(testDir, 0o755)
+	assert.NoError(t, err)
+	defer os.RemoveAll(testDir)
+
+	convPath := filepath.Join(testDir, "conv")
+	deployPath := filepath.Join(testDir, "deploy")
+	assert.NoError(t, os.MkdirAll(convPath, 0o755))
+	assert.NoError(t, os.MkdirAll(deployPath, 0o755))
+
+	config := model.Configuration{
+		Folders: model.FoldersConfig{
+			ConversionPath: convPath,
+			DeploymentPath: deployPath,
+		},
+		Defaults: model.ConfigBlock{
+			// Defaults intentionally differ from per-config values to confirm overrides are applied
+			Conversion:  model.ConversionConfig{Target: "loki"},
+			Integration: model.IntegrationConfig{DataSource: "default-ds", FolderID: "default-folder", OrgID: 99},
+		},
+		Configurations: []model.NamedConfigBlock{
+			{
+				Name: "conv_loki",
+				ConfigBlock: model.ConfigBlock{
+					Conversion: model.ConversionConfig{Target: "loki"},
+					Integration: model.IntegrationConfig{
+						DataSource:          "loki-logs-ds",
+						FolderID:            "folder-loki",
+						OrgID:               10,
+						RuleGroup:           "Loki Alerts",
+						TimeWindow:          "5m",
+						Lookback:            "2m",
+						QueryModel:          `{"refId":"%s","datasource":{"type":"custom-model","uid":"%s"},"expr":"%s"}`,
+						TemplateLabels:      map[string]string{"team": "loki-team"},
+						TemplateAnnotations: map[string]string{"summary": "loki alert"},
+					},
+				},
+			},
+			{
+				Name: "conv_es",
+				ConfigBlock: model.ConfigBlock{
+					Conversion: model.ConversionConfig{Target: "esql"},
+					Integration: model.IntegrationConfig{
+						DataSource:          "es-logs-ds",
+						DataSourceType:      "elasticsearch",
+						FolderID:            "folder-es",
+						OrgID:               20,
+						RuleGroup:           "ES Alerts",
+						TimeWindow:          "10m",
+						Lookback:            "5m",
+						TemplateLabels:      map[string]string{"team": "es-team"},
+						TemplateAnnotations: map[string]string{"summary": "es alert"},
+					},
+				},
+			},
+		},
+	}
+
+	lokiConv := model.ConversionOutput{
+		ConversionName: "conv_loki",
+		Queries:        []string{`{job="loki-test"} | json`},
+		Rules:          []model.SigmaRule{{ID: "11111111-1111-4111-8111-111111111111", Title: "Loki Rule"}},
+	}
+	esConv := model.ConversionOutput{
+		ConversionName: "conv_es",
+		Queries:        []string{`from * | where service == "test"`},
+		Rules:          []model.SigmaRule{{ID: "22222222-2222-4222-8222-222222222222", Title: "ES Rule"}},
+	}
+
+	lokiConvFile := filepath.Join(convPath, "conv_loki_rule.json")
+	esConvFile := filepath.Join(convPath, "conv_es_rule.json")
+
+	lokiBytes, err := json.Marshal(lokiConv)
+	assert.NoError(t, err)
+	esBytes, err := json.Marshal(esConv)
+	assert.NoError(t, err)
+
+	assert.NoError(t, os.WriteFile(lokiConvFile, lokiBytes, 0o600))
+	assert.NoError(t, os.WriteFile(esConvFile, esBytes, 0o600))
+
+	i := &Integrator{
+		config:     config,
+		addedFiles: []string{lokiConvFile, esConvFile},
+	}
+
+	assert.NoError(t, i.DoConversions())
+
+	// Read output alert rule files
+	files, err := os.ReadDir(deployPath)
+	assert.NoError(t, err)
+	assert.Len(t, files, 2, "expected one alert file per conversion")
+
+	var lokiRule, esRule model.ProvisionedAlertRule
+	for _, f := range files {
+		content, err := os.ReadFile(filepath.Join(deployPath, f.Name()))
+		assert.NoError(t, err)
+		var rule model.ProvisionedAlertRule
+		assert.NoError(t, json.Unmarshal(content, &rule))
+		switch {
+		case strings.HasPrefix(f.Name(), "alert_rule_conv_loki_"):
+			lokiRule = rule
+		case strings.HasPrefix(f.Name(), "alert_rule_conv_es_"):
+			esRule = rule
+		default:
+			t.Errorf("unexpected deployment file: %s", f.Name())
+		}
+	}
+
+	// Loki conversion assertions
+	assert.Equal(t, int64(10), lokiRule.OrgID, "loki orgID")
+	assert.Equal(t, "folder-loki", lokiRule.FolderUID, "loki folderID")
+	assert.Equal(t, "Loki Alerts", lokiRule.RuleGroup, "loki ruleGroup")
+	assert.Equal(t, "loki-logs-ds", lokiRule.Data[0].DatasourceUID, "loki datasource UID")
+	assert.Contains(t, string(lokiRule.Data[0].Model), `"type":"custom-model"`, "loki uses custom query_model")
+	assert.Equal(t, "2m", lokiRule.Annotations["Lookback"], "loki lookback")
+	assert.Equal(t, "loki-team", lokiRule.Labels["team"], "loki template label")
+	assert.Equal(t, "loki alert", lokiRule.Annotations["summary"], "loki template annotation")
+
+	// Elasticsearch conversion assertions
+	assert.Equal(t, int64(20), esRule.OrgID, "es orgID")
+	assert.Equal(t, "folder-es", esRule.FolderUID, "es folderID")
+	assert.Equal(t, "ES Alerts", esRule.RuleGroup, "es ruleGroup")
+	assert.Equal(t, "es-logs-ds", esRule.Data[0].DatasourceUID, "es datasource UID")
+	assert.Contains(t, string(esRule.Data[0].Model), `"type":"elasticsearch"`, "es query model type")
+	assert.Contains(t, string(esRule.Data[0].Model), `"uid":"es-logs-ds"`, "es query model uid")
+	assert.Equal(t, "5m", esRule.Annotations["Lookback"], "es lookback")
+	assert.Equal(t, "es-team", esRule.Labels["team"], "es template label")
+	assert.Equal(t, "es alert", esRule.Annotations["summary"], "es template annotation")
+
+	// Cross-check: values must not bleed between the two conversions
+	assert.NotEqual(t, lokiRule.OrgID, esRule.OrgID)
+	assert.NotEqual(t, lokiRule.FolderUID, esRule.FolderUID)
+	assert.NotEqual(t, lokiRule.RuleGroup, esRule.RuleGroup)
+	assert.NotEqual(t, lokiRule.Data[0].DatasourceUID, esRule.Data[0].DatasourceUID)
+	assert.NotEqual(t, lokiRule.Annotations["Lookback"], esRule.Annotations["Lookback"])
+	assert.NotEqual(t, lokiRule.Labels["team"], esRule.Labels["team"])
+	assert.NotEqual(t, lokiRule.Annotations["summary"], esRule.Annotations["summary"])
+}
+
 func TestDoCleanup(t *testing.T) {
 	tests := []struct {
 		name                     string
@@ -1046,11 +1426,12 @@ func TestDoCleanup(t *testing.T) {
 					ConversionPath: convPath,
 					DeploymentPath: deployPath,
 				},
-				Conversions: []model.ConversionConfig{
+				Configurations: []model.NamedConfigBlock{
 					{
-						Name:       "test_conv",
-						RuleGroup:  "Test Rules",
-						TimeWindow: "5m",
+						Name: "test_conv",
+						ConfigBlock: model.ConfigBlock{
+							Integration: model.IntegrationConfig{RuleGroup: "Test Rules", TimeWindow: "5m"},
+						},
 					},
 				},
 			}
@@ -1230,27 +1611,18 @@ func TestRun(t *testing.T) {
 					ConversionPath: convPath,
 					DeploymentPath: deployPath,
 				},
-				ConversionDefaults: model.ConversionConfig{
-					Target:     "loki",
-					DataSource: "test-datasource",
+				Defaults: model.ConfigBlock{
+					Conversion:  model.ConversionConfig{Target: "loki"},
+					Integration: model.IntegrationConfig{DataSource: "test-datasource", FolderID: "test-folder", OrgID: 1, TestQueries: new(true), From: "now-1h", To: "now"},
+					Deployment:  model.DeploymentConfig{GrafanaInstance: model.GrafanaInstances{"https://test.grafana.com"}, Timeout: "5s"},
 				},
-				Conversions: []model.ConversionConfig{
+				Configurations: []model.NamedConfigBlock{
 					{
-						Name:       "test_conv",
-						RuleGroup:  "Test Rules",
-						TimeWindow: "5m",
+						Name: "test_conv",
+						ConfigBlock: model.ConfigBlock{
+							Integration: model.IntegrationConfig{RuleGroup: "Test Rules", TimeWindow: "5m"},
+						},
 					},
-				},
-				IntegratorConfig: model.IntegrationConfig{
-					FolderID:    "test-folder",
-					OrgID:       1,
-					TestQueries: true,
-					From:        "now-1h",
-					To:          "now",
-				},
-				DeployerConfig: model.DeploymentConfig{
-					GrafanaInstance: "https://test.grafana.com",
-					Timeout:         "5s",
 				},
 			}
 
@@ -1555,16 +1927,16 @@ func TestIntegratorRun(t *testing.T) {
 			assert.NoError(t, err)
 
 			// Create test configuration
-			conversions := []model.ConversionConfig{}
+			configurations := []model.NamedConfigBlock{}
 
 			// For orphaned cleanup test cases, don't include the conversion in config
 			if !tt.wantOrphanedCleanup {
-				conversions = []model.ConversionConfig{
+				configurations = []model.NamedConfigBlock{
 					{
-						Name:       tt.conversionName,
-						RuleGroup:  "Test Rules",
-						TimeWindow: "5m",
-						Lookback:   "2m",
+						Name: tt.conversionName,
+						ConfigBlock: model.ConfigBlock{
+							Integration: model.IntegrationConfig{RuleGroup: "Test Rules", TimeWindow: "5m", Lookback: "2m"},
+						},
 					},
 				}
 			}
@@ -1574,15 +1946,11 @@ func TestIntegratorRun(t *testing.T) {
 					ConversionPath: convPath,
 					DeploymentPath: deployPath,
 				},
-				ConversionDefaults: model.ConversionConfig{
-					Target:     "loki",
-					DataSource: "test-datasource",
+				Defaults: model.ConfigBlock{
+					Conversion:  model.ConversionConfig{Target: "loki"},
+					Integration: model.IntegrationConfig{DataSource: "test-datasource", FolderID: "test-folder", OrgID: 1},
 				},
-				Conversions: conversions,
-				IntegratorConfig: model.IntegrationConfig{
-					FolderID: "test-folder",
-					OrgID:    1,
-				},
+				Configurations: configurations,
 			}
 
 			// Create test conversion output file
@@ -1841,30 +2209,27 @@ func TestIntegratorWithQueryTesting(t *testing.T) {
 					ConversionPath: convPath,
 					DeploymentPath: deployPath,
 				},
-				ConversionDefaults: model.ConversionConfig{
-					Target:     "loki",
-					DataSource: "test-loki-datasource",
-				},
-				Conversions: []model.ConversionConfig{
-					{
-						Name:       "test_loki",
-						RuleGroup:  "Loki Test Rules",
-						TimeWindow: "5m",
-						DataSource: "test-loki-datasource",
+				Defaults: model.ConfigBlock{
+					Conversion: model.ConversionConfig{Target: "loki"},
+					Integration: model.IntegrationConfig{
+						DataSource:       "test-loki-datasource",
+						FolderID:         "test-folder",
+						OrgID:            1,
+						TestQueries:      new(true),
+						From:             "now-1h",
+						To:               "now",
+						ShowLogLines:     &tt.showLogLines,
+						ShowSampleValues: &tt.showSampleValues,
 					},
+					Deployment: model.DeploymentConfig{GrafanaInstance: model.GrafanaInstances{"https://test.grafana.com"}, Timeout: "5s"},
 				},
-				IntegratorConfig: model.IntegrationConfig{
-					FolderID:         "test-folder",
-					OrgID:            1,
-					TestQueries:      true,
-					From:             "now-1h",
-					To:               "now",
-					ShowLogLines:     tt.showLogLines,
-					ShowSampleValues: tt.showSampleValues,
-				},
-				DeployerConfig: model.DeploymentConfig{
-					GrafanaInstance: "https://test.grafana.com",
-					Timeout:         "5s",
+				Configurations: []model.NamedConfigBlock{
+					{
+						Name: "test_loki",
+						ConfigBlock: model.ConfigBlock{
+							Integration: model.IntegrationConfig{DataSource: "test-loki-datasource", RuleGroup: "Loki Test Rules", TimeWindow: "5m"},
+						},
+					},
 				},
 			}
 
@@ -2065,30 +2430,26 @@ func TestIntegratorWithExploreLinkGeneration(t *testing.T) {
 					ConversionPath: convPath,
 					DeploymentPath: deployPath,
 				},
-				ConversionDefaults: model.ConversionConfig{
-					Target:         tt.datasourceType,
-					DataSource:     tt.datasource,
-					DataSourceType: tt.datasourceType,
-				},
-				Conversions: []model.ConversionConfig{
-					{
-						Name:           "test_explore_link",
-						RuleGroup:      "Explore Link Test Rules",
-						TimeWindow:     "5m",
+				Defaults: model.ConfigBlock{
+					Conversion: model.ConversionConfig{Target: tt.datasourceType},
+					Integration: model.IntegrationConfig{
 						DataSource:     tt.datasource,
 						DataSourceType: tt.datasourceType,
+						FolderID:       "test-folder",
+						OrgID:          1,
+						TestQueries:    new(true),
+						From:           "now-1h",
+						To:             "now",
 					},
+					Deployment: model.DeploymentConfig{GrafanaInstance: model.GrafanaInstances{"https://test.grafana.com"}, Timeout: "5s"},
 				},
-				IntegratorConfig: model.IntegrationConfig{
-					FolderID:    "test-folder",
-					OrgID:       1,
-					TestQueries: true,
-					From:        "now-1h",
-					To:          "now",
-				},
-				DeployerConfig: model.DeploymentConfig{
-					GrafanaInstance: "https://test.grafana.com",
-					Timeout:         "5s",
+				Configurations: []model.NamedConfigBlock{
+					{
+						Name: "test_explore_link",
+						ConfigBlock: model.ConfigBlock{
+							Integration: model.IntegrationConfig{DataSource: tt.datasource, DataSourceType: tt.datasourceType, RuleGroup: "Explore Link Test Rules", TimeWindow: "5m"},
+						},
+					},
 				},
 			}
 
@@ -2234,6 +2595,141 @@ func TestCorrelationWindowWarnings(t *testing.T) {
 			assert.Len(t, warnings, tt.wantCount)
 			for _, w := range warnings {
 				assert.Contains(t, w, "correlation timespan")
+			}
+		})
+	}
+}
+
+func TestAnyTestQueriesEnabled(t *testing.T) {
+	cfgWith := func(testQueries *bool) model.NamedConfigBlock {
+		return model.NamedConfigBlock{Name: "c", ConfigBlock: model.ConfigBlock{Integration: model.IntegrationConfig{TestQueries: testQueries}}}
+	}
+	withDefaults := func(testQueries *bool, cfgs ...model.NamedConfigBlock) model.Configuration {
+		return model.Configuration{
+			Defaults:       model.ConfigBlock{Integration: model.IntegrationConfig{TestQueries: testQueries}},
+			Configurations: cfgs,
+		}
+	}
+
+	assert.False(t, AnyTestQueriesEnabled(withDefaults(nil, cfgWith(nil))), "nothing set")
+	assert.True(t, AnyTestQueriesEnabled(withDefaults(nil, cfgWith(new(true)))), "enabled per configuration only")
+	assert.True(t, AnyTestQueriesEnabled(withDefaults(new(true), cfgWith(nil))), "enabled by default and inherited")
+	assert.False(t, AnyTestQueriesEnabled(withDefaults(new(true), cfgWith(new(false)))), "default true overridden by every configuration")
+	assert.True(t, AnyTestQueriesEnabled(withDefaults(new(true), cfgWith(new(false)), cfgWith(nil))), "one configuration still inherits the default")
+	assert.True(t, AnyTestQueriesEnabled(withDefaults(new(true))), "no configurations, enabled by default")
+}
+
+func TestLoadConfigContinueOnErrorEnvVar(t *testing.T) {
+	// env var, YAML defaults value -> expected defaults.integration.continue_on_error
+	cases := []struct {
+		name     string
+		env      *string
+		yamlLine string
+		want     *bool
+	}{
+		{name: "env true sets the default", env: new("true"), want: new(true)},
+		{name: "env false sets the default", env: new("false"), want: new(false)},
+		{name: "env overrides the YAML default", env: new("false"), yamlLine: "    continue_on_error: true\n", want: new(false)},
+		{name: "unset env keeps the YAML default", yamlLine: "    continue_on_error: true\n", want: new(true)},
+		{name: "unset env and unset YAML leaves it unset", want: nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			configFile, err := os.CreateTemp(".", "test_continue_on_error_*.yml")
+			require.NoError(t, err)
+			t.Cleanup(func() { os.Remove(configFile.Name()) })
+			deployDir, err := os.MkdirTemp(".", "test-continue-on-error-*")
+			require.NoError(t, err)
+			t.Cleanup(func() { os.RemoveAll(deployDir) })
+			_, err = configFile.WriteString("version: 2\nfolders:\n  conversion_path: conversions\n  deployment_path: \"" + deployDir + "\"\n" +
+				"defaults:\n  integration:\n    data_source: ds\n" + tc.yamlLine)
+			require.NoError(t, err)
+			require.NoError(t, configFile.Close())
+
+			t.Setenv("INTEGRATOR_CONFIG_PATH", configFile.Name())
+			t.Setenv("INTEGRATOR_GRAFANA_SA_TOKEN", "my-test-token")
+			t.Setenv("CHANGED_FILES", "")
+			t.Setenv("DELETED_FILES", "")
+			t.Setenv("MANUAL_FILES", "")
+			t.Setenv("ALL_RULES", "false")
+			t.Setenv("TEST_FILES", "")
+			if tc.env != nil {
+				t.Setenv("CONTINUE_ON_QUERY_TESTING_ERRORS", *tc.env)
+			} else {
+				t.Setenv("CONTINUE_ON_QUERY_TESTING_ERRORS", "")
+			}
+
+			i := NewIntegrator()
+			require.NoError(t, i.LoadConfig())
+			assert.Equal(t, tc.want, i.config.Defaults.Integration.ContinueOnError)
+		})
+	}
+}
+
+func TestLoadConfigRequiresResolvableFolderAndOrg(t *testing.T) {
+	tests := []struct {
+		name      string
+		defaults  string // lines under defaults.integration
+		configs   string // the configurations list items
+		wantError []string
+	}{
+		{
+			name:     "set in defaults",
+			defaults: "    folder_id: XXXX\n    org_id: 1\n",
+			configs:  "  - name: a\n    conversion:\n      input: x\n",
+		},
+		{
+			name:     "set only per configuration",
+			defaults: "    data_source: ds\n",
+			configs:  "  - name: a\n    conversion:\n      input: x\n    integration:\n      folder_id: F\n      org_id: 2\n",
+		},
+		{
+			name:     "configuration overrides the defaults",
+			defaults: "    folder_id: XXXX\n    org_id: 1\n",
+			configs:  "  - name: a\n    conversion:\n      input: x\n    integration:\n      folder_id: F\n      org_id: 2\n",
+		},
+		{
+			name:      "nothing set anywhere",
+			defaults:  "    data_source: ds\n",
+			configs:   "  - name: a\n    conversion:\n      input: x\n",
+			wantError: []string{`configuration "a" has no folder_id`, `configuration "a" has no org_id`},
+		},
+		{
+			name:      "only the configuration without a destination is reported",
+			defaults:  "    data_source: ds\n",
+			configs:   "  - name: ok\n    conversion:\n      input: x\n    integration:\n      folder_id: F\n      org_id: 2\n  - name: missing_org\n    conversion:\n      input: y\n    integration:\n      folder_id: F\n",
+			wantError: []string{`configuration "missing_org" has no org_id`},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			configFile, err := os.CreateTemp(".", "test_destination_*.yml")
+			require.NoError(t, err)
+			t.Cleanup(func() { os.Remove(configFile.Name()) })
+			deployDir, err := os.MkdirTemp(".", "test-destination-*")
+			require.NoError(t, err)
+			t.Cleanup(func() { os.RemoveAll(deployDir) })
+			_, err = configFile.WriteString("version: 2\nfolders:\n  conversion_path: conversions\n  deployment_path: \"" + deployDir + "\"\n" +
+				"defaults:\n  integration:\n" + tc.defaults + "configurations:\n" + tc.configs)
+			require.NoError(t, err)
+			require.NoError(t, configFile.Close())
+
+			t.Setenv("INTEGRATOR_CONFIG_PATH", configFile.Name())
+			t.Setenv("INTEGRATOR_GRAFANA_SA_TOKEN", "my-test-token")
+			t.Setenv("CHANGED_FILES", "")
+			t.Setenv("DELETED_FILES", "")
+			t.Setenv("MANUAL_FILES", "")
+			t.Setenv("ALL_RULES", "false")
+			t.Setenv("TEST_FILES", "")
+
+			err = NewIntegrator().LoadConfig()
+			if len(tc.wantError) == 0 {
+				require.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			for _, want := range tc.wantError {
+				assert.ErrorContains(t, err, want)
 			}
 		})
 	}

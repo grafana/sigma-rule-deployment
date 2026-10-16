@@ -22,9 +22,10 @@ Automate the conversion, testing, and deployment of [Sigma rules](https://sigmah
      - Alerting: Rules Writer
      - Alerting: Set provisioning status
      - Data sources: Reader
-3. Create a configuration file that defines one or more conversions and add it to the repository
-   - See the sample [configuration file](config/config-example.yml)
-   - See also the [configuration file schema](config/schema.json) for more details
+3. Create a configuration file that defines one or more configurations and add it to the repository
+   - See the sample [configuration file](config/config-example-v2.yml)
+   - See also the [configuration file schema](config/schema-v2.json) for more details
+   - The v1 configuration format is deprecated and no longer supported by the Actions. If you have a v1 file, use the [migration script](scripts/migrate-config-v1-to-v2/README.md) to convert it to v2
 4. Add a workflow to run the conversion/integration Actions on a PR commit or issue comment
    - See the reusable workflow [convert-integrate.yml](.github/workflows/convert-integrate.yml)
 5. Add a workflow to run the deployment Action on a push to main
@@ -58,7 +59,7 @@ Relevent conversion backends and data sources that can be used in Grafana includ
 | [CrowdStrike LogScale](https://github.com/SigmaHQ/pySigma-backend-crowdstrike)         | [Falcon LogScale data source](https://grafana.com/grafana/plugins/grafana-falconlogscale-datasource/)          | Custom Model                 |
 | [SentinelOne PowerQuery](https://github.com/7RedViolin/pySigma-backend-sentinelone-pq) | [Dataset data source](https://grafana.com/grafana/plugins/sentinelone-dataset-datasource/)                     | Native                       |
 
-- **Native**: The data source plugin is supported by the integrate action and the query model is generated automatically. Loki and Elasticsearch are selected by the `target` (or `data_source_type`) being `loki` or `elasticsearch`; the other native data sources are selected by setting `data_source_type` to the plugin's type ID, or by `target` where it is one of the names in the [table below](#native-query-models).
+- **Native**: The data source plugin is supported by the integrate action and the query model is generated automatically. Loki and Elasticsearch are selected by the `target` (or `integration.data_source_type`) being `loki` or `elasticsearch`; the other native data sources are selected by setting `integration.data_source_type` to the plugin's type ID, or by `target` where it is one of the names in the [table below](#native-query-models).
 - **Custom Model**: The data source plugin is supported by the integrate action but the query model must be passed as a custom model in the conversion configuration, as it needs a value specific to your environment (see [How can I use a custom query model for a data source?](#how-can-i-use-a-custom-query-model-for-a-data-source)).
 
 > [!NOTE]
@@ -66,7 +67,7 @@ Relevent conversion backends and data sources that can be used in Grafana includ
 
 #### Native query models
 
-| Data source         | `data_source_type`                       | Also selected by `target` | What the query needs to return                                                                                                                                   |
+| Data source         | `integration.data_source_type`           | Also selected by `target` | What the query needs to return                                                                                                                                   |
 | ------------------- | ---------------------------------------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Azure Data Explorer | `grafana-azure-data-explorer-datasource` |                           | A time series: KQL that ends `summarize ... by bin(<time>, <step>) \| order by <time> asc`. The data source must have a default database and cluster configured. |
 | Datadog             | `grafana-datadog-datasource`             | `datadog`                 | A [logs search](https://grafana.com/docs/plugins/grafana-datadog-datasource/latest/alerting/) in aggregate mode, returning the count of matching logs            |
@@ -111,7 +112,7 @@ SELECT COUNT(*) FROM A
 
 ### How can I use a custom query model for a data source?
 
-To ensure the data source plugin can execute your queries, you may need to provide a bespoke `query_model` in the conversion configuration. You do this by specifing a [fmt.Sprintf](https://pkg.go.dev/fmt#pkg-overview) formatted JSON string, which receives the following arguments:
+To ensure the data source plugin can execute your queries, you may need to provide a bespoke `query_model` in the `integration` section of the configuration (either in `defaults.integration` or in a configuration's own `integration` block). You do this by specifing a [fmt.Sprintf](https://pkg.go.dev/fmt#pkg-overview) formatted JSON string, which receives the following arguments:
 
 1. the ref ID for the query
 2. the UID for the data source
@@ -160,7 +161,7 @@ The main restriction are they need to be valid Sigma rules, including the `id` a
 > [!IMPORTANT]
 > The [Sigma Rules Validator](https://github.com/SigmaHQ/sigma-rules-validator) action does not currently work with multiple documents in a single YAML and hence we recommend storing such rules in a separate directory from the Sigma rules. More info can be found [here](./actions/sigma-validation/README.md)
 
-### What value should be provided for the `data_source` field in the `conversion` settings?
+### What value should be provided for the `data_source` field in the `integration` settings?
 
 This should be the UID (Unique IDentifier) of the data source, not the data source name. You can find the UID for a data source by opening the Explore page, selecting the relevant data source, and examining the page URL for the text `"datasource":"XXX"` - that value (i.e., `XXX`) is the UID.
 

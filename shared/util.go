@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -97,4 +100,84 @@ func GetConfigValue(config, defaultConf, def string) string {
 		return defaultConf
 	}
 	return def
+}
+
+// GetConfigBool returns config if it is set, otherwise defaultConf if it is set, otherwise false.
+// A set false in config overrides a true defaultConf.
+func GetConfigBool(config, defaultConf *bool) bool {
+	if config != nil {
+		return *config
+	}
+	if defaultConf != nil {
+		return *defaultConf
+	}
+	return false
+}
+
+// GetConfigValueInt64 returns config if non-zero, otherwise defaultVal.
+func GetConfigValueInt64(config, defaultVal int64) int64 {
+	if config != 0 {
+		return config
+	}
+	return defaultVal
+}
+
+// ParseDuration parses a duration as time.ParseDuration does, and additionally accepts a leading whole
+// number of days ("1d", "2d12h"), which time.ParseDuration doesn't support. A day is 24 hours.
+// Days must come first and be unsigned, so "1h1d" and "-1d" are rejected.
+func ParseDuration(s string) (time.Duration, error) {
+	end := 0
+	for end < len(s) && s[end] >= '0' && s[end] <= '9' {
+		end++
+	}
+	if end == 0 || end >= len(s) || s[end] != 'd' {
+		return time.ParseDuration(s)
+	}
+	days, err := strconv.ParseInt(s[:end], 10, 64)
+	if err != nil || days > int64(math.MaxInt64/(24*time.Hour)) {
+		return 0, fmt.Errorf("invalid duration %q: too many days", s)
+	}
+	total := time.Duration(days) * 24 * time.Hour
+	rest := s[end+1:]
+	if rest == "" {
+		return total, nil
+	}
+	remainder, err := time.ParseDuration(rest)
+	if err != nil {
+		return 0, fmt.Errorf("invalid duration %q: %w", s, err)
+	}
+	// time.ParseDuration accepts a sign, which would be meaningless after the days
+	if rest[0] == '-' || rest[0] == '+' {
+		return 0, fmt.Errorf("invalid duration %q", s)
+	}
+	if total > math.MaxInt64-remainder {
+		return 0, fmt.Errorf("invalid duration %q: overflows", s)
+	}
+	return total + remainder, nil
+}
+
+// ParseDurationOrDefault parses s as a duration (see ParseDuration), returning defaultVal if s is empty or invalid.
+func ParseDurationOrDefault(s string, defaultVal time.Duration) time.Duration {
+	if s == "" {
+		return defaultVal
+	}
+	if d, err := ParseDuration(s); err == nil {
+		return d
+	}
+	return defaultVal
+}
+
+// MatchConfigName returns the configuration name that owns filename, which must start with
+// "{name}_". When several names match (e.g. "aws" and "aws_cloudtrail" for
+// "aws_cloudtrail_rule.json") the longest wins, so the result doesn't depend on ordering.
+// Pass every configuration name, not just those with overrides, so a longer name without
+// overrides isn't mistaken for a shorter one that has them.
+func MatchConfigName(filename string, names []string) (string, bool) {
+	best, found := "", false
+	for _, name := range names {
+		if strings.HasPrefix(filename, name+"_") && (!found || len(name) > len(best)) {
+			best, found = name, true
+		}
+	}
+	return best, found
 }

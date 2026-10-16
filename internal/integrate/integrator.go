@@ -9,7 +9,6 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"text/template"
 	"time"
@@ -157,13 +156,21 @@ func (i *Integrator) LoadConfig() error {
 	i.prettyPrint = strings.ToLower(os.Getenv("PRETTY_PRINT")) == TRUE
 	i.allRules = strings.ToLower(os.Getenv("ALL_RULES")) == TRUE
 
-	i.config.IntegratorConfig.ContinueOnQueryTestingErrors = strings.ToLower(os.Getenv("CONTINUE_ON_QUERY_TESTING_ERRORS")) == TRUE
+	// The action input is the workflow-level default, and so takes precedence over
+	// defaults.integration.continue_on_error; a configuration's own setting still overrides it
+	if v := os.Getenv("CONTINUE_ON_QUERY_TESTING_ERRORS"); v != "" {
+		i.config.Defaults.Integration.ContinueOnError = new(strings.ToLower(v) == TRUE)
+	}
 
 	if !filepath.IsLocal(i.config.Folders.ConversionPath) {
 		return fmt.Errorf("conversion path is not local: %s", i.config.Folders.ConversionPath)
 	}
 	if !filepath.IsLocal(i.config.Folders.DeploymentPath) {
 		return fmt.Errorf("deployment path is not local: %s", i.config.Folders.DeploymentPath)
+	}
+
+	if err := validateAlertDestinations(i.config); err != nil {
+		return err
 	}
 
 	fmt.Printf("Conversion path: %s\nDeployment path: %s\n", i.config.Folders.ConversionPath, i.config.Folders.DeploymentPath)
@@ -177,11 +184,11 @@ func (i *Integrator) LoadConfig() error {
 
 	// If from and to are not provided, use the default values
 	// to query for the last hour.
-	if i.config.IntegratorConfig.From == "" {
-		i.config.IntegratorConfig.From = "now-1h"
+	if i.config.Defaults.Integration.From == "" {
+		i.config.Defaults.Integration.From = "now-1h"
 	}
-	if i.config.IntegratorConfig.To == "" {
-		i.config.IntegratorConfig.To = "now"
+	if i.config.Defaults.Integration.To == "" {
+		i.config.Defaults.Integration.To = "now"
 	}
 
 	changedFiles := strings.Split(os.Getenv("CHANGED_FILES"), " ")
@@ -200,8 +207,7 @@ func (i *Integrator) LoadConfig() error {
 			}
 			if !info.IsDir() {
 				newUpdatedFiles = append(newUpdatedFiles, path)
-				// If all files is true, test all files
-				if i.config.IntegratorConfig.TestQueries {
+				if testQueriesEnabledForFile(filepath.Base(path), i.config) {
 					filesToBeTested = append(filesToBeTested, path)
 				}
 			}
@@ -214,9 +220,13 @@ func (i *Integrator) LoadConfig() error {
 		if newUpdatedFiles, err = filterFilesInDir(changedFiles, i.config.Folders.ConversionPath); err != nil {
 			return err
 		}
-		if i.config.IntegratorConfig.TestQueries {
-			if filesToBeTested, err = filterFilesInDir(testFiles, i.config.Folders.ConversionPath); err != nil {
-				return err
+		testCandidates, err := filterFilesInDir(testFiles, i.config.Folders.ConversionPath)
+		if err != nil {
+			return err
+		}
+		for _, path := range testCandidates {
+			if testQueriesEnabledForFile(filepath.Base(path), i.config) {
+				filesToBeTested = append(filesToBeTested, path)
 			}
 		}
 	}
@@ -311,8 +321,8 @@ func (i *Integrator) isConversionFileOrphaned(file string) (bool, error) {
 	}
 
 	// Check if this conversion name has a matching configuration
-	for _, conf := range i.config.Conversions {
-		if conf.Name == conversionObject.ConversionName {
+	for _, cfg := range i.config.Configurations {
+		if cfg.Name == conversionObject.ConversionName {
 			return false, nil
 		}
 	}
@@ -494,14 +504,14 @@ func (i *Integrator) DoConversions() error {
 		}
 
 		// Find matching configuration using ConversionName
-		var config model.ConversionConfig
-		for _, conf := range i.config.Conversions {
-			if conf.Name == conversionObject.ConversionName {
-				config = conf
+		var cfg model.NamedConfigBlock
+		for _, c := range i.config.Configurations {
+			if c.Name == conversionObject.ConversionName {
+				cfg = c
 				break
 			}
 		}
-		if config.Name == "" {
+		if cfg.Name == "" {
 			fmt.Printf("Warning: No configuration found for conversion name: %s, skipping file: %s\n", conversionObject.ConversionName, inputFile)
 			continue
 		}
@@ -519,9 +529,9 @@ func (i *Integrator) DoConversions() error {
 
 		// Extract rule filename from input file name
 		ruleFilename := strings.TrimSuffix(filepath.Base(inputFile), ".json")
-		ruleFilename = strings.TrimPrefix(ruleFilename, config.Name+"_")
+		ruleFilename = strings.TrimPrefix(ruleFilename, cfg.Name+"_")
 		ruleUID := getRuleUID(conversionObject.ConversionName, conversionID)
-		file := fmt.Sprintf("%s%salert_rule_%s_%s_%s.json", i.config.Folders.DeploymentPath, string(filepath.Separator), config.Name, ruleFilename, ruleUID)
+		file := fmt.Sprintf("%s%salert_rule_%s_%s_%s.json", i.config.Folders.DeploymentPath, string(filepath.Separator), cfg.Name, ruleFilename, ruleUID)
 		fmt.Printf("Working on alert rule file: %s\n", file)
 		rule := &model.ProvisionedAlertRule{UID: ruleUID}
 
@@ -533,7 +543,7 @@ func (i *Integrator) DoConversions() error {
 			fmt.Printf("Skipping manually-maintained deployment file (not overwriting): %s\n", file)
 			continue
 		}
-		err = i.ConvertToAlert(rule, queries, titles, config, inputFile, file, conversionObject)
+		err = i.ConvertToAlert(rule, queries, titles, cfg, inputFile, file, conversionObject)
 		if err != nil {
 			return err
 		}
@@ -626,25 +636,35 @@ func correlationWindowWarnings(rules []model.SigmaRule, timeWindow time.Duration
 	return warnings
 }
 
-// parseSigmaTimespan parses a Sigma correlation timespan. Besides the units
-// supported by time.ParseDuration it accepts a day suffix ("1d"), which Sigma
-// rules commonly use.
+// parseSigmaTimespan parses a Sigma correlation timespan, which commonly uses a day suffix ("1d")
 func parseSigmaTimespan(s string) (time.Duration, error) {
-	s = strings.TrimSpace(s)
-	if days, ok := strings.CutSuffix(s, "d"); ok {
-		n, err := strconv.Atoi(days)
-		if err != nil {
-			return 0, err
-		}
-		return time.Duration(n) * 24 * time.Hour, nil
-	}
-	return time.ParseDuration(s)
+	return shared.ParseDuration(strings.TrimSpace(s))
 }
 
-func (i *Integrator) ConvertToAlert(rule *model.ProvisionedAlertRule, queries []string, titles string, config model.ConversionConfig, conversionFile string, integrateFile string, conversionObject model.ConversionOutput) error {
-	datasource := shared.GetConfigValue(config.DataSource, i.config.ConversionDefaults.DataSource, "nil")
-	timewindow := shared.GetConfigValue(config.TimeWindow, i.config.ConversionDefaults.TimeWindow, "1m")
-	duration, err := time.ParseDuration(timewindow)
+// validateAlertDestinations checks that every configuration resolves a folder_id and an org_id, from
+// its own integration settings or from the defaults. The schema can't require them, as they may be set
+// in either place, but without them the alert rules would be generated for no folder or organisation,
+// and only fail later when they are deployed.
+func validateAlertDestinations(config model.Configuration) error {
+	var problems []string
+	for _, cfg := range config.Configurations {
+		if shared.GetConfigValue(cfg.Integration.FolderID, config.Defaults.Integration.FolderID, "") == "" {
+			problems = append(problems, fmt.Sprintf("configuration %q has no folder_id", cfg.Name))
+		}
+		if shared.GetConfigValueInt64(cfg.Integration.OrgID, config.Defaults.Integration.OrgID) == 0 {
+			problems = append(problems, fmt.Sprintf("configuration %q has no org_id", cfg.Name))
+		}
+	}
+	if len(problems) > 0 {
+		return fmt.Errorf("%s: set folder_id and org_id in defaults.integration or in the configuration's integration block", strings.Join(problems, ", "))
+	}
+	return nil
+}
+
+func (i *Integrator) ConvertToAlert(rule *model.ProvisionedAlertRule, queries []string, titles string, cfg model.NamedConfigBlock, conversionFile string, integrateFile string, conversionObject model.ConversionOutput) error {
+	datasource := shared.GetConfigValue(cfg.Integration.DataSource, i.config.Defaults.Integration.DataSource, "nil")
+	timewindow := shared.GetConfigValue(cfg.Integration.TimeWindow, i.config.Defaults.Integration.TimeWindow, "1m")
+	duration, err := shared.ParseDuration(timewindow)
 	if err != nil {
 		return fmt.Errorf("error parsing time window: %v", err)
 	}
@@ -655,8 +675,8 @@ func (i *Integrator) ConvertToAlert(rule *model.ProvisionedAlertRule, queries []
 		fmt.Printf("Warning: %s\n", warning)
 	}
 
-	lookback := shared.GetConfigValue(config.Lookback, i.config.ConversionDefaults.Lookback, "0s")
-	lookbackDuration, err := time.ParseDuration(lookback)
+	lookback := shared.GetConfigValue(cfg.Integration.Lookback, i.config.Defaults.Integration.Lookback, "0s")
+	lookbackDuration, err := shared.ParseDuration(lookback)
 	if err != nil {
 		return fmt.Errorf("error parsing lookback: %v", err)
 	}
@@ -670,7 +690,7 @@ func (i *Integrator) ConvertToAlert(rule *model.ProvisionedAlertRule, queries []
 	refIDs := make([]string, len(queries))
 	for index, query := range queries {
 		refIDs[index] = fmt.Sprintf("A%d", index)
-		alertQuery, err := createAlertQuery(query, refIDs[index], datasource, timerange, config, i.config.ConversionDefaults)
+		alertQuery, err := createAlertQuery(query, refIDs[index], datasource, timerange, cfg, i.config.Defaults)
 		if err != nil {
 			return err
 		}
@@ -720,9 +740,9 @@ func (i *Integrator) ConvertToAlert(rule *model.ProvisionedAlertRule, queries []
 	rule.Data = queryData
 
 	// alerting rule metadata
-	rule.OrgID = i.config.IntegratorConfig.OrgID
-	rule.FolderUID = i.config.IntegratorConfig.FolderID
-	rule.RuleGroup = shared.GetConfigValue(config.RuleGroup, i.config.ConversionDefaults.RuleGroup, "Default")
+	rule.OrgID = shared.GetConfigValueInt64(cfg.Integration.OrgID, i.config.Defaults.Integration.OrgID)
+	rule.FolderUID = shared.GetConfigValue(cfg.Integration.FolderID, i.config.Defaults.Integration.FolderID, "")
+	rule.RuleGroup = shared.GetConfigValue(cfg.Integration.RuleGroup, i.config.Defaults.Integration.RuleGroup, "Default")
 	rule.NoDataState = model.OK
 	rule.ExecErrState = model.OkErrState
 	rule.Title = titles
@@ -741,7 +761,7 @@ func (i *Integrator) ConvertToAlert(rule *model.ProvisionedAlertRule, queries []
 	rule.Annotations["LogSourceUid"] = datasource
 
 	// LogSourceType annotation (target)
-	logSourceType := shared.GetConfigValue(config.Target, i.config.ConversionDefaults.Target, shared.Loki)
+	logSourceType := shared.GetConfigValue(cfg.Conversion.Target, i.config.Defaults.Conversion.Target, shared.Loki)
 	rule.Annotations["LogSourceType"] = logSourceType
 
 	// Path to associated files
@@ -749,48 +769,53 @@ func (i *Integrator) ConvertToAlert(rule *model.ProvisionedAlertRule, queries []
 	rule.Annotations["ConversionFile"] = conversionFile
 	rule.Annotations["DeploymentFile"] = integrateFile
 
-	funcs := templateFuncs(i.config.IntegratorConfig.TemplateAllRules)
+	templateAllRules := shared.GetConfigBool(cfg.Integration.TemplateAllRules, i.config.Defaults.Integration.TemplateAllRules)
+	funcs := templateFuncs(templateAllRules)
 
-	if i.config.IntegratorConfig.TemplateAnnotations != nil {
-		for key, value := range i.config.IntegratorConfig.TemplateAnnotations {
-			tmpl, err := template.New("annotation_" + key).Funcs(funcs).Parse(value)
-			if err != nil {
-				return fmt.Errorf("error parsing template %s: %v", key, err)
-			}
-			var buf bytes.Buffer
-			if i.config.IntegratorConfig.TemplateAllRules {
-				err = tmpl.Execute(&buf, conversionObject.Rules)
-			} else {
-				err = tmpl.Execute(&buf, conversionObject.Rules[0])
-			}
-			if err != nil {
-				return fmt.Errorf("error executing template %s: %v", key, err)
-			}
-			rule.Annotations[key] = buf.String()
+	templateAnnotations := i.config.Defaults.Integration.TemplateAnnotations
+	if cfg.Integration.TemplateAnnotations != nil {
+		templateAnnotations = cfg.Integration.TemplateAnnotations
+	}
+	for key, value := range templateAnnotations {
+		tmpl, err := template.New("annotation_" + key).Funcs(funcs).Parse(value)
+		if err != nil {
+			return fmt.Errorf("error parsing template %s: %v", key, err)
 		}
+		var buf bytes.Buffer
+		if templateAllRules {
+			err = tmpl.Execute(&buf, conversionObject.Rules)
+		} else {
+			err = tmpl.Execute(&buf, conversionObject.Rules[0])
+		}
+		if err != nil {
+			return fmt.Errorf("error executing template %s: %v", key, err)
+		}
+		rule.Annotations[key] = buf.String()
 	}
 
 	if rule.Labels == nil {
 		rule.Labels = make(map[string]string)
 	}
 
-	if i.config.IntegratorConfig.TemplateLabels != nil {
-		for key, value := range i.config.IntegratorConfig.TemplateLabels {
-			tmpl, err := template.New("label_" + key).Funcs(funcs).Parse(value)
-			if err != nil {
-				return fmt.Errorf("error parsing template %s: %v", key, err)
-			}
-			var buf bytes.Buffer
-			if i.config.IntegratorConfig.TemplateAllRules {
-				err = tmpl.Execute(&buf, conversionObject.Rules)
-			} else {
-				err = tmpl.Execute(&buf, conversionObject.Rules[0])
-			}
-			if err != nil {
-				return fmt.Errorf("error executing template %s: %v", key, err)
-			}
-			rule.Labels[key] = buf.String()
+	templateLabels := i.config.Defaults.Integration.TemplateLabels
+	if cfg.Integration.TemplateLabels != nil {
+		templateLabels = cfg.Integration.TemplateLabels
+	}
+	for key, value := range templateLabels {
+		tmpl, err := template.New("label_" + key).Funcs(funcs).Parse(value)
+		if err != nil {
+			return fmt.Errorf("error parsing template %s: %v", key, err)
 		}
+		var buf bytes.Buffer
+		if templateAllRules {
+			err = tmpl.Execute(&buf, conversionObject.Rules)
+		} else {
+			err = tmpl.Execute(&buf, conversionObject.Rules[0])
+		}
+		if err != nil {
+			return fmt.Errorf("error executing template %s: %v", key, err)
+		}
+		rule.Labels[key] = buf.String()
 	}
 
 	return nil
@@ -975,9 +1000,9 @@ func BuiltinQueryModel(datasourceType string) (string, bool) {
 }
 
 // createAlertQuery creates an AlertQuery based on the target data source and configuration
-func createAlertQuery(query string, refID string, datasource string, timerange model.RelativeTimeRange, config model.ConversionConfig, defaultConf model.ConversionConfig) (model.AlertQuery, error) {
-	datasourceType := shared.GetConfigValue(config.DataSourceType, defaultConf.DataSourceType, shared.GetConfigValue(config.Target, defaultConf.Target, shared.Loki))
-	customModel := shared.GetConfigValue(config.QueryModel, defaultConf.QueryModel, "")
+func createAlertQuery(query string, refID string, datasource string, timerange model.RelativeTimeRange, cfg model.NamedConfigBlock, defaults model.ConfigBlock) (model.AlertQuery, error) {
+	datasourceType := shared.GetConfigValue(cfg.Integration.DataSourceType, defaults.Integration.DataSourceType, shared.GetConfigValue(cfg.Conversion.Target, defaults.Conversion.Target, shared.Loki))
+	customModel := shared.GetConfigValue(cfg.Integration.QueryModel, defaults.Integration.QueryModel, "")
 
 	if datasourceType == shared.Loki {
 		if !isLokiMetricQuery(query) {
@@ -1021,4 +1046,33 @@ func createAlertQuery(query string, refID string, datasource string, timerange m
 	}
 
 	return alertQuery, nil
+}
+
+// AnyTestQueriesEnabled returns true if the default config or any named configuration has TestQueries enabled.
+func AnyTestQueriesEnabled(config model.Configuration) bool {
+	for _, cfg := range config.Configurations {
+		if shared.GetConfigBool(cfg.Integration.TestQueries, config.Defaults.Integration.TestQueries) {
+			return true
+		}
+	}
+	return len(config.Configurations) == 0 && shared.GetConfigBool(nil, config.Defaults.Integration.TestQueries)
+}
+
+// testQueriesEnabledForFile returns true if the file's associated configuration has TestQueries enabled.
+// Files are matched to configurations by the "{configName}_" filename prefix, taking the longest
+// matching name when one configuration name is a prefix of another.
+// Falls back to the default TestQueries setting if no named configuration matches.
+func testQueriesEnabledForFile(filename string, config model.Configuration) bool {
+	names := make([]string, 0, len(config.Configurations))
+	for _, cfg := range config.Configurations {
+		names = append(names, cfg.Name)
+	}
+	if name, ok := shared.MatchConfigName(filename, names); ok {
+		for _, cfg := range config.Configurations {
+			if cfg.Name == name {
+				return shared.GetConfigBool(cfg.Integration.TestQueries, config.Defaults.Integration.TestQueries)
+			}
+		}
+	}
+	return shared.GetConfigBool(nil, config.Defaults.Integration.TestQueries)
 }

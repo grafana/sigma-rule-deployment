@@ -24,6 +24,8 @@ Note: The token provided in `grafana_sa_token` must have the following permissio
 
 A fresh deployment (`fresh_deploy`) will delete all existing alert rules in the Grafana Alert folder specified in the config file and then create all the alerts existing in the deployment folder. This is therefore a destructive action and should be used with caution. It is meant to be used when the alerts are to be re-deployed from scratch after a deployment drift. The advised way of using this mode is via a manually triggered workflow. Ensure a dedicated Grafana Alert folder is used for this purpose.
 
+Each configuration must resolve to at least one Grafana instance, from its own `deployment.grafana_instance` or from `defaults.deployment.grafana_instance`. The action fails when it can't, rather than skipping the alerts. When configurations deploy to different instances, a fresh deployment cleans each instance separately: only the alerts in the `folder_id` and `org_id` of the configurations deployed to that instance are deleted from it. A default instance that every configuration overrides is left untouched.
+
 ## Outputs
 
 | Name               | Description                                                                |

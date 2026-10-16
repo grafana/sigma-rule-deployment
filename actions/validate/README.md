@@ -1,6 +1,6 @@
 # Config Validator GitHub Action
 
-A GitHub Action that validates sigma-rule-deployment configuration files against the [JSON schema](https://github.com/grafana/sigma-rule-deployment/blob/main/config/schema.json). This action ensures proper structure and required fields before processing, and is part of the Sigma Rule Deployment GitHub Actions Suite.
+A GitHub Action that validates sigma-rule-deployment configuration files against the [v2 JSON schema](https://github.com/grafana/sigma-rule-deployment/blob/main/config/schema-v2.json). It also detects the deprecated v1 format and tells you to migrate. This action ensures proper structure and required fields before processing, and is part of the Sigma Rule Deployment GitHub Actions Suite.
 
 ## Overview
 
@@ -8,10 +8,12 @@ The Config Validator action should be used as a validation step before running c
 
 ## Inputs
 
-| Input         | Description                                                                        | Required | Default              |
-| ------------- | ---------------------------------------------------------------------------------- | -------- | -------------------- |
-| `config_file` | Path to the configuration file to validate, relative to the root of the repository | No       | `config.yml`         |
-| `schema_file` | Path to the JSON schema file, relative to the root of the repository               | No       | `config/schema.json` |
+| Input            | Description                                                                                                                                  | Required | Default                 |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ----------------------- |
+| `config_file`    | Path to the configuration file to validate, relative to the root of the repository                                                          | No       | `config.yml`            |
+| `v2_schema_file` | Path to the v2 JSON schema file, relative to the root of the repository. Defaults to the schema bundled with this action                    | No       | `config/schema-v2.json` |
+| `v1_schema_file` | Path to the v1 JSON schema file, relative to the root of the repository. Only used to recognise a v1 config. Defaults to the bundled schema | No       | `config/schema.json`    |
+| `github_token`   | GitHub token used to post a PR comment with a suggested v2 configuration when a v1 configuration is detected. If omitted, no comment is posted | No       | `""`                    |
 
 ## Usage
 
@@ -42,36 +44,36 @@ jobs:
         uses: grafana/sigma-rule-deployment/actions/validate@<HASH>
         with:
           config_file: config.yml
-          schema_file: config/schema.json
 ```
 
 ## How It Works
 
 1. **Setup**: The action checks out the repository and prepares the environment for validation.
-2. **File Resolution**: Resolves the paths for both the configuration file and JSON schema file relative to the repository root.
-3. **Schema Loading**: Loads the JSON schema file (either the default bundled schema or a custom one from your repository).
-4. **Configuration Parsing**: Parses the YAML configuration file and converts it to JSON format for validation.
-5. **Validation**: Uses `check-jsonschema` to validate the configuration against the schema, checking for:
+2. **File Resolution**: Resolves the paths for the configuration file and the JSON schema files relative to the repository root.
+3. **v2 Validation**: Uses `check-jsonschema` to validate the configuration against the v2 schema, checking for:
    - Required fields and their presence
    - Data types and format compliance
    - Nested object structure validation
    - Enum value validation
    - Custom constraint validation
-6. **Error Reporting**: Provides detailed error messages if validation fails, including specific field names and expected formats.
-7. **Success**: Exits with success status if the configuration passes all validation checks.
+
+   If the configuration is valid, the action exits with success.
+4. **v1 Detection**: If v2 validation fails, the configuration is checked against the v1 schema. A valid v1 configuration is deprecated and no longer supported by the Actions, so the action fails with a message asking you to migrate. It generates a suggested v2 configuration using the [migration script](../../scripts/migrate-config-v1-to-v2/README.md) and prints it to the log, or, on a pull request when `github_token` is provided, posts it as a PR comment.
+5. **Error Reporting**: If the configuration is valid in neither format, the action prints the v2 validation errors, including specific field names and expected formats, and fails.
 
 ## Important Notes
 
 ### Path Resolution
 
-- Both `config_file` and `schema_file` paths are resolved relative to the user's repository root.
+- `config_file`, `v2_schema_file` and `v1_schema_file` paths are resolved relative to the user's repository root.
 - Custom schema files must be located within your repository for security reasons.
 
 ### Validation Details
 
 - The action uses [`check-jsonschema`](https://github.com/python-jsonschema/check-jsonschema) for validation.
 - The action provides detailed error messages when configuration doesn't match the schema.
-- When using the default `schema_file`, the action uses [the bundled schema](https://github.com/grafana/sigma-rule-deployment/blob/main/config/schema.json) from the action repository.
+- When using the default schema inputs, the action uses the bundled [v2 schema](https://github.com/grafana/sigma-rule-deployment/blob/main/config/schema-v2.json) and [v1 schema](https://github.com/grafana/sigma-rule-deployment/blob/main/config/schema.json) from the action repository.
+- A valid v1 configuration still fails the action. To post the suggested migration as a PR comment, pass `github_token` and grant the job `pull-requests: write`.
 
 ### Best Practices
 
