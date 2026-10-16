@@ -43,7 +43,7 @@ runs:
         WORKSPACE_REAL=$(realpath "$GITHUB_WORKSPACE")
 
         # Resolve config file path
-        CONFIG_PATH=$(realpath "${GITHUB_WORKSPACE}/${INPUTS_CONFIG_FILE}" 2>/dev/null)
+        CONFIG_PATH=$(realpath "${GITHUB_WORKSPACE}/${INPUTS_CONFIG_FILE}" 2>/dev/null) || true
         if [ -z "$CONFIG_PATH" ]; then
           echo "Error: Failed to resolve config file path '${INPUTS_CONFIG_FILE}'"
           exit 1
@@ -65,13 +65,13 @@ runs:
           local resolved
 
           if [ -n "$input" ]; then
-            resolved=$(realpath "${GITHUB_WORKSPACE}/${input}" 2>/dev/null)
+            resolved=$(realpath "${GITHUB_WORKSPACE}/${input}" 2>/dev/null) || true
             if [ -z "$resolved" ] || [[ "$resolved" != "$WORKSPACE_REAL"* ]]; then
               echo "Error: ${label} path '${input}' is invalid or resolves outside workspace boundaries" >&2
               exit 1
             fi
           else
-            resolved=$(realpath "$default_path" 2>/dev/null)
+            resolved=$(realpath "$default_path" 2>/dev/null) || true
           fi
 
           if [ ! -f "$resolved" ]; then
@@ -87,8 +87,9 @@ runs:
 
         # --- Try v2 schema first ---
         echo "Validating ${INPUTS_CONFIG_FILE} against v2 schema..."
-        V2_OUTPUT=$(check-jsonschema --schemafile "$V2_SCHEMA_PATH" "$CONFIG_PATH" 2>&1)
-        V2_EXIT=$?
+        # The step runs under `bash -e`, so capture the exit code with `||` rather than a bare `$?`
+        V2_EXIT=0
+        V2_OUTPUT=$(check-jsonschema --schemafile "$V2_SCHEMA_PATH" "$CONFIG_PATH" 2>&1) || V2_EXIT=$?
 
         if [ $V2_EXIT -eq 0 ]; then
           echo "Configuration is valid (v2 format)"
@@ -97,8 +98,8 @@ runs:
 
         # --- Fall back to v1 schema ---
         echo "v2 validation failed, checking if config is valid v1 format..."
-        V1_OUTPUT=$(check-jsonschema --schemafile "$V1_SCHEMA_PATH" "$CONFIG_PATH" 2>&1)
-        V1_EXIT=$?
+        V1_EXIT=0
+        V1_OUTPUT=$(check-jsonschema --schemafile "$V1_SCHEMA_PATH" "$CONFIG_PATH" 2>&1) || V1_EXIT=$?
 
         if [ $V1_EXIT -eq 0 ]; then
           echo "Configuration matches v1 format — migration to v2 is required"
