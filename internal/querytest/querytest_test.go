@@ -910,3 +910,20 @@ func TestQueryTestingWithMultipleGrafanaInstances(t *testing.T) {
 	// 4 total calls: 2 per conversion × 2 instances each
 	assert.Len(t, mock.calls, 4)
 }
+
+func TestTestQueriesFailsWhenNoGrafanaInstanceResolves(t *testing.T) {
+	defaults := model.ConfigBlock{
+		Conversion:  model.ConversionConfig{Target: "loki"},
+		Integration: model.IntegrationConfig{DataSource: "test-datasource", OrgID: 1},
+	}
+	queryTester := NewQueryTester(model.Configuration{Defaults: defaults}, nil, 5*time.Second)
+
+	results, err := queryTester.TestQueries(
+		map[string]string{"A0": `{job="test"}`},
+		model.NamedConfigBlock{Name: "test_conv"},
+		defaults,
+	)
+
+	assert.ErrorContains(t, err, `configuration "test_conv" has no Grafana instance`)
+	assert.Empty(t, results)
+}

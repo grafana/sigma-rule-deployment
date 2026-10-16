@@ -172,6 +172,9 @@ func (qt *QueryTester) TestQueries(queries map[string]string, cfg model.NamedCon
 	from := shared.GetConfigValue(cfg.Integration.From, defaults.Integration.From, "now-1h")
 	to := shared.GetConfigValue(cfg.Integration.To, defaults.Integration.To, "now")
 	grafanaInstances := cfg.Deployment.GrafanaInstance.WithDefault(defaults.Deployment.GrafanaInstance)
+	if len(grafanaInstances) == 0 {
+		return nil, fmt.Errorf("configuration %q has no Grafana instance to test queries against: set grafana_instance in defaults.deployment or in the configuration's deployment block", cfg.Name)
+	}
 	saToken := os.Getenv("INTEGRATOR_GRAFANA_SA_TOKEN")
 	timeout := shared.ParseDurationOrDefault(cfg.Deployment.Timeout, qt.timeout)
 	showSampleValues := defaults.Integration.ShowSampleValues || cfg.Integration.ShowSampleValues

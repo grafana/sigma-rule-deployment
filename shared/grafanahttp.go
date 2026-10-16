@@ -21,15 +21,23 @@ type GrafanaClient struct {
 	client    *http.Client
 }
 
-// NewGrafanaClient creates a new Grafana HTTP client
-func NewGrafanaClient(baseURL, apiKey, userAgent string, timeout time.Duration) *GrafanaClient {
-	// Ensure baseURL ends with a slash
+// NormalizeBaseURL ensures a non-empty base URL ends with a slash, as clients store it.
+func NormalizeBaseURL(baseURL string) string {
 	if baseURL != "" && baseURL[len(baseURL)-1] != '/' {
 		baseURL += "/"
 	}
+	return baseURL
+}
 
+// BaseURL returns the normalised base URL of the Grafana instance this client talks to.
+func (c *GrafanaClient) BaseURL() string {
+	return c.baseURL
+}
+
+// NewGrafanaClient creates a new Grafana HTTP client
+func NewGrafanaClient(baseURL, apiKey, userAgent string, timeout time.Duration) *GrafanaClient {
 	return &GrafanaClient{
-		baseURL:   baseURL,
+		baseURL:   NormalizeBaseURL(baseURL),
 		apiKey:    apiKey,
 		timeout:   timeout,
 		userAgent: userAgent,

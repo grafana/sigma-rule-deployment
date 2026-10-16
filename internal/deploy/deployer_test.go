@@ -636,16 +636,6 @@ func TestLoadConfig(t *testing.T) {
 	}, d.config.folderOrgPairs)
 }
 
-func TestFakeAlertFilename(t *testing.T) {
-	d := Deployer{
-		config: deploymentConfig{
-			alertPath: "deployments",
-		},
-		client: shared.NewGrafanaClient("", "", "sigma-rule-deployment/deployer", defaultRequestTimeout),
-	}
-	assert.Equal(t, "abcd123", getAlertUIDFromFilename(d.fakeAlertFilename("abcd123")))
-}
-
 func TestListAlertsInDeploymentFolder(t *testing.T) {
 	d := Deployer{
 		config: deploymentConfig{
@@ -1374,4 +1364,219 @@ func TestClientsForAlertFileOverlappingConfigNames(t *testing.T) {
 		}
 		assert.Equal(t, []*shared.GrafanaClient{defaultClient}, d.clientsForAlertFile("alert_rule_okta_rule_uid3.json"))
 	})
+}
+
+// writeTestDeployerConfig writes a config file and an empty deployment folder into the working
+// directory (config paths must be local) and points the deployer at them via the environment.
+func writeTestDeployerConfig(t *testing.T, content string) {
+	t.Helper()
+	configFile, err := os.CreateTemp(".", "test_deployer_config_*.yml")
+	assert.NoError(t, err)
+	t.Cleanup(func() { os.Remove(configFile.Name()) })
+	_, err = configFile.WriteString(content)
+	assert.NoError(t, err)
+	assert.NoError(t, configFile.Close())
+	t.Setenv("CONFIG_PATH", configFile.Name())
+	t.Setenv("DEPLOYER_GRAFANA_SA_TOKEN", "my-test-token")
+}
+
+func TestLoadConfigRequiresResolvableGrafanaInstance(t *testing.T) {
+	const noInstance = "version: 2\nfolders:\n  deployment_path: \"./deployments\"\n"
+	testCases := []struct {
+		name      string
+		config    string
+		wantError string
+	}{
+		{
+			name: "configuration without an instance and no default",
+			config: noInstance + "defaults:\n  integration:\n    folder_id: f\n    org_id: 1\n" +
+				"configurations:\n  - name: conv_a\n    integration:\n      rule_group: g\n      time_window: 5m\n",
+			wantError: `configuration "conv_a" has no Grafana instance`,
+		},
+		{
+			name:      "no configurations and no default instance",
+			config:    noInstance + "defaults:\n  integration:\n    folder_id: f\n    org_id: 1\n",
+			wantError: "no Grafana instance is configured",
+		},
+		{
+			name: "only some configurations override a missing default",
+			config: noInstance + "defaults:\n  integration:\n    folder_id: f\n    org_id: 1\n" +
+				"configurations:\n" +
+				"  - name: conv_a\n    deployment:\n      grafana_instance: https://a.example\n" +
+				"  - name: conv_b\n",
+			wantError: `configuration "conv_b" has no Grafana instance`,
+		},
+		{
+			name: "every configuration overrides the instance, so no default is needed",
+			config: noInstance + "defaults:\n  integration:\n    folder_id: f\n    org_id: 1\n" +
+				"configurations:\n" +
+				"  - name: conv_a\n    deployment:\n      grafana_instance: https://a.example\n" +
+				"  - name: conv_b\n    deployment:\n      grafana_instance:\n        - https://b1.example\n        - https://b2.example\n",
+		},
+		{
+			name: "configurations inherit the default instance",
+			config: noInstance + "defaults:\n  integration:\n    folder_id: f\n    org_id: 1\n" +
+				"  deployment:\n    grafana_instance: https://default.example\n" +
+				"configurations:\n  - name: conv_a\n",
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			writeTestDeployerConfig(t, tc.config)
+			err := NewDeployer().LoadConfig(context.Background())
+			if tc.wantError == "" {
+				assert.NoError(t, err)
+				return
+			}
+			assert.ErrorContains(t, err, tc.wantError)
+		})
+	}
+}
+
+func TestLoadConfigPerConfigTimeoutWithoutInstanceOverride(t *testing.T) {
+	writeTestDeployerConfig(t, "version: 2\nfolders:\n  deployment_path: \"./deployments\"\n"+
+		"defaults:\n  integration:\n    folder_id: f\n    org_id: 1\n"+
+		"  deployment:\n    grafana_instance: https://default.example\n    timeout: 10s\n"+
+		"configurations:\n"+
+		"  - name: slow\n    deployment:\n      timeout: 60s\n"+
+		"  - name: bad_timeout\n    deployment:\n      timeout: forever\n"+
+		"  - name: plain\n")
+
+	d := NewDeployer()
+	assert.NoError(t, d.LoadConfig(context.Background()))
+	d.SetClient()
+
+	// slow gets its own client on the default instance; an invalid timeout is ignored with a warning,
+	// leaving bad_timeout on the shared default clients like plain
+	assert.Len(t, d.perConversionClients, 1)
+	if assert.Contains(t, d.perConversionClients, "slow") {
+		assert.Len(t, d.perConversionClients["slow"], 1)
+		assert.Equal(t, "https://default.example/", d.perConversionClients["slow"][0].BaseURL())
+		assert.NotSame(t, d.clients[0], d.perConversionClients["slow"][0])
+	}
+	assert.Equal(t, d.clients, d.clientsForAlertFile("alert_rule_bad_timeout_rule_uid.json"))
+	assert.Equal(t, d.clients, d.clientsForAlertFile("alert_rule_plain_rule_uid.json"))
+}
+
+func TestDeployFailsWhenNoInstanceResolvesForAlertFile(t *testing.T) {
+	tmpDir, err := os.MkdirTemp(".", "test-no-instance-*")
+	assert.NoError(t, err)
+	t.Cleanup(func() { os.RemoveAll(tmpDir) })
+	alertFile := filepath.Join(tmpDir, "alert_rule_conv_a_rule_uid1.json")
+	assert.NoError(t, os.WriteFile(alertFile, []byte(`{"uid":"uid1","title":"A","folderUID":"f","orgID":1,"ruleGroup":"g"}`), 0o600))
+
+	for name, d := range map[string]*Deployer{
+		"alert to add":    {config: deploymentConfig{alertsToAdd: []string{alertFile}}},
+		"alert to update": {config: deploymentConfig{alertsToUpdate: []string{alertFile}}},
+		"alert to remove": {config: deploymentConfig{alertsToRemove: []string{alertFile}}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, _, _, err := d.Deploy(context.Background()) //nolint:dogsled
+			assert.ErrorContains(t, err, "no Grafana instance is configured for alert file")
+		})
+	}
+}
+
+// TestFreshDeployCleansEachInstanceWithItsOwnFolderOrgPairs verifies that fresh-deploy cleanup
+// only matches an instance's alerts against the (folder, org) pairs deployed to that instance,
+// and deletes them from that same instance rather than from the default ones.
+func TestFreshDeployCleansEachInstanceWithItsOwnFolderOrgPairs(t *testing.T) {
+	var deletedOnX, deletedOnY []string
+
+	makeServer := func(alerts string, deleted *[]string) *httptest.Server {
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			defer r.Body.Close()
+			switch {
+			case r.URL.Path == "/api/v1/provisioning/alert-rules" && r.Method == http.MethodGet:
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte(alerts))
+			case strings.HasPrefix(r.URL.Path, "/api/v1/provisioning/alert-rules/") && r.Method == http.MethodGet:
+				w.WriteHeader(http.StatusNotFound) // the title lookup falls back to the UID
+			case strings.HasPrefix(r.URL.Path, "/api/v1/provisioning/alert-rules/") && r.Method == http.MethodDelete:
+				*deleted = append(*deleted, strings.TrimPrefix(r.URL.Path, "/api/v1/provisioning/alert-rules/"))
+				w.WriteHeader(http.StatusNoContent)
+			default:
+				t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+				w.WriteHeader(http.StatusNotFound)
+			}
+		}))
+	}
+
+	// X is the default instance and hosts folder fx/org 1. Y is conv_y's override and hosts fy/org 2.
+	// Each also holds an alert in the other's folder, and one in an unmanaged folder.
+	serverX := makeServer(`[
+		{"uid":"x-managed","title":"x","folderUID":"fx","orgID":1},
+		{"uid":"x-in-ys-folder","title":"x","folderUID":"fy","orgID":2},
+		{"uid":"x-unmanaged","title":"x","folderUID":"other","orgID":1}
+	]`, &deletedOnX)
+	defer serverX.Close()
+	serverY := makeServer(`[
+		{"uid":"y-managed","title":"y","folderUID":"fy","orgID":2},
+		{"uid":"y-in-xs-folder","title":"y","folderUID":"fx","orgID":1}
+	]`, &deletedOnY)
+	defer serverY.Close()
+
+	tmpDir, err := os.MkdirTemp(".", "test-fresh-deploy-*")
+	assert.NoError(t, err)
+	t.Cleanup(func() { os.RemoveAll(tmpDir) })
+
+	writeTestDeployerConfig(t, "version: 2\nfolders:\n  deployment_path: \""+tmpDir+"\"\n"+
+		"defaults:\n  integration:\n    folder_id: fx\n    org_id: 1\n"+
+		"  deployment:\n    grafana_instance: "+serverX.URL+"\n"+
+		"configurations:\n"+
+		"  - name: conv_x\n    integration:\n      rule_group: gx\n      time_window: 5m\n"+
+		"  - name: conv_y\n    integration:\n      rule_group: gy\n      time_window: 5m\n      folder_id: fy\n      org_id: 2\n"+
+		"    deployment:\n      grafana_instance: "+serverY.URL+"\n")
+	t.Setenv("DEPLOYER_FRESH_DEPLOY", "true")
+
+	ctx := context.Background()
+	d := NewDeployer()
+	assert.NoError(t, d.LoadConfig(ctx))
+	d.SetClient()
+	assert.NoError(t, d.ConfigFreshDeployment(ctx))
+
+	_, _, deleted, err := d.Deploy(ctx)
+	assert.NoError(t, err)
+
+	assert.Equal(t, []string{"x-managed"}, deletedOnX)
+	assert.Equal(t, []string{"y-managed"}, deletedOnY)
+	assert.ElementsMatch(t, []AlertDeployment{{UID: "x-managed", Title: "x-managed"}, {UID: "y-managed", Title: "y-managed"}}, deleted)
+}
+
+// TestFreshDeploySkipsInstancesNoConfigurationDeploysTo verifies a default instance that every
+// configuration overrides is left alone, rather than being cleaned using other instances' pairs.
+func TestFreshDeploySkipsInstancesNoConfigurationDeploysTo(t *testing.T) {
+	var defaultRequests int
+	serverDefault := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		defaultRequests++
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`[{"uid":"stale","title":"s","folderUID":"fy","orgID":1}]`))
+	}))
+	defer serverDefault.Close()
+	serverY := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/api/v1/provisioning/alert-rules" {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`[]`))
+			return
+		}
+		t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer serverY.Close()
+
+	tmpDir, err := os.MkdirTemp(".", "test-fresh-skip-*")
+	assert.NoError(t, err)
+	t.Cleanup(func() { os.RemoveAll(tmpDir) })
+	writeTestDeployerConfig(t, "version: 2\nfolders:\n  deployment_path: \""+tmpDir+"\"\n"+
+		"defaults:\n  integration:\n    folder_id: fy\n    org_id: 1\n"+
+		"  deployment:\n    grafana_instance: "+serverDefault.URL+"\n"+
+		"configurations:\n  - name: conv_y\n    deployment:\n      grafana_instance: "+serverY.URL+"\n")
+	t.Setenv("DEPLOYER_FRESH_DEPLOY", "true")
+
+	ctx := context.Background()
+	d := NewDeployer()
+	assert.NoError(t, d.LoadConfig(ctx))
+	d.SetClient()
+	assert.NoError(t, d.ConfigFreshDeployment(ctx))
+	assert.Equal(t, 0, defaultRequests, "the default instance is not deployed to, so it must not be listed")
 }
