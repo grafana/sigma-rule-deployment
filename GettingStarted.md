@@ -120,7 +120,40 @@ Create a configuration file (typically named `config.yml`) in your repository. T
 - Which Grafana data source to target
 - Alert rule settings (folder, group, evaluation interval, etc.)
 
-![Config file example](assets/Config.png "Config File")
+```yaml
+version: 2
+folders:
+  conversion_path: "./conversions"
+  deployment_path: "./deployments"
+defaults:
+  conversion:
+    target: loki
+    format: default
+    skip_unsupported: true
+    file_pattern: "*.yml"
+  integration:
+    data_source: your-source # The UID of your Grafana data source
+    folder_id: yourfolderid # Change this
+    org_id: 1
+    test_queries: true # Whether to test the queries against the data source
+    from: "now-1h"
+    to: "now"
+  deployment:
+    grafana_instance: https://yourgrafanainstance.grafana.net
+configurations:
+  - name: okta_audit
+    conversion:
+      input:
+        - "rules/rules-okta/*"
+      backend_options:
+        case_sensitive: false
+        add_line_filters: true
+      pipelines:
+        - pipelines/okta/*.yml
+    integration:
+      rule_group: Every 1 Hour
+      time_window: 1h
+```
 
 **Pro tip**: Start with a sample configuration and customize it for your environment. You can find example configurations in the repository:
 - [config-example-v2.yml](config/config-example-v2.yml) - Complete example with comments
