@@ -42,6 +42,10 @@ Store the whole object as one secret (or in Vault, with `vault_path`). A plain t
 
 Each configuration must resolve to at least one Grafana instance, from its own `deployment.grafana_instance` or from `defaults.deployment.grafana_instance`. The action fails when it can't, rather than skipping the alerts. When configurations deploy to different instances, a fresh deployment cleans each instance separately: only the alerts in the `folder_id` and `org_id` of the configurations deployed to that instance are deleted from it. A default instance that every configuration overrides is left untouched.
 
+When an alert file is removed, its alert is deleted from the instances the configuration deployed it to. The deployer reads these from the configuration file as it was before the push (`github.event.before`), so removing a configuration, or its `grafana_instance`, in the same change as its alert files still cleans up the instances it deployed to. If there is no previous configuration (a first deployment, a manually triggered run, or a previous file that isn't a valid v2 configuration), the alert is deleted from the instances in the current configuration instead. Removing a configuration or an instance without removing its alert files does not delete anything: use a fresh deployment, or delete the alerts in Grafana.
+
+Deployed alerts carry a `SigmaConfiguration` annotation with the name of the configuration that produced them.
+
 ## Outputs
 
 | Name               | Description                                                                |

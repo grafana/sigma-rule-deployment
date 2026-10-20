@@ -769,6 +769,9 @@ func (i *Integrator) ConvertToAlert(rule *model.ProvisionedAlertRule, queries []
 	rule.Annotations["ConversionFile"] = conversionFile
 	rule.Annotations["DeploymentFile"] = integrateFile
 
+	// The configuration that produced the rule, to trace a deployed rule back to its configuration
+	rule.Annotations["SigmaConfiguration"] = cfg.Name
+
 	templateAllRules := shared.GetConfigBool(cfg.Integration.TemplateAllRules, i.config.Defaults.Integration.TemplateAllRules)
 	funcs := templateFuncs(templateAllRules)
 

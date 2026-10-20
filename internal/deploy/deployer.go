@@ -76,6 +76,9 @@ type Deployer struct {
 	defaultTokenErr      error                                        // why there are no default clients, when a default instance has no token
 	perConversionClients map[string][]*shared.GrafanaClient           // per-conversion Grafana clients
 	configNames          []string                                     // every configuration name, to resolve which config an alert file belongs to
+	previousNames        []string                                     // every configuration name in the previous config, if one was provided
+	previousClients      map[string][]*shared.GrafanaClient           // the instances of each configuration in the previous config
+	previousDefault      []*shared.GrafanaClient                      // the default instances in the previous config, nil if there was no previous config
 	freshRemovals        []alertRemoval                               // alerts found on specific instances to delete in fresh deploy mode
 	groupsToUpdate       map[*shared.GrafanaClient]map[ruleGroup]bool // rule groups touched on each Grafana instance, for interval updates
 }
@@ -101,18 +104,66 @@ func NewDeployer() *Deployer {
 // The owning configuration is the longest matching name across all configurations, not just
 // those with a grafana_instance override, so "aws_cloudtrail" files never go to "aws" clients.
 func (d *Deployer) clientsForAlertFile(filename string) []*shared.GrafanaClient {
-	base := filepath.Base(filename)
-	name := strings.TrimPrefix(base, "alert_rule_")
-	names := append([]string(nil), d.configNames...)
-	for convName := range d.perConversionClients {
-		names = append(names, convName)
-	}
-	if convName, ok := shared.MatchConfigName(name, names); ok {
+	if convName, ok := shared.MatchConfigName(alertFileConfigPart(filename), d.currentConfigNames()); ok {
 		if clients, ok := d.perConversionClients[convName]; ok {
 			return clients
 		}
 	}
 	return d.clients
+}
+
+// alertFileConfigPart returns the part of an alert filename that starts with its configuration name.
+func alertFileConfigPart(filename string) string {
+	return strings.TrimPrefix(filepath.Base(filename), "alert_rule_")
+}
+
+// currentConfigNames returns every configuration name in the current config.
+func (d *Deployer) currentConfigNames() []string {
+	names := append([]string(nil), d.configNames...)
+	for convName := range d.perConversionClients {
+		names = append(names, convName)
+	}
+	return names
+}
+
+// clientsForRemovedAlertFile returns every instance the rule of a removed alert file may be on.
+// The current config routes it as for any other alert file, but a file is usually removed
+// together with a change to the config: its configuration may be gone, or its instances changed.
+// So the instances the previous config routed it to are included too. A file that matches no
+// configuration in the current config, and has no previous config to say where it was deployed,
+// is removed from every instance in the current config (a UID that isn't on an instance is
+// ignored there).
+func (d *Deployer) clientsForRemovedAlertFile(filename string) []*shared.GrafanaClient {
+	part := alertFileConfigPart(filename)
+	var clients []*shared.GrafanaClient
+	_, inCurrent := shared.MatchConfigName(part, d.currentConfigNames())
+	if inCurrent {
+		clients = append(clients, d.clientsForAlertFile(filename)...)
+	}
+	previousName, inPrevious := shared.MatchConfigName(part, d.previousNames)
+	if inPrevious {
+		clients = append(clients, d.previousClients[previousName]...)
+	} else if d.previousClients != nil {
+		// Alert files matching no configuration were routed to the default instances
+		clients = append(clients, d.previousDefault...)
+	}
+	if !inCurrent && !inPrevious && d.previousClients == nil {
+		clients = d.allClients()
+	}
+	return uniqueClients(clients)
+}
+
+// uniqueClients removes clients for an instance already listed, keeping the first of each.
+func uniqueClients(clients []*shared.GrafanaClient) []*shared.GrafanaClient {
+	seen := make(map[string]bool, len(clients))
+	unique := make([]*shared.GrafanaClient, 0, len(clients))
+	for _, c := range clients {
+		if !seen[c.BaseURL()] {
+			seen[c.BaseURL()] = true
+			unique = append(unique, c)
+		}
+	}
+	return unique
 }
 
 // markGroupForUpdate records that the alert's rule group was touched on the current client,
@@ -176,9 +227,9 @@ func (d *Deployer) pendingRemovals() ([]alertRemoval, error) {
 		if alertUID == "" {
 			return nil, fmt.Errorf("invalid alert filename: %s", alertFile)
 		}
-		clients, err := d.requireClientsForAlertFile(alertFile)
-		if err != nil {
-			return nil, err
+		clients := d.clientsForRemovedAlertFile(alertFile)
+		if len(clients) == 0 {
+			return nil, fmt.Errorf("no Grafana instance is configured for alert file %s: set grafana_instance in defaults.deployment or in the matching configuration", alertFile)
 		}
 		removals = append(removals, alertRemoval{uid: alertUID, clients: clients})
 	}
@@ -526,11 +577,49 @@ func (d *Deployer) LoadConfig(_ context.Context) error {
 		}
 	}
 
+	d.loadPreviousConfig(os.Getenv("PREVIOUS_CONFIG_PATH"))
+
 	// Retrieve the fresh deploy flag
 	freshDeploy := strings.ToLower(os.Getenv("DEPLOYER_FRESH_DEPLOY")) == "true"
 	d.config.freshDeploy = freshDeploy
 
 	return nil
+}
+
+// loadPreviousConfig reads the config as it was before the change being deployed, so removed
+// alerts can also be deleted from the instances it deployed them to. The previous config is
+// optional: it is absent for the first deployment, and may not be a valid v2 config. Either way
+// removals fall back to the current config alone, which is logged rather than failing the deployment.
+func (d *Deployer) loadPreviousConfig(path string) {
+	if path == "" {
+		return
+	}
+	previous, err := shared.LoadConfigFromFile(path)
+	if err != nil {
+		log.Printf("Warning: ignoring the previous config, so removed alerts are only deleted from the instances in the current config: %v", err) //nolint:gosec // G706: the error comes from a config file path set by the action
+		return
+	}
+	d.previousNames = make([]string, 0, len(previous.Configurations))
+	d.previousClients = make(map[string][]*shared.GrafanaClient, len(previous.Configurations))
+	newClients := func(instances model.GrafanaInstances) []*shared.GrafanaClient {
+		clients := make([]*shared.GrafanaClient, 0, len(instances))
+		for _, ep := range instances {
+			// An instance that is no longer in the config may have no token: leave it out
+			// rather than use another instance's
+			token, err := d.config.tokens.For(ep)
+			if err != nil {
+				log.Printf("Warning: removed alerts are not deleted from %s: %v", sanitizeForLog(ep), err) //nolint:gosec // G706: ep sanitized with sanitizeForLog before logging
+				continue
+			}
+			clients = append(clients, shared.NewGrafanaClient(ep, token, "sigma-rule-deployment/deployer", d.config.timeout))
+		}
+		return clients
+	}
+	d.previousDefault = newClients(previous.Defaults.Deployment.GrafanaInstance)
+	for _, cfg := range previous.Configurations {
+		d.previousNames = append(d.previousNames, cfg.Name)
+		d.previousClients[cfg.Name] = newClients(cfg.Deployment.GrafanaInstance.WithDefault(previous.Defaults.Deployment.GrafanaInstance))
+	}
 }
 
 func (d *Deployer) ConfigNormalMode() error {
