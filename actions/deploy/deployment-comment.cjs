@@ -16,12 +16,14 @@ function normalizeDeploymentResults(results) {
       const uid = result.uid.trim();
       const title =
         typeof result.title === 'string' && result.title.trim() !== '' ? result.title.trim() : uid;
-      return { uid, title };
+      const instance = typeof result.instance === 'string' ? result.instance.trim() : '';
+      return instance === '' ? { uid, title } : { uid, title, instance };
     })
     .sort(
       (first, second) =>
         titleCollator.compare(first.title, second.title) ||
-        titleCollator.compare(first.uid, second.uid)
+        titleCollator.compare(first.uid, second.uid) ||
+        titleCollator.compare(first.instance || '', second.instance || '')
     );
 }
 
@@ -45,13 +47,20 @@ function parseDeploymentResults(details, uidList = '') {
   return normalizeDeploymentResults(fallback);
 }
 
-function renderAlertList(alerts, grafanaInstance, includeLinks) {
-  const baseUrl = String(grafanaInstance || '')
+function cleanBaseUrl(url) {
+  return String(url || '')
     .replaceAll('"', '')
     .replace(/\/+$/, '');
+}
+
+// Each alert links to the instance it was deployed to, falling back to grafanaInstance for
+// results that don't say (such as the UID-only output)
+function renderAlertList(alerts, grafanaInstance, includeLinks) {
+  const defaultBaseUrl = cleanBaseUrl(grafanaInstance);
 
   return normalizeDeploymentResults(alerts)
-    .map(({ uid, title }) => {
+    .map(({ uid, title, instance }) => {
+      const baseUrl = cleanBaseUrl(instance) || defaultBaseUrl;
       if (includeLinks && baseUrl) {
         return `- [${title}](${baseUrl}/alerting/grafana/${encodeURIComponent(uid)}/view)`;
       }

@@ -83,6 +83,9 @@ type Deployer struct {
 type AlertDeployment struct {
 	UID   string `json:"uid"`
 	Title string `json:"title"`
+	// Instance is the base URL of the Grafana instance the alert was deployed to, so a link to
+	// the alert points at the right instance when configurations deploy to different ones
+	Instance string `json:"instance,omitempty"`
 }
 
 func NewDeployer() *Deployer {
@@ -233,7 +236,7 @@ func (d *Deployer) Deploy(ctx context.Context) ([]AlertDeployment, []AlertDeploy
 			// UID could be empty if the alert was not found
 			// In this case, we don't want to add it to the list of deleted alerts
 			if uid != "" {
-				alertsDeleted = append(alertsDeleted, AlertDeployment{UID: uid, Title: alertTitle})
+				alertsDeleted = append(alertsDeleted, AlertDeployment{UID: uid, Title: alertTitle, Instance: client.BaseURL()})
 			}
 		}
 	}
@@ -251,6 +254,7 @@ func (d *Deployer) Deploy(ctx context.Context) ([]AlertDeployment, []AlertDeploy
 			if err != nil {
 				return alertsCreated, alertsUpdated, alertsDeleted, err
 			}
+			deployment.Instance = client.BaseURL()
 			if updated {
 				// If the alert was updated, we need to add it to the list of updated alerts
 				alertsUpdated = append(alertsUpdated, deployment)
@@ -274,6 +278,7 @@ func (d *Deployer) Deploy(ctx context.Context) ([]AlertDeployment, []AlertDeploy
 			if err != nil {
 				return alertsCreated, alertsUpdated, alertsDeleted, err
 			}
+			deployment.Instance = client.BaseURL()
 			// Sometimes the alert to update doesn't exist anymore (e.g. it was deleted manually)
 			// In this case, we re-create it instead of updating it
 			// So we take this into account for the reporting

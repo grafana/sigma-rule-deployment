@@ -20,7 +20,7 @@ func TestWriteOutputIncludesDeploymentDetails(t *testing.T) {
 
 	deployer := NewDeployer()
 	created := []AlertDeployment{
-		{UID: "uid-z", Title: "Zulu rule"},
+		{UID: "uid-z", Title: "Zulu rule", Instance: "https://z.example/"},
 		{UID: "uid-a", Title: "Alpha rule"},
 	}
 	deleted := []AlertDeployment{{UID: "uid-d", Title: "Deleted rule"}}
