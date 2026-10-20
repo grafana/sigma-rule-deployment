@@ -68,6 +68,31 @@ runs:
       run: |
         REPO_ROOT="$(cd "$GITHUB_ACTION_PATH/../.." && pwd)"
         "$REPO_ROOT/scripts/mask-grafana-tokens/mask-grafana-tokens.sh"
+    - name: Get previous configuration
+      id: previous-config
+      shell: bash
+      env:
+        CONFIG_PATH: ${{ inputs.config_path }}
+        BEFORE_SHA: ${{ github.event.before }}
+      run: |
+        # Removed alerts are deleted from the instances the previous config deployed them to,
+        # which is only known from the config as it was before this push
+        rm -f .sigma-previous-config.yml
+        if [[ -z "$BEFORE_SHA" || "$BEFORE_SHA" =~ ^0+$ ]]; then
+          echo "::notice::No previous commit for this event, so removed alerts will only be deleted from the instances in the current configuration"
+          exit 0
+        fi
+        if ! git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
+          echo "::warning::The previous commit ${BEFORE_SHA} is not available (was the branch force-pushed?), so removed alerts will only be deleted from the instances in the current configuration"
+          exit 0
+        fi
+        CONFIG_RELATIVE_PATH=$(realpath --relative-to="$PWD" "$CONFIG_PATH")
+        if git show "${BEFORE_SHA}:./${CONFIG_RELATIVE_PATH}" > .sigma-previous-config.yml 2>/dev/null; then
+          echo "previous_config_path=.sigma-previous-config.yml" >> "$GITHUB_OUTPUT"
+        else
+          rm -f .sigma-previous-config.yml
+          echo "::notice::${CONFIG_RELATIVE_PATH} does not exist in the previous commit, so removed alerts will only be deleted from the instances in the current configuration"
+        fi
     - name: Run Sigma Rule Deployer
       id: deploy
       shell: bash
@@ -80,6 +105,7 @@ runs:
         DELETED_FILES: ${{ steps.changed-files.outputs.deleted_files }}
         COPIED_FILES: ${{ steps.changed-files.outputs.copied_files }}
         IMAGE_REF: ${{ steps.image-ref.outputs.image_ref }}
+        PREVIOUS_CONFIG_PATH: ${{ steps.previous-config.outputs.previous_config_path }}
       run: |
         rm -f .sigma-deploy-output
         docker run --rm \
@@ -88,6 +114,7 @@ runs:
             -w /sigma-rules \
             -e GITHUB_OUTPUT="/sigma-rules/.sigma-deploy-output" \
             -e CONFIG_PATH="$CONFIG_PATH" \
+            -e PREVIOUS_CONFIG_PATH="$PREVIOUS_CONFIG_PATH" \
             -e DEPLOYER_GRAFANA_SA_TOKEN="$GRAFANA_SA_TOKEN" \
             -e DEPLOYER_FRESH_DEPLOY="$FRESH_DEPLOY" \
             -e ADDED_FILES="$ADDED_FILES" \
@@ -105,6 +132,7 @@ runs:
           cat .sigma-deploy-output >> "$GITHUB_OUTPUT"
           rm -f .sigma-deploy-output
         fi
+        rm -f .sigma-previous-config.yml
     - name: Get Grafana Instance
       if: success() && github.event_name == 'push'
       id: grafana-instance

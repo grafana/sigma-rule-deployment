@@ -1,6 +1,7 @@
 package deploy
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -1872,4 +1873,301 @@ func TestLoadConfigTreatsEquivalentInstanceURLsAsOneInstance(t *testing.T) {
 	assert.Equal(t, map[string][]folderOrg{
 		"https://prod.example/": {{folderUID: "fa", orgID: 1}, {folderUID: "fb", orgID: 1}},
 	}, d.config.endpointPairs)
+}
+
+func TestClientsForRemovedAlertFile(t *testing.T) {
+	newClient := func(url string) *shared.GrafanaClient {
+		return shared.NewGrafanaClient(url, "my-test-token", "sigma-rule-deployment/deployer", defaultRequestTimeout)
+	}
+	defaultClient := newClient("http://default.example/")
+	awsClient := newClient("http://aws.example/")
+	oldAWSClient := newClient("http://old-aws.example/")
+	oldDefaultClient := newClient("http://old-default.example/")
+
+	tests := []struct {
+		name            string
+		filename        string
+		previousNames   []string
+		previousClients map[string][]*shared.GrafanaClient
+		previousDefault []*shared.GrafanaClient
+		want            []string
+		wantBestEffort  []string
+	}{
+		{
+			name:     "no previous config routes a configuration with an override to its instance",
+			filename: "alert_rule_aws_rule_uid1.json",
+			want:     []string{"http://aws.example/"},
+		},
+		{
+			name:     "no previous config routes a configuration without an override to the default instance",
+			filename: "alert_rule_okta_rule_uid2.json",
+			want:     []string{"http://default.example/"},
+		},
+		{
+			name:     "no previous config removes a deleted configuration's alert from every current instance",
+			filename: "alert_rule_gone_rule_uid3.json",
+			want:     []string{"http://default.example/", "http://aws.example/"},
+		},
+		{
+			name:            "previous config adds the instances a deleted configuration deployed to, as best effort",
+			filename:        "alert_rule_gone_rule_uid3.json",
+			previousNames:   []string{"gone"},
+			previousClients: map[string][]*shared.GrafanaClient{"gone": {oldAWSClient}},
+			previousDefault: []*shared.GrafanaClient{oldDefaultClient},
+			wantBestEffort:  []string{"http://old-aws.example/"},
+		},
+		{
+			name:            "previous config adds instances dropped from a configuration, without repeating shared ones",
+			filename:        "alert_rule_aws_rule_uid1.json",
+			previousNames:   []string{"aws"},
+			previousClients: map[string][]*shared.GrafanaClient{"aws": {oldAWSClient, newClient("http://aws.example")}},
+			want:            []string{"http://aws.example/"},
+			wantBestEffort:  []string{"http://old-aws.example/"},
+		},
+		{
+			name:            "a previous instance that is still in the current config is not best effort",
+			filename:        "alert_rule_gone_rule_uid3.json",
+			previousNames:   []string{"gone"},
+			previousClients: map[string][]*shared.GrafanaClient{"gone": {newClient("http://default.example")}},
+			want:            []string{"http://default.example/"},
+		},
+		{
+			name:            "a file matching no previous configuration was deployed to the previous default instances",
+			filename:        "alert_rule_gone_rule_uid3.json",
+			previousNames:   []string{"okta"},
+			previousClients: map[string][]*shared.GrafanaClient{"okta": {oldDefaultClient}},
+			previousDefault: []*shared.GrafanaClient{oldDefaultClient},
+			wantBestEffort:  []string{"http://old-default.example/"},
+		},
+		{
+			name:            "a file matching no configuration with no previous default instance goes to every current instance",
+			filename:        "alert_rule_gone_rule_uid3.json",
+			previousNames:   []string{"okta"},
+			previousClients: map[string][]*shared.GrafanaClient{"okta": {oldDefaultClient}},
+			want:            []string{"http://default.example/", "http://aws.example/"},
+		},
+		{
+			name:            "a configuration new in the current config was deployed to the previous default instances",
+			filename:        "alert_rule_okta_rule_uid2.json",
+			previousNames:   []string{"aws"},
+			previousClients: map[string][]*shared.GrafanaClient{"aws": {oldAWSClient}},
+			previousDefault: []*shared.GrafanaClient{oldDefaultClient},
+			want:            []string{"http://default.example/"},
+			wantBestEffort:  []string{"http://old-default.example/"},
+		},
+	}
+	urls := func(clients []*shared.GrafanaClient) []string {
+		result := make([]string, 0, len(clients))
+		for _, c := range clients {
+			result = append(result, c.BaseURL())
+		}
+		return result
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := &Deployer{
+				clients:              []*shared.GrafanaClient{defaultClient},
+				configNames:          []string{"aws", "okta"},
+				perConversionClients: map[string][]*shared.GrafanaClient{"aws": {awsClient}},
+				previousNames:        tt.previousNames,
+				previousClients:      tt.previousClients,
+				previousDefault:      tt.previousDefault,
+			}
+			required, bestEffort := d.clientsForRemovedAlertFile(tt.filename)
+			assert.Equal(t, append([]string{}, tt.want...), urls(required))
+			assert.Equal(t, append([]string{}, tt.wantBestEffort...), urls(bestEffort))
+		})
+	}
+}
+
+//nolint:gosec // G101: the tokens are fakes
+func TestLoadPreviousConfig(t *testing.T) {
+	validConfig := "version: 2\nfolders:\n  deployment_path: deploy\n" +
+		"defaults:\n  deployment:\n    grafana_instance: http://default.example\n    timeout: 30s\n" +
+		"configurations:\n" +
+		"  - name: plain\n" +
+		"  - name: slow\n    deployment:\n      grafana_instance: [http://slow-a.example, http://slow-b.example]\n      timeout: 2m\n"
+	tests := []struct {
+		name        string
+		content     string // written to a file in the working directory when set
+		path        string // used as is when content is empty
+		tokens      string // the Grafana tokens, one token for every instance when empty
+		wantNames   []string
+		wantClients map[string][]string // base URL and timeout of each configuration's clients
+	}{
+		{name: "no path", path: ""},
+		{name: "missing file", path: "missing_previous_config.yml"},
+		{name: "path outside the working directory", path: "../previous_config.yml"},
+		{name: "unsupported version", content: "version: 1\nconfigurations: []\n"},
+		{name: "malformed YAML", content: "version: 2\nconfigurations: [unclosed\n"},
+		{
+			name:      "valid config keeps each configuration's instances and timeout",
+			content:   validConfig,
+			wantNames: []string{"plain", "slow"},
+			wantClients: map[string][]string{
+				"plain": {"http://default.example/ 30s"},
+				"slow":  {"http://slow-a.example/ 2m0s", "http://slow-b.example/ 2m0s"},
+			},
+		},
+		{
+			name:      "an instance with no token is left out, never given another's",
+			content:   validConfig,
+			tokens:    `{"http://default.example": "glsa_d", "http://slow-b.example/": "glsa_b"}`,
+			wantNames: []string{"plain", "slow"},
+			wantClients: map[string][]string{
+				"plain": {"http://default.example/ 30s"},
+				"slow":  {"http://slow-b.example/ 2m0s"},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tokens, err := shared.ParseGrafanaTokens(cmp.Or(tt.tokens, "my-test-token"))
+			assert.NoError(t, err)
+			path := tt.path
+			if tt.content != "" {
+				f, err := os.CreateTemp(".", "test_previous_config_*.yml")
+				assert.NoError(t, err)
+				t.Cleanup(func() { os.Remove(f.Name()) })
+				_, err = f.WriteString(tt.content)
+				assert.NoError(t, err)
+				assert.NoError(t, f.Close())
+				path = f.Name()
+			}
+			d := &Deployer{config: deploymentConfig{tokens: tokens, timeout: defaultRequestTimeout}}
+			d.loadPreviousConfig(path)
+
+			assert.Equal(t, tt.wantNames, d.previousNames)
+			if tt.wantNames == nil {
+				assert.Nil(t, d.previousClients, "an unusable previous config must leave no previous routing")
+				return
+			}
+			got := map[string][]string{}
+			for name, clients := range d.previousClients {
+				for _, c := range clients {
+					got[name] = append(got[name], c.BaseURL()+" "+c.Timeout().String())
+				}
+			}
+			assert.Equal(t, tt.wantClients, got)
+		})
+	}
+}
+
+// TestDeployRemovesAlertsOfDeletedConfiguration verifies that deleting a configuration and its
+// alert file together removes the alert from the instance the configuration deployed to when the
+// previous config is available, and falls back to the current config's instances when it isn't.
+func TestDeployRemovesAlertsOfDeletedConfiguration(t *testing.T) {
+	var deletedOnDefault, deletedOnOverride []string
+	overrideDeleteStatus := http.StatusNoContent
+	makeServer := func(deleted *[]string) *httptest.Server {
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			defer r.Body.Close()
+			uid := strings.TrimPrefix(r.URL.Path, "/api/v1/provisioning/alert-rules/")
+			switch {
+			case strings.HasPrefix(r.URL.Path, "/api/v1/provisioning/alert-rules/") && r.Method == http.MethodGet:
+				w.WriteHeader(http.StatusNotFound) // the title lookup falls back to the UID
+			case strings.HasPrefix(r.URL.Path, "/api/v1/provisioning/alert-rules/") && r.Method == http.MethodDelete:
+				*deleted = append(*deleted, uid)
+				if deleted == &deletedOnOverride {
+					w.WriteHeader(overrideDeleteStatus)
+					return
+				}
+				w.WriteHeader(http.StatusNoContent)
+			default:
+				t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+				w.WriteHeader(http.StatusNotFound)
+			}
+		}))
+	}
+	serverDefault := makeServer(&deletedOnDefault)
+	defer serverDefault.Close()
+	serverOverride := makeServer(&deletedOnOverride)
+	defer serverOverride.Close()
+
+	tmpDir, err := os.MkdirTemp(".", "test-previous-config-*")
+	assert.NoError(t, err)
+	t.Cleanup(func() { os.RemoveAll(tmpDir) })
+	t.Setenv("DELETED_FILES", filepath.Join(tmpDir, "alert_rule_gone_rule_uid1.json"))
+	t.Setenv("ADDED_FILES", "")
+	t.Setenv("MODIFIED_FILES", "")
+	t.Setenv("COPIED_FILES", "")
+
+	currentConfig := "version: 2\nfolders:\n  deployment_path: \"" + tmpDir + "\"\n" +
+		"defaults:\n  integration:\n    folder_id: f\n    org_id: 1\n" +
+		"  deployment:\n    grafana_instance: " + serverDefault.URL + "\n" +
+		"configurations:\n  - name: kept\n    integration:\n      time_window: 5m\n"
+
+	previousWithOverride := currentConfig +
+		"  - name: gone\n    integration:\n      time_window: 5m\n    deployment:\n      grafana_instance: " + serverOverride.URL + "\n"
+	// The alert records the instance it was deleted from
+	deletedUID1From := func(server *httptest.Server) []AlertDeployment {
+		return []AlertDeployment{{UID: "uid1", Title: "uid1", Instance: server.URL + "/"}}
+	}
+
+	tests := []struct {
+		name                 string
+		previousConfig       string // empty for no previous config
+		overrideDeleteStatus int
+		wantDefault          []string
+		wantOverride         []string
+		wantDeleted          []AlertDeployment
+	}{
+		{
+			name:                 "previous config routes the alert to the deleted configuration's instance",
+			previousConfig:       previousWithOverride,
+			overrideDeleteStatus: http.StatusNoContent,
+			wantOverride:         []string{"uid1"},
+			wantDeleted:          deletedUID1From(serverOverride),
+		},
+		{
+			name:                 "failing to delete from an instance no longer in the config does not fail the deployment",
+			previousConfig:       previousWithOverride,
+			overrideDeleteStatus: http.StatusBadGateway,
+			wantOverride:         []string{"uid1"},
+			wantDeleted:          []AlertDeployment{},
+		},
+		{
+			name:        "no previous config falls back to every instance in the current config",
+			wantDefault: []string{"uid1"},
+			wantDeleted: deletedUID1From(serverDefault),
+		},
+		{
+			name:           "an unusable previous config is ignored",
+			previousConfig: "version: 1\nconfigurations: []\n",
+			wantDefault:    []string{"uid1"},
+			wantDeleted:    deletedUID1From(serverDefault),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			deletedOnDefault, deletedOnOverride = nil, nil
+			overrideDeleteStatus = http.StatusNoContent
+			if tt.overrideDeleteStatus != 0 {
+				overrideDeleteStatus = tt.overrideDeleteStatus
+			}
+			writeTestDeployerConfig(t, currentConfig)
+			t.Setenv("PREVIOUS_CONFIG_PATH", "")
+			if tt.previousConfig != "" {
+				previousFile, err := os.CreateTemp(".", "test_previous_config_*.yml")
+				assert.NoError(t, err)
+				t.Cleanup(func() { os.Remove(previousFile.Name()) })
+				_, err = previousFile.WriteString(tt.previousConfig)
+				assert.NoError(t, err)
+				assert.NoError(t, previousFile.Close())
+				t.Setenv("PREVIOUS_CONFIG_PATH", previousFile.Name())
+			}
+
+			ctx := context.Background()
+			d := NewDeployer()
+			assert.NoError(t, d.LoadConfig(ctx))
+			d.SetClient()
+			assert.NoError(t, d.ConfigNormalMode())
+			_, _, deleted, err := d.Deploy(ctx)
+			assert.NoError(t, err)
+
+			assert.Equal(t, tt.wantDefault, deletedOnDefault)
+			assert.Equal(t, tt.wantOverride, deletedOnOverride)
+			assert.Equal(t, tt.wantDeleted, deleted)
+		})
+	}
 }
