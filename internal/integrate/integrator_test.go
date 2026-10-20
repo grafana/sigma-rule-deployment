@@ -2736,3 +2736,221 @@ func TestLoadConfigRequiresResolvableFolderAndOrg(t *testing.T) {
 		})
 	}
 }
+
+// writeFilterTestConfig writes a v2 config file with the aws_cloudtrail and github_audit
+// configurations and returns its path along with the conversion and deployment
+// directories. aws_cloudtrail sets its own from/to; github_audit sets test_queries: true.
+func writeFilterTestConfig(t *testing.T) (configPath, convDir, deployDir string) {
+	t.Helper()
+	configFile, err := os.CreateTemp(".", "test_config_filter_*.yml")
+	require.NoError(t, err)
+	t.Cleanup(func() { os.Remove(configFile.Name()) })
+	convDir, err = os.MkdirTemp(".", "test-filter-conv-*")
+	require.NoError(t, err)
+	t.Cleanup(func() { os.RemoveAll(convDir) })
+	deployDir, err = os.MkdirTemp(".", "test-filter-deploy-*")
+	require.NoError(t, err)
+	t.Cleanup(func() { os.RemoveAll(deployDir) })
+
+	_, err = configFile.WriteString("version: 2\nfolders:\n  conversion_path: \"" + convDir + "\"\n  deployment_path: \"" + deployDir + "\"\n" +
+		"defaults:\n  integration:\n    data_source: ds\n    folder_id: XXXX\n    org_id: 1\n    test_queries: true\n" +
+		"configurations:\n" +
+		"  - name: aws_cloudtrail\n    conversion:\n      input: \"rules/aws/*\"\n    integration:\n      from: now-24h\n      to: now-1h\n" +
+		"  - name: github_audit\n    conversion:\n      input: \"rules/github/*\"\n    integration:\n      test_queries: true\n")
+	require.NoError(t, err)
+	require.NoError(t, configFile.Close())
+	return configFile.Name(), convDir, deployDir
+}
+
+func TestLoadConfigConfigurationFilter(t *testing.T) {
+	tests := []struct {
+		name            string
+		filter          string
+		allRules        bool
+		filesOnDisk     []string // created in the conversion directory, for the allRules walk
+		changed         []string // base names, joined with the conversion directory
+		deleted         []string
+		testFiles       []string
+		wantAdd         []string
+		wantDel         []string
+		wantTest        []string
+		wantConfigNames []string
+		wantErr         string // substring match; empty means success
+	}{
+		{
+			name:            "no filter keeps all files",
+			filter:          "",
+			changed:         []string{"aws_cloudtrail_a.json", "github_audit_b.json"},
+			deleted:         []string{"aws_cloudtrail_c.json", "github_audit_d.json"},
+			testFiles:       []string{"aws_cloudtrail_a.json", "github_audit_b.json"},
+			wantAdd:         []string{"aws_cloudtrail_a.json", "github_audit_b.json"},
+			wantDel:         []string{"aws_cloudtrail_c.json", "github_audit_d.json"},
+			wantTest:        []string{"aws_cloudtrail_a.json", "github_audit_b.json"},
+			wantConfigNames: []string{"aws_cloudtrail", "github_audit"},
+		},
+		{
+			name:            "single name filters changed, test and removed files",
+			filter:          "aws_cloudtrail",
+			changed:         []string{"aws_cloudtrail_a.json", "github_audit_b.json"},
+			deleted:         []string{"aws_cloudtrail_c.json", "github_audit_d.json"},
+			testFiles:       []string{"aws_cloudtrail_a.json", "github_audit_b.json"},
+			wantAdd:         []string{"aws_cloudtrail_a.json"},
+			wantDel:         []string{"aws_cloudtrail_c.json"},
+			wantTest:        []string{"aws_cloudtrail_a.json"},
+			wantConfigNames: []string{"aws_cloudtrail"},
+		},
+		{
+			name:            "multiple names keep both configurations' files",
+			filter:          "aws_cloudtrail github_audit",
+			changed:         []string{"aws_cloudtrail_a.json", "github_audit_b.json"},
+			deleted:         []string{"aws_cloudtrail_c.json", "github_audit_d.json"},
+			testFiles:       []string{"aws_cloudtrail_a.json", "github_audit_b.json"},
+			wantAdd:         []string{"aws_cloudtrail_a.json", "github_audit_b.json"},
+			wantDel:         []string{"aws_cloudtrail_c.json", "github_audit_d.json"},
+			wantTest:        []string{"aws_cloudtrail_a.json", "github_audit_b.json"},
+			wantConfigNames: []string{"aws_cloudtrail", "github_audit"},
+		},
+		{
+			name:    "unknown name errors and lists the valid names",
+			filter:  "aws_cloudtrail bogus",
+			wantErr: `unknown configuration "bogus" in CONFIGURATION_FILTER (valid configurations: aws_cloudtrail, github_audit)`,
+		},
+		{
+			name:            "all rules walk only includes the selected configurations' files",
+			filter:          "github_audit",
+			allRules:        true,
+			filesOnDisk:     []string{"aws_cloudtrail_a.json", "github_audit_b.json"},
+			wantAdd:         []string{"github_audit_b.json"},
+			wantDel:         []string{},
+			wantTest:        []string{"github_audit_b.json"},
+			wantConfigNames: []string{"github_audit"},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			configPath, convDir, _ := writeFilterTestConfig(t)
+
+			join := func(names []string) []string {
+				paths := make([]string, len(names))
+				for idx, name := range names {
+					paths[idx] = filepath.Join(convDir, name)
+				}
+				return paths
+			}
+			for _, name := range tc.filesOnDisk {
+				require.NoError(t, os.WriteFile(filepath.Join(convDir, name), []byte("{}"), 0o600))
+			}
+
+			t.Setenv("INTEGRATOR_CONFIG_PATH", configPath)
+			t.Setenv("INTEGRATOR_GRAFANA_SA_TOKEN", "my-test-token")
+			t.Setenv("CHANGED_FILES", strings.Join(join(tc.changed), " "))
+			t.Setenv("DELETED_FILES", strings.Join(join(tc.deleted), " "))
+			t.Setenv("TEST_FILES", strings.Join(join(tc.testFiles), " "))
+			t.Setenv("MANUAL_FILES", "")
+			t.Setenv("CONFIGURATION_FILTER", tc.filter)
+			if tc.allRules {
+				t.Setenv("ALL_RULES", "true")
+			} else {
+				t.Setenv("ALL_RULES", "false")
+			}
+
+			i := NewIntegrator()
+			err := i.LoadConfig()
+			if tc.wantErr != "" {
+				require.Error(t, err)
+				assert.ErrorContains(t, err, tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, join(tc.wantAdd), i.addedFiles)
+			assert.Equal(t, join(tc.wantDel), i.removedFiles)
+			assert.Equal(t, join(tc.wantTest), i.testFiles)
+
+			configNames := make([]string, 0, len(i.config.Configurations))
+			for _, cfg := range i.config.Configurations {
+				configNames = append(configNames, cfg.Name)
+			}
+			assert.Equal(t, tc.wantConfigNames, configNames)
+		})
+	}
+}
+
+func TestLoadConfigSkipQueryTesting(t *testing.T) {
+	tests := []struct {
+		name         string
+		env          string
+		wantDefaults *bool
+		wantTested   *bool // configuration that sets test_queries: true
+		wantUnset    *bool // configuration that does not set test_queries
+	}{
+		{name: "unset leaves the test_queries settings alone", env: "", wantDefaults: new(true), wantTested: new(true), wantUnset: nil},
+		{name: "true forces all query testing off", env: "true", wantDefaults: new(false), wantTested: new(false), wantUnset: new(false)},
+		{name: "TRUE is case-insensitive", env: "TRUE", wantDefaults: new(false), wantTested: new(false), wantUnset: new(false)},
+		{name: "false leaves the test_queries settings alone", env: "false", wantDefaults: new(true), wantTested: new(true), wantUnset: nil},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// github_audit sets test_queries: true explicitly; aws_cloudtrail leaves it unset
+			configPath, _, _ := writeFilterTestConfig(t)
+
+			t.Setenv("INTEGRATOR_CONFIG_PATH", configPath)
+			t.Setenv("INTEGRATOR_GRAFANA_SA_TOKEN", "my-test-token")
+			t.Setenv("CHANGED_FILES", "")
+			t.Setenv("DELETED_FILES", "")
+			t.Setenv("TEST_FILES", "")
+			t.Setenv("MANUAL_FILES", "")
+			t.Setenv("ALL_RULES", "false")
+			t.Setenv("INTEGRATOR_SKIP_QUERY_TESTING", tc.env)
+
+			i := NewIntegrator()
+			require.NoError(t, i.LoadConfig())
+			assert.Equal(t, tc.wantDefaults, i.config.Defaults.Integration.TestQueries)
+			assert.Equal(t, tc.wantUnset, i.config.Configurations[0].Integration.TestQueries)
+			assert.Equal(t, tc.wantTested, i.config.Configurations[1].Integration.TestQueries)
+		})
+	}
+}
+
+func TestLoadConfigQueryTimeWindow(t *testing.T) {
+	tests := []struct {
+		name     string
+		env      string
+		wantFrom string
+		wantTo   string
+		wantErr  string // substring match; empty means success
+	}{
+		{name: "unset uses the default one-hour window", env: "", wantFrom: "now-1h", wantTo: "now"},
+		{name: "valid window overrides the defaults", env: "6h", wantFrom: "now-6h", wantTo: "now"},
+		{name: "window with a day unit", env: "1d12h", wantFrom: "now-1d12h", wantTo: "now"},
+		{name: "invalid duration errors", env: "6x", wantErr: `invalid INTEGRATOR_QUERY_TIME_WINDOW "6x"`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// aws_cloudtrail sets its own from/to, which must win over the env override
+			configPath, _, _ := writeFilterTestConfig(t)
+
+			t.Setenv("INTEGRATOR_CONFIG_PATH", configPath)
+			t.Setenv("INTEGRATOR_GRAFANA_SA_TOKEN", "my-test-token")
+			t.Setenv("CHANGED_FILES", "")
+			t.Setenv("DELETED_FILES", "")
+			t.Setenv("TEST_FILES", "")
+			t.Setenv("MANUAL_FILES", "")
+			t.Setenv("ALL_RULES", "false")
+			t.Setenv("INTEGRATOR_QUERY_TIME_WINDOW", tc.env)
+
+			i := NewIntegrator()
+			err := i.LoadConfig()
+			if tc.wantErr != "" {
+				require.Error(t, err)
+				assert.ErrorContains(t, err, tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantFrom, i.config.Defaults.Integration.From)
+			assert.Equal(t, tc.wantTo, i.config.Defaults.Integration.To)
+			// The per-configuration from/to still takes precedence over the override
+			assert.Equal(t, "now-24h", i.config.Configurations[0].Integration.From)
+			assert.Equal(t, "now-1h", i.config.Configurations[0].Integration.To)
+		})
+	}
+}

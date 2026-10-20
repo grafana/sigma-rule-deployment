@@ -35,6 +35,18 @@ inputs:
     description: "Continue integration process even when query testing fails, but print errors and continue the action"
     required: false
     default: "true"
+  configurations:
+    description: "Space-separated configuration names to restrict the integration to; empty integrates all configurations"
+    required: false
+    default: ""
+  skip_query_testing:
+    description: "Skip all query testing, overriding the test_queries settings in the configuration file"
+    required: false
+    default: "false"
+  query_time_window:
+    description: "Duration (e.g. 30m, 6h, 1d12h) overriding the default query testing time range; per-configuration from/to settings still take precedence"
+    required: false
+    default: ""
 
 outputs:
   rules_integrated:
@@ -131,6 +143,9 @@ runs:
         MANUAL_FILES: ${{ steps.changed-files.outputs.manual_files }}
         ALL_RULES: ${{ inputs.all_rules }}
         CONTINUE_ON_QUERY_TESTING_ERRORS: ${{ inputs.continue_on_query_testing_errors }}
+        CONFIGURATION_FILTER: ${{ inputs.configurations }}
+        INTEGRATOR_SKIP_QUERY_TESTING: ${{ inputs.skip_query_testing }}
+        INTEGRATOR_QUERY_TIME_WINDOW: ${{ inputs.query_time_window }}
         IMAGE_REF: ${{ steps.image-ref.outputs.image_ref }}
       run: |
         docker run --rm \
@@ -147,6 +162,9 @@ runs:
             -e MANUAL_FILES="$MANUAL_FILES" \
             -e ALL_RULES="$ALL_RULES" \
             -e CONTINUE_ON_QUERY_TESTING_ERRORS="$CONTINUE_ON_QUERY_TESTING_ERRORS" \
+            -e CONFIGURATION_FILTER="$CONFIGURATION_FILTER" \
+            -e INTEGRATOR_SKIP_QUERY_TESTING="$INTEGRATOR_SKIP_QUERY_TESTING" \
+            -e INTEGRATOR_QUERY_TIME_WINDOW="$INTEGRATOR_QUERY_TIME_WINDOW" \
             -e TEST_QUERY_RESULTS_FILE=test-query-results.json \
             "ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:$IMAGE_REF" \
             integrate

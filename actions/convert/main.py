@@ -9,6 +9,7 @@ usage: main.py [-h] [--config CONFIG] [--path-prefix PATH_PREFIX]
                [--changed-files CHANGED_FILES]
                [--deleted-files DELETED_FILES]
                [--manual-files MANUAL_FILES]
+               [--configurations CONFIGURATIONS]
 
 Sigma CLI Conversion
 
@@ -30,6 +31,9 @@ options:
   --manual-files MANUAL_FILES
                         List of conversion files a human modified since the
                         last automation commit (default: )
+  --configurations CONFIGURATIONS
+                        Space-separated configuration names to convert (empty
+                        converts all) (default: )
 ---
 Notes:
   - The path prefix must be set using the PATH_PREFIX environment variable,
@@ -79,4 +83,5 @@ if __name__ == "__main__":
         changed_files=args.changed_files,
         deleted_files=args.deleted_files,
         manual_files=args.manual_files,
+        configurations=args.configurations,
     )
