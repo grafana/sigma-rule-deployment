@@ -29,8 +29,35 @@ func NewQueryTester(config model.Configuration, testFiles []string, timeout time
 	}
 }
 
+// validateTokens checks the Grafana tokens are usable before any query is tested: they parse, and
+// when they are per instance, every instance of a configuration that tests queries has one.
+// It is a configuration error, so it isn't affected by continue_on_query_testing_errors.
+func (qt *QueryTester) validateTokens() error {
+	tokens, err := shared.ParseGrafanaTokens(os.Getenv("INTEGRATOR_GRAFANA_SA_TOKEN"))
+	if err != nil {
+		return fmt.Errorf("invalid Grafana SA token: %w", err)
+	}
+	if !tokens.IsSet() {
+		return nil
+	}
+	for _, cfg := range qt.config.Configurations {
+		if !shared.GetConfigBool(cfg.Integration.TestQueries, qt.config.Defaults.Integration.TestQueries) {
+			continue
+		}
+		for _, instance := range cfg.Deployment.GrafanaInstance.WithDefault(qt.config.Defaults.Deployment.GrafanaInstance) {
+			if _, err := tokens.For(instance); err != nil {
+				return fmt.Errorf("configuration %q: %w", cfg.Name, err)
+			}
+		}
+	}
+	return nil
+}
+
 // Run executes query testing for all test files
 func (qt *QueryTester) Run() error {
+	if err := qt.validateTokens(); err != nil {
+		return err
+	}
 	fmt.Println("Testing queries against the datasource")
 	queryTestResults := make(map[string][]model.QueryTestResult, len(qt.testFiles))
 
@@ -175,7 +202,19 @@ func (qt *QueryTester) TestQueries(queries map[string]string, cfg model.NamedCon
 	if len(grafanaInstances) == 0 {
 		return nil, fmt.Errorf("configuration %q has no Grafana instance to test queries against: set grafana_instance in defaults.deployment or in the configuration's deployment block", cfg.Name)
 	}
-	saToken := os.Getenv("INTEGRATOR_GRAFANA_SA_TOKEN")
+	tokens, err := shared.ParseGrafanaTokens(os.Getenv("INTEGRATOR_GRAFANA_SA_TOKEN"))
+	if err != nil {
+		return nil, fmt.Errorf("invalid Grafana SA token: %w", err)
+	}
+	// Every instance needs its own token before any query is tested against any of them
+	instanceTokens := make(map[string]string, len(grafanaInstances))
+	for _, grafanaInstance := range grafanaInstances {
+		token, err := tokens.For(grafanaInstance)
+		if err != nil {
+			return nil, fmt.Errorf("configuration %q: %w", cfg.Name, err)
+		}
+		instanceTokens[grafanaInstance] = token
+	}
 	timeout := shared.ParseDurationOrDefault(cfg.Deployment.Timeout, qt.timeout)
 	showSampleValues := shared.GetConfigBool(cfg.Integration.ShowSampleValues, defaults.Integration.ShowSampleValues)
 	showLogLines := shared.GetConfigBool(cfg.Integration.ShowLogLines, defaults.Integration.ShowLogLines)
@@ -209,7 +248,7 @@ func (qt *QueryTester) TestQueries(queries map[string]string, cfg model.NamedCon
 				query,
 				datasource,
 				grafanaInstance,
-				saToken,
+				instanceTokens[grafanaInstance],
 				refID,
 				from,
 				to,

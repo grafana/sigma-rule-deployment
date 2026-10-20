@@ -8,7 +8,7 @@ inputs:
     required: true
     default: ""
   grafana_sa_token:
-    description: "Service account token for Grafana for query testing"
+    description: "Service account token for Grafana for query testing, or a JSON object mapping each Grafana instance URL to its own token when the configuration tests queries on several instances"
     required: false
     default: ""
   pretty_print:
@@ -111,6 +111,13 @@ runs:
         echo test_files=${TEST_FILES//\\n/} >> "$GITHUB_OUTPUT"
         echo manual_files=${MANUAL_FILES//\\n/} >> "$GITHUB_OUTPUT"
 
+    - name: Mask Grafana tokens
+      shell: bash
+      env:
+        GRAFANA_SA_TOKEN: ${{ inputs.grafana_sa_token }}
+      run: |
+        REPO_ROOT="$(cd "$GITHUB_ACTION_PATH/../.." && pwd)"
+        "$REPO_ROOT/scripts/mask-grafana-tokens/mask-grafana-tokens.sh"
     - name: Run Sigma Rule Integrator
       id: integrate
       shell: bash

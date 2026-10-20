@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -21,8 +22,30 @@ type GrafanaClient struct {
 	client    *http.Client
 }
 
-// NormalizeBaseURL ensures a non-empty base URL ends with a slash, as clients store it.
+// defaultPorts are the ports a URL leaves out, by scheme. Its keys are the schemes of a Grafana URL.
+var defaultPorts = map[string]string{"http": "80", "https": "443"}
+
+// isHTTPURL reports whether a parsed URL has an http or https scheme and a host.
+func isHTTPURL(u *url.URL) bool {
+	_, ok := defaultPorts[u.Scheme]
+	return ok && u.Hostname() != ""
+}
+
+// NormalizeBaseURL returns the canonical form of a Grafana instance URL, as clients store it, so
+// equivalent URLs compare equal: the scheme and host are lower case, a default port is dropped
+// and the URL ends with a single slash. A URL that isn't a plain http(s) URL only gets the slash.
 func NormalizeBaseURL(baseURL string) string {
+	if u, err := url.Parse(strings.TrimSpace(baseURL)); err == nil && isHTTPURL(u) &&
+		u.User == nil && u.RawQuery == "" && u.Fragment == "" {
+		host := strings.ToLower(u.Hostname())
+		if strings.Contains(host, ":") {
+			host = "[" + host + "]" // IPv6
+		}
+		if port := u.Port(); port != "" && port != defaultPorts[u.Scheme] {
+			host += ":" + port
+		}
+		return u.Scheme + "://" + host + strings.TrimRight(u.EscapedPath(), "/") + "/"
+	}
 	if baseURL != "" && baseURL[len(baseURL)-1] != '/' {
 		baseURL += "/"
 	}

@@ -54,7 +54,7 @@ on:
         default: ""
     secrets:
       grafana_sa_token:
-        description: "A Grafana service account token for testing queries, with at least the following role: Data sources:Reader"
+        description: "A Grafana service account token for testing queries (or a JSON object mapping each Grafana instance URL to its own token), with at least the following role: Data sources:Reader"
         required: false
 
 jobs:

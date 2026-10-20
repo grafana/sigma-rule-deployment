@@ -65,6 +65,19 @@ Security is crucial! Never commit your Grafana token directly to your repository
 
 ![Adding the token to your repo's GitHub secrets](assets/ActionSetup.png "GitHub Secrets")
 
+### Using more than one Grafana instance
+
+If your configurations deploy to different Grafana instances (set with `grafana_instance` in `defaults.deployment` or in a configuration's `deployment` block), each instance needs a service account token created in that instance. Store them in a single secret as a JSON object that maps each instance URL to its token:
+
+```json
+{
+  "https://prod.grafana.net": "glsa_prod_token",
+  "https://staging.grafana.net": "glsa_staging_token"
+}
+```
+
+Every instance in your configuration must have a token, and an instance only ever uses its own. If you use one instance, or instances that share a token, a plain token works as before.
+
 ## Step 4: Organize Your Sigma Rules and Pipelines
 
 Now it's time to add your Sigma rules and conversion pipelines to your repository. Following the [SigmaHQ/sigma](https://github.com/SigmaHQ/sigma) convention helps maintain consistency and makes your repository easier to navigate.

@@ -177,7 +177,7 @@ func TestUpdateAlert(t *testing.T) {
 	d := Deployer{
 		config: deploymentConfig{
 			endpoints: []string{server.URL + "/"},
-			saToken:   "my-test-token",
+			tokens:    shared.NewGrafanaToken("my-test-token"),
 		},
 		client:         shared.NewGrafanaClient(server.URL+"/", "my-test-token", "sigma-rule-deployment/deployer", defaultRequestTimeout),
 		groupsToUpdate: map[*shared.GrafanaClient]map[ruleGroup]bool{},
@@ -279,7 +279,7 @@ func TestCreateAlert(t *testing.T) {
 	d := Deployer{
 		config: deploymentConfig{
 			endpoints: []string{server.URL + "/"},
-			saToken:   "my-test-token",
+			tokens:    shared.NewGrafanaToken("my-test-token"),
 		},
 		client:         shared.NewGrafanaClient(server.URL+"/", "my-test-token", "sigma-rule-deployment/deployer", defaultRequestTimeout),
 		groupsToUpdate: map[*shared.GrafanaClient]map[ruleGroup]bool{},
@@ -438,7 +438,7 @@ func TestDeleteAlert(t *testing.T) {
 	d := Deployer{
 		config: deploymentConfig{
 			endpoints: []string{server.URL + "/"},
-			saToken:   "my-test-token",
+			tokens:    shared.NewGrafanaToken("my-test-token"),
 		},
 		client: shared.NewGrafanaClient(server.URL+"/", "my-test-token", "sigma-rule-deployment/deployer", defaultRequestTimeout),
 	}
@@ -511,7 +511,7 @@ func TestListAlerts(t *testing.T) {
 	d := Deployer{
 		config: deploymentConfig{
 			endpoints: []string{server.URL + "/"},
-			saToken:   "my-test-token",
+			tokens:    shared.NewGrafanaToken("my-test-token"),
 			folderUID: "efgh456",
 			orgID:     23,
 		},
@@ -544,7 +544,7 @@ func TestListAlertsMultipleFolderOrgPairs(t *testing.T) {
 	d := Deployer{
 		config: deploymentConfig{
 			endpoints: []string{server.URL + "/"},
-			saToken:   "my-test-token",
+			tokens:    shared.NewGrafanaToken("my-test-token"),
 			folderUID: "efgh456",
 			orgID:     23,
 			folderOrgPairs: []folderOrg{
@@ -589,7 +589,9 @@ func TestLoadConfig(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Test basic config values
-	assert.Equal(t, "my-test-token", d.config.saToken)
+	token, err := d.config.tokens.For("https://myinstance.grafana.com")
+	assert.NoError(t, err)
+	assert.Equal(t, "my-test-token", token)
 	assert.Equal(t, []string{"https://myinstance.grafana.com"}, d.config.endpoints)
 	assert.Equal(t, "deployments", d.config.alertPath)
 	assert.Equal(t, "abcdef123", d.config.folderUID)
@@ -705,7 +707,7 @@ func TestDeployToMultipleGrafanaInstances(t *testing.T) {
 	d := Deployer{
 		config: deploymentConfig{
 			endpoints:       []string{server1.URL + "/"},
-			saToken:         "my-test-token",
+			tokens:          shared.NewGrafanaToken("my-test-token"),
 			alertPath:       tmpDir,
 			folderUID:       "folder1",
 			alertsToAdd:     []string{conv1File, conv2File},
@@ -863,7 +865,7 @@ func TestUpdateAlertGroupInterval(t *testing.T) {
 			d := Deployer{
 				config: deploymentConfig{
 					endpoints: []string{server.URL + "/"},
-					saToken:   "my-test-token",
+					tokens:    shared.NewGrafanaToken("my-test-token"),
 				},
 				client: shared.NewGrafanaClient(server.URL+"/", "my-test-token", "sigma-rule-deployment/deployer", defaultRequestTimeout),
 			}
@@ -1685,4 +1687,189 @@ func TestDeployRecordsTheInstanceOfEachAlert(t *testing.T) {
 	assert.Equal(t, []AlertDeployment{{UID: "ux1", Title: "Created on X", Instance: serverX.URL + "/"}}, created)
 	assert.Equal(t, []AlertDeployment{{UID: "uy1", Title: "Updated on Y", Instance: serverY.URL + "/"}}, updated)
 	assert.Equal(t, []AlertDeployment{{UID: "uy2", Title: "uy2", Instance: serverY.URL + "/"}}, deleted)
+}
+
+// TestDeployUsesTheTokenOfEachInstance verifies every request to an instance, whether creating,
+// updating, deleting or checking a group, carries that instance's token and never another's.
+func TestDeployUsesTheTokenOfEachInstance(t *testing.T) {
+	var authX, authY map[string]bool
+	makeServer := func(auth *map[string]bool) *httptest.Server {
+		*auth = map[string]bool{}
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			defer r.Body.Close()
+			(*auth)[r.Header.Get("Authorization")] = true
+			switch {
+			case r.URL.Path == "/api/v1/provisioning/alert-rules" && r.Method == http.MethodPost:
+				w.WriteHeader(http.StatusCreated)
+				_, _ = w.Write([]byte(`{}`))
+			case strings.HasPrefix(r.URL.Path, "/api/v1/provisioning/alert-rules/") && r.Method == http.MethodPut:
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte(`{}`))
+			case strings.HasPrefix(r.URL.Path, "/api/v1/provisioning/alert-rules/") && r.Method == http.MethodGet:
+				w.WriteHeader(http.StatusNotFound)
+			case strings.HasPrefix(r.URL.Path, "/api/v1/provisioning/alert-rules/") && r.Method == http.MethodDelete:
+				w.WriteHeader(http.StatusNoContent)
+			case strings.HasPrefix(r.URL.Path, "/api/v1/provisioning/folder/") && r.Method == http.MethodGet:
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte(`{"interval":300,"rules":[]}`))
+			default:
+				t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+				w.WriteHeader(http.StatusNotFound)
+			}
+		}))
+	}
+	serverX := makeServer(&authX)
+	defer serverX.Close()
+	serverY := makeServer(&authY)
+	defer serverY.Close()
+
+	tmpDir, err := os.MkdirTemp(".", "test-token-per-instance-*")
+	assert.NoError(t, err)
+	t.Cleanup(func() { os.RemoveAll(tmpDir) })
+	writeAlert := func(name, uid string) string {
+		file := filepath.Join(tmpDir, name)
+		assert.NoError(t, os.WriteFile(file, []byte(`{"uid":"`+uid+`","title":"T","folderUID":"f","orgID":1,"ruleGroup":"g"}`), 0o600))
+		return file
+	}
+	// conv_x deploys to the default instance X and conv_y to its override Y
+	t.Setenv("ADDED_FILES", writeAlert("alert_rule_conv_x_rule_ux1.json", "ux1")+" "+writeAlert("alert_rule_conv_y_rule_uy1.json", "uy1"))
+	t.Setenv("MODIFIED_FILES", writeAlert("alert_rule_conv_x_rule_ux2.json", "ux2")+" "+writeAlert("alert_rule_conv_y_rule_uy2.json", "uy2"))
+	t.Setenv("DELETED_FILES", filepath.Join(tmpDir, "alert_rule_conv_x_rule_ux3.json")+" "+filepath.Join(tmpDir, "alert_rule_conv_y_rule_uy3.json"))
+	t.Setenv("COPIED_FILES", "")
+
+	writeTestDeployerConfig(t, "version: 2\nfolders:\n  deployment_path: \""+tmpDir+"\"\n"+
+		"defaults:\n  integration:\n    folder_id: f\n    org_id: 1\n    rule_group: g\n    time_window: 5m\n"+
+		"  deployment:\n    grafana_instance: "+serverX.URL+"\n"+
+		"configurations:\n  - name: conv_x\n  - name: conv_y\n    deployment:\n      grafana_instance: "+serverY.URL+"\n")
+	t.Setenv("DEPLOYER_GRAFANA_SA_TOKEN", `{"`+serverX.URL+`": "tok-x", "`+serverY.URL+`/": "tok-y"}`)
+
+	ctx := context.Background()
+	d := NewDeployer()
+	assert.NoError(t, d.LoadConfig(ctx))
+	d.SetClient()
+	assert.NoError(t, d.ConfigNormalMode())
+	created, updated, deleted, err := d.Deploy(ctx)
+	assert.NoError(t, err)
+	assert.Len(t, created, 2)
+	assert.Len(t, updated, 2)
+	assert.Len(t, deleted, 2)
+
+	assert.Equal(t, map[string]bool{"Bearer tok-x": true}, authX)
+	assert.Equal(t, map[string]bool{"Bearer tok-y": true}, authY)
+}
+
+//nolint:gosec // G101: the tokens are fakes
+func TestLoadConfigGrafanaTokens(t *testing.T) {
+	const instances = "version: 2\nfolders:\n  deployment_path: deployments\n" +
+		"defaults:\n  integration:\n    folder_id: f\n    org_id: 1\n  deployment:\n    grafana_instance: https://default.example\n" +
+		"configurations:\n  - name: conv_default\n  - name: conv_override\n    deployment:\n      grafana_instance: [https://one.example, https://two.example]\n"
+	tests := []struct {
+		name    string
+		config  string
+		token   string
+		wantErr string
+	}{
+		{name: "one token for every instance", config: instances, token: "glsa_all"},
+		{
+			name:   "a token for each instance",
+			config: instances,
+			token:  `{"https://default.example": "glsa_d", "https://one.example/": "glsa_1", "https://TWO.example": "glsa_2"}`,
+		},
+		{
+			name: "a default instance every configuration overrides is not required to have a token",
+			config: "version: 2\nfolders:\n  deployment_path: deployments\n" +
+				"defaults:\n  integration:\n    folder_id: f\n    org_id: 1\n  deployment:\n    grafana_instance: https://unused.example\n" +
+				"configurations:\n  - name: conv_a\n    deployment:\n      grafana_instance: https://a.example\n",
+			token: `{"https://a.example": "glsa_a"}`,
+		},
+		{
+			name:    "an instance with no token",
+			config:  instances,
+			token:   `{"https://default.example": "glsa_d", "https://one.example": "glsa_1"}`,
+			wantErr: `configuration "conv_override": there is no Grafana token for instance https://two.example`,
+		},
+		{
+			name:    "the default instance with no token",
+			config:  instances,
+			token:   `{"https://one.example": "glsa_1", "https://two.example": "glsa_2"}`,
+			wantErr: `configuration "conv_default": there is no Grafana token for instance https://default.example`,
+		},
+		{
+			name:    "the default instance with no token and no configurations",
+			config:  "version: 2\nfolders:\n  deployment_path: deployments\ndefaults:\n  integration:\n    folder_id: f\n  deployment:\n    grafana_instance: https://default.example\n",
+			token:   `{"https://other.example": "glsa_o"}`,
+			wantErr: "there is no Grafana token for instance https://default.example",
+		},
+		{name: "tokens that are not valid", config: instances, token: `{"https://default.example": `, wantErr: "invalid Grafana SA token"},
+		{name: "no token", config: instances, token: " ", wantErr: "the Grafana SA token is not set or empty"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			writeTestDeployerConfig(t, tt.config)
+			t.Setenv("DEPLOYER_GRAFANA_SA_TOKEN", tt.token)
+			err := NewDeployer().LoadConfig(context.Background())
+			if tt.wantErr != "" {
+				assert.ErrorContains(t, err, tt.wantErr)
+				assert.NotContains(t, err.Error(), "glsa_", "an error must not include a token")
+				return
+			}
+			assert.NoError(t, err)
+		})
+	}
+}
+
+// TestDefaultInstanceWithoutTokenIsNeverUsed verifies that when every configuration overrides the
+// default instance and the tokens leave it out, an alert file that matches no configuration fails
+// saying the token is missing, rather than being sent to the default instance without one.
+func TestDefaultInstanceWithoutTokenIsNeverUsed(t *testing.T) {
+	var requests int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests++
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	tmpDir, err := os.MkdirTemp(".", "test-default-no-token-*")
+	assert.NoError(t, err)
+	t.Cleanup(func() { os.RemoveAll(tmpDir) })
+	strayFile := filepath.Join(tmpDir, "alert_rule_stray_rule_ustray.json")
+	assert.NoError(t, os.WriteFile(strayFile, []byte(`{"uid":"ustray","title":"T","folderUID":"f","orgID":1,"ruleGroup":"g"}`), 0o600))
+	t.Setenv("ADDED_FILES", strayFile)
+	t.Setenv("MODIFIED_FILES", "")
+	t.Setenv("DELETED_FILES", "")
+	t.Setenv("COPIED_FILES", "")
+
+	writeTestDeployerConfig(t, "version: 2\nfolders:\n  deployment_path: \""+tmpDir+"\"\n"+
+		"defaults:\n  integration:\n    folder_id: f\n    org_id: 1\n    time_window: 5m\n"+
+		"  deployment:\n    grafana_instance: https://default.example\n"+
+		"configurations:\n  - name: conv\n    deployment:\n      grafana_instance: "+server.URL+"\n")
+	t.Setenv("DEPLOYER_GRAFANA_SA_TOKEN", `{"`+server.URL+`": "tok"}`)
+
+	ctx := context.Background()
+	d := NewDeployer()
+	assert.NoError(t, d.LoadConfig(ctx), "a default instance every configuration overrides needs no token")
+	d.SetClient()
+	assert.Empty(t, d.clients)
+	assert.NoError(t, d.ConfigNormalMode())
+	_, _, _, err = d.Deploy(ctx) //nolint:dogsled
+	assert.ErrorContains(t, err, "there is no Grafana token for instance https://default.example")
+	assert.ErrorContains(t, err, "stray_rule")
+	assert.Zero(t, requests)
+}
+
+// TestLoadConfigTreatsEquivalentInstanceURLsAsOneInstance verifies the same instance written in
+// different ways has one set of folders and orgs for a fresh deploy, and one token.
+func TestLoadConfigTreatsEquivalentInstanceURLsAsOneInstance(t *testing.T) {
+	writeTestDeployerConfig(t, "version: 2\nfolders:\n  deployment_path: deployments\n"+
+		"defaults:\n  integration:\n    org_id: 1\n  deployment:\n    grafana_instance: https://prod.example\n"+
+		"configurations:\n"+
+		"  - name: conv_a\n    integration:\n      folder_id: fa\n    deployment:\n      grafana_instance: https://Prod.example/\n"+
+		"  - name: conv_b\n    integration:\n      folder_id: fb\n    deployment:\n      grafana_instance: https://prod.example:443\n")
+	t.Setenv("DEPLOYER_GRAFANA_SA_TOKEN", `{"https://PROD.example:443/": "tok"}`)
+
+	d := NewDeployer()
+	assert.NoError(t, d.LoadConfig(context.Background()))
+	assert.Equal(t, map[string][]folderOrg{
+		"https://prod.example/": {{folderUID: "fa", orgID: 1}, {folderUID: "fb", orgID: 1}},
+	}, d.config.endpointPairs)
 }
