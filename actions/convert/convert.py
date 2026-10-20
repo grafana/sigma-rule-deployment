@@ -223,7 +223,7 @@ def convert_rules(
     # Restrict the run to the requested configurations, if any. Unselected
     # configurations are dropped from the list entirely, so nothing downstream
     # (conversion, deletion, stale-output cleanup) touches them.
-    configuration_names = [c.get("name") for c in conversions]
+    configuration_names = [name for c in conversions if (name := c.get("name"))]
     if configuration_filter:
         unknown_names = configuration_filter - set(configuration_names)
         if unknown_names:
@@ -264,12 +264,10 @@ def convert_rules(
             continue
         # With a configuration filter, only backfill files belonging to the
         # selected configurations; other configurations' files stay untouched.
-        if (
-            configuration_filter
-            and _owning_configuration_name(manual_file.name, configuration_names)
-            not in configuration_filter
-        ):
-            continue
+        if configuration_filter:
+            owning = _owning_configuration_name(manual_file.name, configuration_names)
+            if owning is None or owning not in configuration_filter:
+                continue
         existing = _read_existing_output(manual_file)
         # A manual key that is already present (any value) reflects a deliberate
         # human choice; do not overwrite it.
