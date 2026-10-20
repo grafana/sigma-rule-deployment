@@ -36,7 +36,7 @@ When configurations deploy to different Grafana instances, each instance usually
 Store the whole object as one secret (or in Vault, with `vault_path`). A plain token is still used for every instance, which suits a single instance, or instances that share a token. With a JSON object:
 
 - Every instance a configuration deploys to must have a token. The action fails before deploying anything if one is missing, so no alert is skipped.
-- An instance never uses another instance's token, and there is no default token. A default instance that every configuration overrides doesn't need one.
+- An instance never uses another instance's token, and there is no default token. A default instance that every configuration overrides doesn't need one, unless an alert file matches no configuration, as it is then deployed to the default instances.
 - URLs are compared ignoring case, a default port and a trailing slash, so `https://Prod.grafana.net/` matches `https://prod.grafana.net`.
 - Each token is masked in the logs on its own, as well as the object as a whole.
 

@@ -39,6 +39,8 @@ func TestParseGrafanaTokens(t *testing.T) {
 		{name: "empty token", raw: `{"https://a.example": " "}`, wantErr: "token for Grafana instance https://a.example is empty"},
 		{name: "key that is not a URL", raw: `{"prod": "glsa_a"}`, wantErr: `"prod" is not a Grafana instance URL`},
 		{name: "key with an unsupported scheme", raw: `{"ftp://a.example": "glsa_a"}`, wantErr: "is not a Grafana instance URL"},
+		{name: "same key twice", raw: `{"https://a.example": "glsa_a", "https://a.example": "glsa_b"}`, wantErr: "more than once"},
+		{name: "more after the object", raw: `{"https://a.example": "glsa_a"} {"https://b.example": "glsa_b"}`, wantErr: "more after the object"},
 		{name: "same instance twice", raw: `{"https://a.example": "glsa_a", "https://A.example/": "glsa_b"}`, wantErr: "more than once"},
 	}
 	for _, tt := range tests {
@@ -81,4 +83,16 @@ func TestGrafanaTokensIsSet(t *testing.T) {
 	assert.True(t, NewGrafanaToken("glsa_a").IsSet())
 	assert.False(t, NewGrafanaToken("").IsSet())
 	assert.False(t, GrafanaTokens{}.IsSet())
+}
+
+func TestGrafanaTokensMatchTheClientBaseURL(t *testing.T) {
+	// A token must be found for an instance by the same URL the client for it is keyed by
+	tokens, err := ParseGrafanaTokens(`{"HTTPS://Prod.example:443/": "glsa_prod"}`)
+	assert.NoError(t, err)
+	for _, instance := range []string{"https://prod.example", "https://PROD.example/", "https://prod.example:443"} {
+		client := NewGrafanaClient(instance, "ignored", "test", 0)
+		token, err := tokens.For(client.BaseURL())
+		assert.NoError(t, err, instance)
+		assert.Equal(t, "glsa_prod", token, instance)
+	}
 }

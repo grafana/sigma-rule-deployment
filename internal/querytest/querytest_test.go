@@ -1136,3 +1136,77 @@ func TestTestQueriesUsesTheTokenOfEachInstance(t *testing.T) {
 		})
 	}
 }
+
+//nolint:gosec // G101: the tokens are fakes
+func TestValidateTokens(t *testing.T) {
+	two := model.GrafanaInstances{"https://a.example", "https://b.example"}
+	tests := []struct {
+		name     string
+		token    string
+		defaults model.ConfigBlock
+		configs  []model.NamedConfigBlock
+		wantErr  string
+	}{
+		{name: "no token", token: "", configs: []model.NamedConfigBlock{{Name: "a"}}},
+		{name: "a plain token", token: "glsa_all", configs: []model.NamedConfigBlock{{Name: "a"}}},
+		{
+			name:  "a token for every instance of a configuration that tests queries",
+			token: `{"https://a.example": "glsa_a", "https://b.example": "glsa_b"}`,
+			defaults: model.ConfigBlock{
+				Integration: model.IntegrationConfig{TestQueries: new(true)},
+				Deployment:  model.DeploymentConfig{GrafanaInstance: two},
+			},
+			configs: []model.NamedConfigBlock{{Name: "a"}},
+		},
+		{
+			name:  "an instance of a configuration that tests queries has no token",
+			token: `{"https://a.example": "glsa_a"}`,
+			defaults: model.ConfigBlock{
+				Integration: model.IntegrationConfig{TestQueries: new(true)},
+				Deployment:  model.DeploymentConfig{GrafanaInstance: two},
+			},
+			configs: []model.NamedConfigBlock{{Name: "a"}},
+			wantErr: `configuration "a": there is no Grafana token for instance https://b.example`,
+		},
+		{
+			name:  "an instance of a configuration that doesn't test queries needs no token",
+			token: `{"https://a.example": "glsa_a"}`,
+			defaults: model.ConfigBlock{
+				Deployment: model.DeploymentConfig{GrafanaInstance: two},
+			},
+			configs: []model.NamedConfigBlock{
+				{Name: "a", ConfigBlock: model.ConfigBlock{Integration: model.IntegrationConfig{TestQueries: new(true)}, Deployment: model.DeploymentConfig{GrafanaInstance: two[:1]}}},
+				{Name: "b"},
+			},
+		},
+		{name: "tokens that are not valid", token: `{"https://a.example": `, wantErr: "invalid Grafana SA token"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("INTEGRATOR_GRAFANA_SA_TOKEN", tt.token)
+			qt := NewQueryTester(model.Configuration{Defaults: tt.defaults, Configurations: tt.configs}, nil, time.Second)
+			err := qt.validateTokens()
+			if tt.wantErr != "" {
+				assert.ErrorContains(t, err, tt.wantErr)
+				assert.NotContains(t, err.Error(), "glsa_", "an error must not include a token")
+				return
+			}
+			assert.NoError(t, err)
+		})
+	}
+}
+
+// TestRunFailsOnMissingTokenEvenWhenContinuingOnErrors verifies a missing token is reported before
+// any file is processed, and isn't downgraded by continue_on_query_testing_errors.
+func TestRunFailsOnMissingTokenEvenWhenContinuingOnErrors(t *testing.T) {
+	t.Setenv("INTEGRATOR_GRAFANA_SA_TOKEN", `{"https://a.example": "glsa_a"}`)
+	config := model.Configuration{
+		Defaults: model.ConfigBlock{
+			Integration: model.IntegrationConfig{TestQueries: new(true), ContinueOnError: new(true)},
+			Deployment:  model.DeploymentConfig{GrafanaInstance: model.GrafanaInstances{"https://b.example"}},
+		},
+		Configurations: []model.NamedConfigBlock{{Name: "conv"}},
+	}
+	err := NewQueryTester(config, []string{"does-not-exist.json"}, time.Second).Run()
+	assert.ErrorContains(t, err, `configuration "conv": there is no Grafana token for instance https://b.example`)
+}

@@ -29,8 +29,35 @@ func NewQueryTester(config model.Configuration, testFiles []string, timeout time
 	}
 }
 
+// validateTokens checks the Grafana tokens are usable before any query is tested: they parse, and
+// when they are per instance, every instance of a configuration that tests queries has one.
+// It is a configuration error, so it isn't affected by continue_on_query_testing_errors.
+func (qt *QueryTester) validateTokens() error {
+	tokens, err := shared.ParseGrafanaTokens(os.Getenv("INTEGRATOR_GRAFANA_SA_TOKEN"))
+	if err != nil {
+		return fmt.Errorf("invalid Grafana SA token: %w", err)
+	}
+	if !tokens.IsSet() {
+		return nil
+	}
+	for _, cfg := range qt.config.Configurations {
+		if !shared.GetConfigBool(cfg.Integration.TestQueries, qt.config.Defaults.Integration.TestQueries) {
+			continue
+		}
+		for _, instance := range cfg.Deployment.GrafanaInstance.WithDefault(qt.config.Defaults.Deployment.GrafanaInstance) {
+			if _, err := tokens.For(instance); err != nil {
+				return fmt.Errorf("configuration %q: %w", cfg.Name, err)
+			}
+		}
+	}
+	return nil
+}
+
 // Run executes query testing for all test files
 func (qt *QueryTester) Run() error {
+	if err := qt.validateTokens(); err != nil {
+		return err
+	}
 	fmt.Println("Testing queries against the datasource")
 	queryTestResults := make(map[string][]model.QueryTestResult, len(qt.testFiles))
 

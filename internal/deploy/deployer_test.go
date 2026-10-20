@@ -1817,3 +1817,59 @@ func TestLoadConfigGrafanaTokens(t *testing.T) {
 		})
 	}
 }
+
+// TestDefaultInstanceWithoutTokenIsNeverUsed verifies that when every configuration overrides the
+// default instance and the tokens leave it out, an alert file that matches no configuration fails
+// saying the token is missing, rather than being sent to the default instance without one.
+func TestDefaultInstanceWithoutTokenIsNeverUsed(t *testing.T) {
+	var requests int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests++
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	tmpDir, err := os.MkdirTemp(".", "test-default-no-token-*")
+	assert.NoError(t, err)
+	t.Cleanup(func() { os.RemoveAll(tmpDir) })
+	strayFile := filepath.Join(tmpDir, "alert_rule_stray_rule_ustray.json")
+	assert.NoError(t, os.WriteFile(strayFile, []byte(`{"uid":"ustray","title":"T","folderUID":"f","orgID":1,"ruleGroup":"g"}`), 0o600))
+	t.Setenv("ADDED_FILES", strayFile)
+	t.Setenv("MODIFIED_FILES", "")
+	t.Setenv("DELETED_FILES", "")
+	t.Setenv("COPIED_FILES", "")
+
+	writeTestDeployerConfig(t, "version: 2\nfolders:\n  deployment_path: \""+tmpDir+"\"\n"+
+		"defaults:\n  integration:\n    folder_id: f\n    org_id: 1\n    time_window: 5m\n"+
+		"  deployment:\n    grafana_instance: https://default.example\n"+
+		"configurations:\n  - name: conv\n    deployment:\n      grafana_instance: "+server.URL+"\n")
+	t.Setenv("DEPLOYER_GRAFANA_SA_TOKEN", `{"`+server.URL+`": "tok"}`)
+
+	ctx := context.Background()
+	d := NewDeployer()
+	assert.NoError(t, d.LoadConfig(ctx), "a default instance every configuration overrides needs no token")
+	d.SetClient()
+	assert.Empty(t, d.clients)
+	assert.NoError(t, d.ConfigNormalMode())
+	_, _, _, err = d.Deploy(ctx) //nolint:dogsled
+	assert.ErrorContains(t, err, "there is no Grafana token for instance https://default.example")
+	assert.ErrorContains(t, err, "stray_rule")
+	assert.Zero(t, requests)
+}
+
+// TestLoadConfigTreatsEquivalentInstanceURLsAsOneInstance verifies the same instance written in
+// different ways has one set of folders and orgs for a fresh deploy, and one token.
+func TestLoadConfigTreatsEquivalentInstanceURLsAsOneInstance(t *testing.T) {
+	writeTestDeployerConfig(t, "version: 2\nfolders:\n  deployment_path: deployments\n"+
+		"defaults:\n  integration:\n    org_id: 1\n  deployment:\n    grafana_instance: https://prod.example\n"+
+		"configurations:\n"+
+		"  - name: conv_a\n    integration:\n      folder_id: fa\n    deployment:\n      grafana_instance: https://Prod.example/\n"+
+		"  - name: conv_b\n    integration:\n      folder_id: fb\n    deployment:\n      grafana_instance: https://prod.example:443\n")
+	t.Setenv("DEPLOYER_GRAFANA_SA_TOKEN", `{"https://PROD.example:443/": "tok"}`)
+
+	d := NewDeployer()
+	assert.NoError(t, d.LoadConfig(context.Background()))
+	assert.Equal(t, map[string][]folderOrg{
+		"https://prod.example/": {{folderUID: "fa", orgID: 1}, {folderUID: "fb", orgID: 1}},
+	}, d.config.endpointPairs)
+}

@@ -3,6 +3,7 @@ package shared
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/url"
 	"strings"
 )
@@ -28,25 +29,34 @@ func NewGrafanaToken(token string) GrafanaTokens {
 
 // ParseGrafanaTokens parses a plain token or a JSON object of instance URLs to tokens.
 // An empty value gives tokens that resolve every instance to an empty token.
-// Errors never include the value, as it is a secret.
+// Errors never include a token, as it is a secret.
 func ParseGrafanaTokens(raw string) (GrafanaTokens, error) {
 	raw = strings.TrimSpace(raw)
 	if !strings.HasPrefix(raw, "{") {
 		return GrafanaTokens{single: raw}, nil
 	}
 
-	var tokens map[string]string
-	if err := json.Unmarshal([]byte(raw), &tokens); err != nil {
-		return GrafanaTokens{}, fmt.Errorf("the Grafana tokens look like a JSON object but can't be parsed as one mapping instance URLs to token strings: %w", err)
+	const notAnObject = "the Grafana tokens look like a JSON object but can't be parsed as one mapping instance URLs to token strings"
+	// Read the object token by token, as decoding it into a map would silently keep the last
+	// of a repeated key
+	dec := json.NewDecoder(strings.NewReader(raw))
+	if _, err := dec.Token(); err != nil {
+		return GrafanaTokens{}, fmt.Errorf("%s: %w", notAnObject, err)
 	}
-	if len(tokens) == 0 {
-		return GrafanaTokens{}, fmt.Errorf("the Grafana tokens are an empty JSON object")
-	}
-	byInstance := make(map[string]string, len(tokens))
-	for instance, token := range tokens {
+	byInstance := map[string]string{}
+	for dec.More() {
+		keyToken, err := dec.Token()
+		if err != nil {
+			return GrafanaTokens{}, fmt.Errorf("%s: %w", notAnObject, err)
+		}
+		instance, _ := keyToken.(string)
 		key, err := normalizeInstanceKey(instance)
 		if err != nil {
 			return GrafanaTokens{}, err
+		}
+		var token string
+		if err := dec.Decode(&token); err != nil {
+			return GrafanaTokens{}, fmt.Errorf("%s: the token for instance %s is not a string", notAnObject, key)
 		}
 		if strings.TrimSpace(token) == "" {
 			return GrafanaTokens{}, fmt.Errorf("the token for Grafana instance %s is empty", key)
@@ -55,6 +65,15 @@ func ParseGrafanaTokens(raw string) (GrafanaTokens, error) {
 			return GrafanaTokens{}, fmt.Errorf("the Grafana tokens list instance %s more than once", key)
 		}
 		byInstance[key] = strings.TrimSpace(token)
+	}
+	if _, err := dec.Token(); err != nil {
+		return GrafanaTokens{}, fmt.Errorf("%s: %w", notAnObject, err)
+	}
+	if _, err := dec.Token(); err != io.EOF {
+		return GrafanaTokens{}, fmt.Errorf("%s: there is more after the object", notAnObject)
+	}
+	if len(byInstance) == 0 {
+		return GrafanaTokens{}, fmt.Errorf("the Grafana tokens are an empty JSON object")
 	}
 	return GrafanaTokens{byInstance: byInstance}, nil
 }
@@ -81,19 +100,12 @@ func (t GrafanaTokens) For(instance string) (string, error) {
 	return token, nil
 }
 
-// normalizeInstanceKey makes equivalent URLs for an instance compare equal: the scheme and host
-// are lower case, a default port and any trailing slashes are dropped.
+// normalizeInstanceKey identifies an instance by its canonical URL, the one clients use, without
+// the trailing slash. It fails for anything that isn't an http(s) URL.
 func normalizeInstanceKey(instance string) (string, error) {
 	u, err := url.Parse(strings.TrimSpace(instance))
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" {
+	if err != nil || !isHTTPURL(u) {
 		return "", fmt.Errorf("%q is not a Grafana instance URL: it must start with http:// or https://", instance)
 	}
-	host := strings.ToLower(u.Hostname())
-	if strings.Contains(host, ":") {
-		host = "[" + host + "]" // IPv6
-	}
-	if port := u.Port(); port != "" && port != map[string]string{"http": "80", "https": "443"}[u.Scheme] {
-		host += ":" + port
-	}
-	return strings.ToLower(u.Scheme) + "://" + host + strings.TrimRight(u.EscapedPath(), "/"), nil
+	return strings.TrimRight(NormalizeBaseURL(instance), "/"), nil
 }
