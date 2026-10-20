@@ -57,6 +57,11 @@ func (c *GrafanaClient) BaseURL() string {
 	return c.baseURL
 }
 
+// Timeout returns the request timeout of the client.
+func (c *GrafanaClient) Timeout() time.Duration {
+	return c.timeout
+}
+
 // NewGrafanaClient creates a new Grafana HTTP client
 func NewGrafanaClient(baseURL, apiKey, userAgent string, timeout time.Duration) *GrafanaClient {
 	return &GrafanaClient{

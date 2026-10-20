@@ -78,11 +78,20 @@ runs:
         # Removed alerts are deleted from the instances the previous config deployed them to,
         # which is only known from the config as it was before this push
         rm -f .sigma-previous-config.yml
-        if [[ -n "$BEFORE_SHA" && ! "$BEFORE_SHA" =~ ^0+$ ]] && git show "${BEFORE_SHA}:./${CONFIG_PATH#./}" > .sigma-previous-config.yml 2>/dev/null; then
+        if [[ -z "$BEFORE_SHA" || "$BEFORE_SHA" =~ ^0+$ ]]; then
+          echo "::notice::No previous commit for this event, so removed alerts will only be deleted from the instances in the current configuration"
+          exit 0
+        fi
+        if ! git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
+          echo "::warning::The previous commit ${BEFORE_SHA} is not available (was the branch force-pushed?), so removed alerts will only be deleted from the instances in the current configuration"
+          exit 0
+        fi
+        CONFIG_RELATIVE_PATH=$(realpath --relative-to="$PWD" "$CONFIG_PATH")
+        if git show "${BEFORE_SHA}:./${CONFIG_RELATIVE_PATH}" > .sigma-previous-config.yml 2>/dev/null; then
           echo "previous_config_path=.sigma-previous-config.yml" >> "$GITHUB_OUTPUT"
         else
           rm -f .sigma-previous-config.yml
-          echo "No previous configuration found, removed alerts will only be deleted from the instances in the current configuration"
+          echo "::notice::${CONFIG_RELATIVE_PATH} does not exist in the previous commit, so removed alerts will only be deleted from the instances in the current configuration"
         fi
     - name: Run Sigma Rule Deployer
       id: deploy
