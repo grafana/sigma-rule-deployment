@@ -72,3 +72,80 @@ test('buildDeploymentComment renders titles without links when the Grafana URL i
   assert(comment.includes('- Alpha rule'));
   assert(!comment.includes('alerting/grafana'));
 });
+
+test('normalizeDeploymentResults keeps the instance of each result when there is one', () => {
+  assert.deepStrictEqual(
+    normalizeDeploymentResults([
+      { uid: 'uid-b', title: 'Same', instance: ' https://b.example/ ' },
+      { uid: 'uid-a', title: 'Same', instance: 'https://a.example/' },
+      { uid: 'uid-c', title: 'Same', instance: '' },
+      { uid: 'uid-d', title: 'Other', instance: 42 },
+    ]),
+    [
+      { uid: 'uid-d', title: 'Other' },
+      { uid: 'uid-a', title: 'Same', instance: 'https://a.example/' },
+      { uid: 'uid-b', title: 'Same', instance: 'https://b.example/' },
+      { uid: 'uid-c', title: 'Same' },
+    ]
+  );
+});
+
+test('normalizeDeploymentResults orders the same rule on different instances by instance', () => {
+  const results = normalizeDeploymentResults([
+    { uid: 'uid-a', title: 'Alpha', instance: 'https://b.example/' },
+    { uid: 'uid-a', title: 'Alpha', instance: 'https://a.example/' },
+  ]);
+
+  assert.deepStrictEqual(
+    results.map(({ instance }) => instance),
+    ['https://a.example/', 'https://b.example/']
+  );
+});
+
+test('parseDeploymentResults keeps the instance from the JSON details', () => {
+  assert.deepStrictEqual(
+    parseDeploymentResults('[{"uid":"uid-a","title":"Alpha","instance":"https://a.example/"}]'),
+    [{ uid: 'uid-a', title: 'Alpha', instance: 'https://a.example/' }]
+  );
+});
+
+test('buildDeploymentComment links each alert to the instance it was deployed to', () => {
+  const comment = buildDeploymentComment({
+    created: [
+      { uid: 'uid-a', title: 'Alpha rule', instance: 'https://a.example/' },
+      { uid: 'uid-b', title: 'Beta rule', instance: 'https://b.example' },
+    ],
+    updated: [{ uid: 'uid-c', title: 'Gamma rule', instance: '"https://c.example/"' }],
+    grafanaInstance: 'https://default.example/',
+  });
+
+  assert(comment.includes('- [Alpha rule](https://a.example/alerting/grafana/uid-a/view)'));
+  assert(comment.includes('- [Beta rule](https://b.example/alerting/grafana/uid-b/view)'));
+  assert(comment.includes('- [Gamma rule](https://c.example/alerting/grafana/uid-c/view)'));
+  assert(!comment.includes('default.example'));
+});
+
+test('buildDeploymentComment falls back to the default instance for alerts without one', () => {
+  const comment = buildDeploymentComment({
+    created: [
+      { uid: 'uid-a', title: 'Alpha rule', instance: 'https://a.example/' },
+      { uid: 'uid-b', title: 'Beta rule' },
+    ],
+    grafanaInstance: 'https://default.example/',
+  });
+
+  assert(comment.includes('- [Alpha rule](https://a.example/alerting/grafana/uid-a/view)'));
+  assert(comment.includes('- [Beta rule](https://default.example/alerting/grafana/uid-b/view)'));
+});
+
+test('buildDeploymentComment links alerts that name their instance without a default instance', () => {
+  const comment = buildDeploymentComment({
+    created: [
+      { uid: 'uid-a', title: 'Alpha rule', instance: 'https://a.example/' },
+      { uid: 'uid-b', title: 'Beta rule' },
+    ],
+  });
+
+  assert(comment.includes('- [Alpha rule](https://a.example/alerting/grafana/uid-a/view)'));
+  assert(comment.includes('- Beta rule'));
+});

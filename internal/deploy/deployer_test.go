@@ -723,8 +723,9 @@ func TestDeployToMultipleGrafanaInstances(t *testing.T) {
 
 	created, updated, deleted, err := d.Deploy(ctx)
 	assert.NoError(t, err)
-	assert.Contains(t, created, AlertDeployment{UID: "conv1uid1", Title: "Conv1 Alert"})
-	assert.Contains(t, created, AlertDeployment{UID: "conv2uid1", Title: "Conv2 Alert"})
+	// Each alert records the instance it was deployed to
+	assert.Contains(t, created, AlertDeployment{UID: "conv1uid1", Title: "Conv1 Alert", Instance: server1.URL + "/"})
+	assert.Contains(t, created, AlertDeployment{UID: "conv2uid1", Title: "Conv2 Alert", Instance: server2.URL + "/"})
 	assert.Empty(t, updated)
 	assert.Empty(t, deleted)
 
@@ -1533,7 +1534,10 @@ func TestFreshDeployCleansEachInstanceWithItsOwnFolderOrgPairs(t *testing.T) {
 
 	assert.Equal(t, []string{"x-managed"}, deletedOnX)
 	assert.Equal(t, []string{"y-managed"}, deletedOnY)
-	assert.ElementsMatch(t, []AlertDeployment{{UID: "x-managed", Title: "x-managed"}, {UID: "y-managed", Title: "y-managed"}}, deleted)
+	assert.ElementsMatch(t, []AlertDeployment{
+		{UID: "x-managed", Title: "x-managed", Instance: serverX.URL + "/"},
+		{UID: "y-managed", Title: "y-managed", Instance: serverY.URL + "/"},
+	}, deleted)
 }
 
 // TestFreshDeploySkipsInstancesNoConfigurationDeploysTo verifies a default instance that every
@@ -1618,4 +1622,67 @@ func TestLoadConfigAcceptsDaysInTimeWindowAndTimeout(t *testing.T) {
 		{folderUID: "f", name: "g"}: 86400,
 		{folderUID: "f", name: "h"}: 129600,
 	}, d.config.groupsIntervals)
+}
+
+// TestDeployRecordsTheInstanceOfEachAlert verifies each created, updated and deleted alert
+// records the instance it was deployed to, so the deployment comment can link to the right one.
+func TestDeployRecordsTheInstanceOfEachAlert(t *testing.T) {
+	makeServer := func() *httptest.Server {
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			defer r.Body.Close()
+			switch {
+			case r.URL.Path == "/api/v1/provisioning/alert-rules" && r.Method == http.MethodPost:
+				w.WriteHeader(http.StatusCreated)
+				_, _ = w.Write([]byte(`{}`))
+			case strings.HasPrefix(r.URL.Path, "/api/v1/provisioning/alert-rules/") && r.Method == http.MethodPut:
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte(`{}`))
+			case strings.HasPrefix(r.URL.Path, "/api/v1/provisioning/alert-rules/") && r.Method == http.MethodGet:
+				w.WriteHeader(http.StatusNotFound) // the title lookup falls back to the UID
+			case strings.HasPrefix(r.URL.Path, "/api/v1/provisioning/alert-rules/") && r.Method == http.MethodDelete:
+				w.WriteHeader(http.StatusNoContent)
+			case strings.HasPrefix(r.URL.Path, "/api/v1/provisioning/folder/") && r.Method == http.MethodGet:
+				w.WriteHeader(http.StatusOK) // the interval of the group already matches
+				_, _ = w.Write([]byte(`{"interval":300,"rules":[]}`))
+			default:
+				t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+				w.WriteHeader(http.StatusNotFound)
+			}
+		}))
+	}
+	serverX := makeServer()
+	defer serverX.Close()
+	serverY := makeServer()
+	defer serverY.Close()
+
+	tmpDir, err := os.MkdirTemp(".", "test-instance-per-alert-*")
+	assert.NoError(t, err)
+	t.Cleanup(func() { os.RemoveAll(tmpDir) })
+	writeAlert := func(name, uid, title string) string {
+		file := filepath.Join(tmpDir, name)
+		assert.NoError(t, os.WriteFile(file, []byte(`{"uid":"`+uid+`","title":"`+title+`","folderUID":"f","orgID":1,"ruleGroup":"g"}`), 0o600))
+		return file
+	}
+	// conv_x deploys to the default instance X and conv_y to its override Y
+	t.Setenv("ADDED_FILES", writeAlert("alert_rule_conv_x_rule_ux1.json", "ux1", "Created on X"))
+	t.Setenv("MODIFIED_FILES", writeAlert("alert_rule_conv_y_rule_uy1.json", "uy1", "Updated on Y"))
+	t.Setenv("DELETED_FILES", filepath.Join(tmpDir, "alert_rule_conv_y_rule_uy2.json"))
+	t.Setenv("COPIED_FILES", "")
+
+	writeTestDeployerConfig(t, "version: 2\nfolders:\n  deployment_path: \""+tmpDir+"\"\n"+
+		"defaults:\n  integration:\n    folder_id: f\n    org_id: 1\n    rule_group: g\n    time_window: 5m\n"+
+		"  deployment:\n    grafana_instance: "+serverX.URL+"\n"+
+		"configurations:\n  - name: conv_x\n  - name: conv_y\n    deployment:\n      grafana_instance: "+serverY.URL+"\n")
+
+	ctx := context.Background()
+	d := NewDeployer()
+	assert.NoError(t, d.LoadConfig(ctx))
+	d.SetClient()
+	assert.NoError(t, d.ConfigNormalMode())
+	created, updated, deleted, err := d.Deploy(ctx)
+	assert.NoError(t, err)
+
+	assert.Equal(t, []AlertDeployment{{UID: "ux1", Title: "Created on X", Instance: serverX.URL + "/"}}, created)
+	assert.Equal(t, []AlertDeployment{{UID: "uy1", Title: "Updated on Y", Instance: serverY.URL + "/"}}, updated)
+	assert.Equal(t, []AlertDeployment{{UID: "uy2", Title: "uy2", Instance: serverY.URL + "/"}}, deleted)
 }

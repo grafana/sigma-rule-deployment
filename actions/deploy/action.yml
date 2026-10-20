@@ -105,7 +105,7 @@ runs:
       env:
         CONFIG_PATH: ${{ inputs.config_path }}
       run: |
-        # v2 config: grafana_instance is a string or a list. The comment links to the first default instance.
+        # v2 config: grafana_instance is a string or a list. This is the fallback link target, for alerts whose deployment details name no instance.
         GRAFANA_INSTANCE=$(yq -r '.defaults.deployment.grafana_instance | (select(tag == "!!seq") | .[0]) // select(tag == "!!str") // ""' "${CONFIG_PATH}")
         echo "grafana_instance=${GRAFANA_INSTANCE}" >> $GITHUB_OUTPUT
     - name: Comment Status
