@@ -1043,3 +1043,96 @@ func TestRunPerConfigurationBooleanOverridesOfTrueDefaults(t *testing.T) {
 		assert.Contains(t, inherited[0].Stats.Fields, "body", "log line field should be stored when inheriting show_log_lines true")
 	})
 }
+
+// tokenRecordingQuery records the token each instance was queried with
+type tokenRecordingQuery struct {
+	*testDatasourceQuery
+	tokens map[string]string
+}
+
+func (r *tokenRecordingQuery) ExecuteQuery(query, dsName, baseURL, apiKey, refID, from, to, customModel string, timeout time.Duration) ([]byte, error) {
+	r.tokens[baseURL] = apiKey
+	return r.testDatasourceQuery.ExecuteQuery(query, dsName, baseURL, apiKey, refID, from, to, customModel, timeout)
+}
+
+//nolint:gosec // G101: the tokens are fakes
+func TestTestQueriesUsesTheTokenOfEachInstance(t *testing.T) {
+	tests := []struct {
+		name       string
+		token      string
+		defaultURL []string
+		cfgURL     []string
+		want       map[string]string // the token each instance was queried with
+		wantErr    string
+	}{
+		{
+			name:       "one token for every instance",
+			token:      "glsa_all",
+			defaultURL: []string{"https://default.example"},
+			cfgURL:     []string{"https://a.example", "https://b.example"},
+			want:       map[string]string{"https://a.example": "glsa_all", "https://b.example": "glsa_all"},
+		},
+		{
+			name:       "a token for each instance",
+			token:      `{"https://a.example/": "glsa_a", "https://B.example": "glsa_b", "https://default.example": "glsa_d"}`,
+			defaultURL: []string{"https://default.example"},
+			cfgURL:     []string{"https://a.example", "https://b.example"},
+			want:       map[string]string{"https://a.example": "glsa_a", "https://b.example": "glsa_b"},
+		},
+		{
+			name:       "the default instance gets its own token",
+			token:      `{"https://a.example": "glsa_a", "https://default.example": "glsa_d"}`,
+			defaultURL: []string{"https://default.example"},
+			want:       map[string]string{"https://default.example": "glsa_d"},
+		},
+		{
+			name:       "an instance with no token fails before any is queried",
+			token:      `{"https://a.example": "glsa_a"}`,
+			defaultURL: []string{"https://default.example"},
+			cfgURL:     []string{"https://a.example", "https://b.example"},
+			want:       map[string]string{},
+			wantErr:    `configuration "conv": there is no Grafana token for instance https://b.example`,
+		},
+		{
+			name:       "tokens that are not valid",
+			token:      `{"https://a.example": `,
+			defaultURL: []string{"https://default.example"},
+			want:       map[string]string{},
+			wantErr:    "invalid Grafana SA token",
+		},
+		{
+			name:       "no token is passed on as empty, as before",
+			token:      "",
+			defaultURL: []string{"https://default.example"},
+			want:       map[string]string{"https://default.example": ""},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("INTEGRATOR_GRAFANA_SA_TOKEN", tt.token)
+			recorder := &tokenRecordingQuery{testDatasourceQuery: newTestDatasourceQuery(), tokens: map[string]string{}}
+			original := integrate.DefaultDatasourceQuery
+			integrate.DefaultDatasourceQuery = recorder
+			defer func() { integrate.DefaultDatasourceQuery = original }()
+
+			cfg := model.NamedConfigBlock{
+				Name: "conv",
+				ConfigBlock: model.ConfigBlock{
+					Integration: model.IntegrationConfig{DataSource: "my-ds"},
+					Deployment:  model.DeploymentConfig{GrafanaInstance: tt.cfgURL},
+				},
+			}
+			defaults := model.ConfigBlock{Deployment: model.DeploymentConfig{GrafanaInstance: tt.defaultURL}}
+			qt := NewQueryTester(model.Configuration{}, nil, 5*time.Second)
+			_, err := qt.TestQueries(map[string]string{"A": "{job=`test`} | json"}, cfg, defaults)
+
+			if tt.wantErr != "" {
+				assert.ErrorContains(t, err, tt.wantErr)
+				assert.NotContains(t, err.Error(), "glsa_", "an error must not include a token")
+			} else {
+				assert.NoError(t, err)
+			}
+			assert.Equal(t, tt.want, recorder.tokens)
+		})
+	}
+}

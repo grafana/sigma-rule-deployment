@@ -51,7 +51,7 @@ type ruleGroup struct {
 type deploymentConfig struct {
 	endpoints      []string
 	alertPath      string
-	saToken        string
+	tokens         shared.GrafanaTokens // the service account token for each Grafana instance
 	freshDeploy    bool
 	folderUID      string      // default folder UID, from Defaults.Integration.FolderID
 	orgID          int64       // default org ID, from Defaults.Integration.OrgID
@@ -181,15 +181,18 @@ func (d *Deployer) pendingRemovals() ([]alertRemoval, error) {
 	return append(removals, d.freshRemovals...), nil
 }
 
+// newClient creates a client for a Grafana instance, using the token for that instance.
+// LoadConfig has already checked there is a token for every instance a configuration uses,
+// so an instance that has none is not used and its client is never given another's token.
+func (d *Deployer) newClient(endpoint string, timeout time.Duration) *shared.GrafanaClient {
+	token, _ := d.config.tokens.For(endpoint)
+	return shared.NewGrafanaClient(endpoint, token, "sigma-rule-deployment/deployer", timeout)
+}
+
 func (d *Deployer) SetClient() {
 	d.clients = make([]*shared.GrafanaClient, 0, len(d.config.endpoints))
 	for _, ep := range d.config.endpoints {
-		d.clients = append(d.clients, shared.NewGrafanaClient(
-			ep,
-			d.config.saToken,
-			"sigma-rule-deployment/deployer",
-			d.config.timeout,
-		))
+		d.clients = append(d.clients, d.newClient(ep, d.config.timeout))
 	}
 	if len(d.clients) > 0 {
 		d.client = d.clients[0]
@@ -396,10 +399,15 @@ func (d *Deployer) LoadConfig(_ context.Context) error {
 	}
 
 	// Get the rest of the config from the environment variables
-	d.config.saToken = os.Getenv("DEPLOYER_GRAFANA_SA_TOKEN")
-	if d.config.saToken == "" {
+	rawTokens := os.Getenv("DEPLOYER_GRAFANA_SA_TOKEN")
+	if strings.TrimSpace(rawTokens) == "" {
 		return fmt.Errorf("the Grafana SA token is not set or empty")
 	}
+	tokens, err := shared.ParseGrafanaTokens(rawTokens)
+	if err != nil {
+		return fmt.Errorf("invalid Grafana SA token: %w", err)
+	}
+	d.config.tokens = tokens
 
 	// Every configuration must resolve to at least one Grafana instance, otherwise its alerts
 	// would be silently skipped. Build per-conversion clients for configurations that override
@@ -411,6 +419,11 @@ func (d *Deployer) LoadConfig(_ context.Context) error {
 		instances := cfg.Deployment.GrafanaInstance.WithDefault(configYAML.Defaults.Deployment.GrafanaInstance)
 		if len(instances) == 0 {
 			return fmt.Errorf("configuration %q has no Grafana instance: set grafana_instance in defaults.deployment or in the configuration's deployment block", cfg.Name)
+		}
+		for _, ep := range instances {
+			if _, err := d.config.tokens.For(ep); err != nil {
+				return fmt.Errorf("configuration %q: %w", cfg.Name, err)
+			}
 		}
 
 		timeout := d.config.timeout
@@ -428,17 +441,19 @@ func (d *Deployer) LoadConfig(_ context.Context) error {
 		}
 		clients := make([]*shared.GrafanaClient, 0, len(instances))
 		for _, ep := range instances {
-			clients = append(clients, shared.NewGrafanaClient(
-				ep,
-				d.config.saToken,
-				"sigma-rule-deployment/deployer",
-				timeout,
-			))
+			clients = append(clients, d.newClient(ep, timeout))
 		}
 		d.perConversionClients[cfg.Name] = clients
 	}
 	if len(configYAML.Configurations) == 0 && len(configYAML.Defaults.Deployment.GrafanaInstance) == 0 {
 		return fmt.Errorf("no Grafana instance is configured: set grafana_instance in defaults.deployment")
+	}
+	if len(configYAML.Configurations) == 0 {
+		for _, ep := range configYAML.Defaults.Deployment.GrafanaInstance {
+			if _, err := d.config.tokens.For(ep); err != nil {
+				return err
+			}
+		}
 	}
 
 	// Extract the groups intervals from the conversion config

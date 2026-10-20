@@ -7,7 +7,7 @@ inputs:
     required: true
     default: ""
   grafana_sa_token:
-    description: "Service account token for Grafana"
+    description: "Service account token for Grafana, or a JSON object mapping each Grafana instance URL to its own token when the configuration deploys to several instances"
     required: true
     default: ""
   fresh_deploy:
@@ -61,6 +61,13 @@ runs:
       run: |
         REPO_ROOT="$(cd "$GITHUB_ACTION_PATH/../.." && pwd)"
         "$REPO_ROOT/scripts/determine-image-ref/determine-image-ref.sh" "$ACTION_REF"
+    - name: Mask Grafana tokens
+      shell: bash
+      env:
+        GRAFANA_SA_TOKEN: ${{ inputs.grafana_sa_token }}
+      run: |
+        REPO_ROOT="$(cd "$GITHUB_ACTION_PATH/../.." && pwd)"
+        "$REPO_ROOT/scripts/mask-grafana-tokens/mask-grafana-tokens.sh"
     - name: Run Sigma Rule Deployer
       id: deploy
       shell: bash
