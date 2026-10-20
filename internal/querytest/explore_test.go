@@ -157,8 +157,8 @@ func TestGenerateExploreLink(t *testing.T) {
 				tt.query,
 				tt.datasource,
 				tt.datasourceType,
-				model.ConversionConfig{},
-				model.ConversionConfig{},
+				model.NamedConfigBlock{},
+				model.ConfigBlock{},
 				tt.grafanaURL,
 				tt.from,
 				tt.to,
@@ -226,7 +226,7 @@ func TestGenerateExploreLinkBuiltinModels(t *testing.T) {
 
 	for datasourceType, want := range cases {
 		t.Run(datasourceType, func(t *testing.T) {
-			link, err := GenerateExploreLink(query, datasource, datasourceType, model.ConversionConfig{}, model.ConversionConfig{}, "https://grafana.example.com", "now-1h", "now", 1)
+			link, err := GenerateExploreLink(query, datasource, datasourceType, model.NamedConfigBlock{}, model.ConfigBlock{}, "https://grafana.example.com", "now-1h", "now", 1)
 			assert.NoError(t, err)
 
 			u, err := url.Parse(link)

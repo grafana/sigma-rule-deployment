@@ -125,8 +125,8 @@ the minimum per job. Keep it that way.
 [`actions/validate/action.yml`](actions/validate/action.yml) for the pattern.
 
 **Config schema.** User-facing config changes must update
-[`config/schema.json`](config/schema.json) and
-[`config/config-example.yml`](config/config-example.yml) together, since the
+[`config/schema-v2.json`](config/schema-v2.json) and
+[`config/config-example-v2.yml`](config/config-example-v2.yml) together, since the
 [`validate`](actions/validate/README.md) action checks user configs against the schema.
 
 **Documentation.** Each Action's `README.md` is its reference documentation. If you change

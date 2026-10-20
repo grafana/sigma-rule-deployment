@@ -120,17 +120,90 @@ Create a configuration file (typically named `config.yml`) in your repository. T
 - Which Grafana data source to target
 - Alert rule settings (folder, group, evaluation interval, etc.)
 
-![Config file example](assets/Config.png "Config File")
+```yaml
+version: 2
+folders:
+  conversion_path: "./conversions"
+  deployment_path: "./deployments"
+defaults:
+  conversion:
+    target: loki
+    format: default
+    skip_unsupported: true
+    file_pattern: "*.yml"
+  integration:
+    data_source: your-source # The UID of your Grafana data source
+    folder_id: yourfolderid # Change this
+    org_id: 1
+    test_queries: true # Whether to test the queries against the data source
+    from: "now-1h"
+    to: "now"
+  deployment:
+    grafana_instance: https://yourgrafanainstance.grafana.net
+configurations:
+  - name: okta_audit
+    conversion:
+      input:
+        - "rules/rules-okta/*"
+      backend_options:
+        case_sensitive: false
+        add_line_filters: true
+      pipelines:
+        - pipelines/okta/*.yml
+    integration:
+      rule_group: Every 1 Hour
+      time_window: 1h
+```
 
 **Pro tip**: Start with a sample configuration and customize it for your environment. You can find example configurations in the repository:
-- [config-example.yml](config/config-example.yml) - Complete example with comments
-- [schema.json](config/schema.json) - Configuration schema for validation
+- [config-example-v2.yml](config/config-example-v2.yml) - Complete example with comments
+- [schema-v2.json](config/schema-v2.json) - Configuration schema for validation
+
+> [!NOTE]
+> The v1 configuration format (`conversion_defaults`, `conversions`) is deprecated and no longer supported by the Actions. If you have an existing v1 file, use the [migration script](scripts/migrate-config-v1-to-v2/README.md) to convert it to v2.
 
 The configuration file uses YAML format and includes sections for:
-- **Conversions**: Define which rules to convert and how
-- **Data sources**: Specify which Grafana data source to use
-- **Alert settings**: Configure folders, groups, intervals, and more
-- **Query models**: Customize the generated queries for your data source
+- **Folders**: Where converted rules and deployed alert files are stored
+- **Defaults**: Settings shared by every configuration, split into `conversion`, `integration` and `deployment` blocks
+- **Configurations**: One entry per set of rules to convert, each with its own `conversion` settings (input files, pipelines, backend options) and optional `integration` and `deployment` overrides
+- **Data sources**: Specify which Grafana data source to use (`integration.data_source`)
+- **Alert settings**: Configure folders, groups, intervals, and more (`integration`)
+- **Query models**: Customize the generated queries for your data source (`integration.query_model`)
+
+### How defaults and per-configuration overrides work
+
+A setting in a configuration overrides the matching setting in `defaults`. How the two are combined depends on the type of setting:
+
+| Type of setting | Examples | Behaviour in a configuration |
+| --- | --- | --- |
+| Text and numbers | `rule_group`, `time_window`, `folder_id`, `org_id`, `data_source`, `from`, `to`, `json_indent` | Replaces the default. An empty text value is treated as not set, so the default still applies, but a `json_indent` of `0` is a real value that overrides the default |
+| Booleans | `test_queries`, `show_log_lines`, `show_sample_values`, `continue_on_error`, `template_all_rules` | Replaces the default when set, including `false` to turn off a default of `true`. When not set, the default applies, and if that is not set either the value is `false` |
+| Lists and maps | `pipelines`, `filters`, `backend_options`, `required_rule_fields`, `template_labels`, `template_annotations` | Replaces the default **entirely**. They are not merged, so repeat any default entries you want to keep. Use `[]` or `{}` to remove the default altogether; leaving the key out keeps it |
+
+For example, with these settings, `okta_audit` skips query testing and gets only the labels `Level` and `Team` (it does not get the default `Product` label), whereas `gcp_k8s` keeps all the defaults:
+
+```yaml
+defaults:
+  integration:
+    test_queries: true
+    template_labels:
+      Level: "{{.Level}}"
+      Product: "{{.Logsource.Product}}"
+configurations:
+  - name: gcp_k8s
+    conversion:
+      input: "rules/gcp/*"
+  - name: okta_audit
+    conversion:
+      input: "rules/okta/*"
+    integration:
+      test_queries: false # overrides the default, so queries for this configuration are not tested
+      template_labels:
+        Level: "{{.Level}}"
+        Team: identity
+```
+
+The `continue_on_query_testing_errors` input of the integrate action sets the default for `continue_on_error`, and so takes precedence over `defaults.integration.continue_on_error`. A configuration's own `continue_on_error` still overrides it.
 
 ## Step 6: Set Up GitHub Actions Workflows
 
@@ -239,7 +312,7 @@ Congratulations! 🎉 You've completed the basic setup. Here's what you should d
 ## Additional Resources
 
 - [Main README](README.md) - Comprehensive documentation
-- [Configuration Schema](config/schema.json) - Detailed configuration options
+- [Configuration Schema](config/schema-v2.json) - Detailed configuration options
 - [SigmaHQ Documentation](https://sigmahq.io/) - Sigma rule specification
 - [Grafana Alerting Documentation](https://grafana.com/docs/grafana/latest/alerting/) - Learn about Grafana alerting
 

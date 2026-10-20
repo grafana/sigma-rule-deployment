@@ -1,3 +1,5 @@
+# DEPRECATED: this is the v1 configuration format, which is no longer supported by the Actions.
+# See config-example-v2.yml for the current format, and scripts/migrate-config-v1-to-v2 to migrate.
 folders:
   conversion_path: "./conversions"
   deployment_path: "./deployments"

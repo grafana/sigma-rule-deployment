@@ -27,4 +27,3 @@ jobs:
         uses: grafana/sigma-rule-deployment/actions/validate@<HASH>
         with:
           config_file: config.yml
-          schema_file: config/schema.json

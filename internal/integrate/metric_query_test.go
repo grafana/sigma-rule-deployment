@@ -43,7 +43,10 @@ func TestIsLokiMetricQuery(t *testing.T) {
 func TestCreateAlertQuery_LokiWrapping(t *testing.T) {
 	t.Parallel()
 
-	lokiConfig := model.ConversionConfig{Target: testLokiTarget, DataSource: testGrafanaCloudLogsDS}
+	lokiConfig := model.ConfigBlock{
+		Conversion:  model.ConversionConfig{Target: testLokiTarget},
+		Integration: model.IntegrationConfig{DataSource: testGrafanaCloudLogsDS},
+	}
 	timerange := model.RelativeTimeRange{From: model.Duration(5 * time.Minute), To: 0}
 
 	tests := []struct {
@@ -100,7 +103,7 @@ func TestCreateAlertQuery_LokiWrapping(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			alertQuery, err := createAlertQuery(tt.input, "A0", testGrafanaCloudLogsDS, timerange, lokiConfig, lokiConfig)
+			alertQuery, err := createAlertQuery(tt.input, "A0", testGrafanaCloudLogsDS, timerange, model.NamedConfigBlock{ConfigBlock: lokiConfig}, lokiConfig)
 			require.NoError(t, err)
 
 			var modelFields map[string]any
