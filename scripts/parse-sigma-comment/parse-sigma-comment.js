@@ -20,12 +20,12 @@
  *   node parse-sigma-comment.js
  *
  * Environment variables (for GitHub Actions):
- *   COMMENT_BODY, COMMENT_AUTHOR_ASSOCIATION, COMMENT_ID, ISSUE_NUMBER,
- *   ALL_RULES, CONFIG_PATH, GITHUB_TOKEN
+ *   COMMENT_BODY, COMMENT_AUTHOR_ASSOCIATION, COMMENT_AUTHOR_TYPE, COMMENT_ID,
+ *   ISSUE_NUMBER, ALL_RULES, CONFIG_PATH, GITHUB_TOKEN
  *
  * CLI arguments (for local testing):
- *   --comment-body, --comment-author-association, --comment-id, --issue-number,
- *   --all-rules, --config-path, --github-token
+ *   --comment-body, --comment-author-association, --comment-author-type,
+ *   --comment-id, --issue-number, --all-rules, --config-path, --github-token
  */
 
 import * as core from '@actions/core';
@@ -65,6 +65,8 @@ function getInputs() {
     return {
       commentBody: core.getInput('comment_body') || process.env.COMMENT_BODY || github.context.payload?.comment?.body || '',
       commentAuthorAssociation: core.getInput('comment_author_association') || process.env.COMMENT_AUTHOR_ASSOCIATION || github.context.payload?.comment?.author_association || '',
+      commentAuthorLogin: core.getInput('comment_author_login') || process.env.COMMENT_AUTHOR_LOGIN || github.context.payload?.comment?.user?.login || '',
+      commentAuthorType: core.getInput('comment_author_type') || process.env.COMMENT_AUTHOR_TYPE || github.context.payload?.comment?.user?.type || '',
       commentId: core.getInput('comment_id') || process.env.COMMENT_ID || github.context.payload?.comment?.id || '',
       issueNumber: core.getInput('issue_number') || process.env.ISSUE_NUMBER || github.context.issue?.number || '',
       allRules: core.getInput('all_rules') || process.env.ALL_RULES || 'false',
@@ -88,6 +90,8 @@ function getInputs() {
     return {
       commentBody: inputs.comment_body || process.env.COMMENT_BODY || '',
       commentAuthorAssociation: inputs.comment_author_association || process.env.COMMENT_AUTHOR_ASSOCIATION || '',
+      commentAuthorLogin: inputs.comment_author_login || process.env.COMMENT_AUTHOR_LOGIN || '',
+      commentAuthorType: inputs.comment_author_type || process.env.COMMENT_AUTHOR_TYPE || '',
       commentId: inputs.comment_id || process.env.COMMENT_ID || '',
       issueNumber: inputs.issue_number || process.env.ISSUE_NUMBER || '',
       allRules: inputs.all_rules || process.env.ALL_RULES || 'false',
@@ -295,10 +299,18 @@ async function run(inputs, context, octokit) {
     return buildOutputs({ triggered: 'true', action: 'convert', all_rules: 'true' });
   }
 
-  // Security-critical: never parse commands from untrusted commenters
+  // Security-critical: never parse commands from untrusted commenters.
+  // - Bots are trusted by type: only installed GitHub Apps and the repo's own
+  //   workflows can comment as a bot, and both are controlled by repo admins.
+  //   (App permissions cannot be queried from a comment: the collaborators API
+  //   reports "none" for GitHub Apps regardless of their installation permissions.)
+  // - Humans need OWNER, MEMBER or COLLABORATOR association; MEMBER covers org
+  //   members whose repo role comes from any team. A non-bot service account
+  //   should be granted access as a collaborator, which this check then honors.
+  const isBot = (inputs.commentAuthorType || '').toLowerCase() === 'bot';
   const association = (inputs.commentAuthorAssociation || '').toUpperCase();
-  if (!TRUSTED_ASSOCIATIONS.includes(association)) {
-    console.log(`Ignoring comment from untrusted author (association: ${inputs.commentAuthorAssociation || 'unknown'})`);
+  if (!isBot && !TRUSTED_ASSOCIATIONS.includes(association)) {
+    console.log(`Ignoring comment from untrusted author ${inputs.commentAuthorLogin || 'unknown'} (type: ${inputs.commentAuthorType || 'unknown'}, association: ${inputs.commentAuthorAssociation || 'unknown'})`);
     return buildOutputs();
   }
 

@@ -1,0 +1,93 @@
+name: "Parse Sigma Comment"
+description: "Parse sigma convert/integrate commands from PR comments into outputs that drive the convert/integrate workflow"
+author: "security-operations"
+
+inputs:
+  comment_body:
+    description: "The issue comment text"
+    required: false
+    default: ""
+  comment_author_association:
+    description: "The comment author's association (OWNER, MEMBER, COLLABORATOR, ...)"
+    required: false
+    default: ""
+  comment_author_login:
+    description: "The comment author's login, used for logging"
+    required: false
+    default: ""
+  comment_author_type:
+    description: "The comment author's type (Bot or User); bots are trusted since only installed apps and the repo's own workflows can comment as a bot"
+    required: false
+    default: ""
+  comment_id:
+    description: "The comment ID, used for reactions"
+    required: false
+    default: ""
+  issue_number:
+    description: "The PR/issue number, used for reply comments"
+    required: false
+    default: ""
+  all_rules:
+    description: "The workflow's all_rules input, preserving non-comment trigger behavior"
+    required: false
+    default: "false"
+  config_path:
+    description: "Path to the v2 configuration file, used to resolve command targets"
+    required: true
+  github_token:
+    description: "GitHub token for reactions and reply comments (best effort)"
+    required: false
+    default: ""
+
+outputs:
+  triggered:
+    description: "true when a valid command (or the all_rules input) should trigger the workflow"
+    value: ${{ steps.parse.outputs.triggered }}
+  action:
+    description: "convert (conversion + integration) or integrate (integration only)"
+    value: ${{ steps.parse.outputs.action }}
+  all_rules:
+    description: "true when the target is all; configurations is then empty"
+    value: ${{ steps.parse.outputs.all_rules }}
+  configurations:
+    description: "Space-separated configuration names the target resolved to (empty for all)"
+    value: ${{ steps.parse.outputs.configurations }}
+  no_test:
+    description: "true when --no-test was passed"
+    value: ${{ steps.parse.outputs.no_test }}
+  debug:
+    description: "true when --debug was passed"
+    value: ${{ steps.parse.outputs.debug }}
+  query_time_window:
+    description: "Value of --query-time-window (empty when not passed)"
+    value: ${{ steps.parse.outputs.query_time_window }}
+  error:
+    description: "Human-readable parse error message (empty on success)"
+    value: ${{ steps.parse.outputs.error }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install dependencies
+      shell: bash
+      run: |
+        SCRIPTS_DIR="$(cd "${{ github.action_path }}/../../scripts/parse-sigma-comment" && pwd)"
+        cd "$SCRIPTS_DIR"
+        npm ci
+    - name: Parse sigma comment
+      id: parse
+      shell: bash
+      env:
+        COMMENT_BODY: ${{ inputs.comment_body }}
+        COMMENT_AUTHOR_ASSOCIATION: ${{ inputs.comment_author_association }}
+        COMMENT_AUTHOR_LOGIN: ${{ inputs.comment_author_login }}
+        COMMENT_AUTHOR_TYPE: ${{ inputs.comment_author_type }}
+        COMMENT_ID: ${{ inputs.comment_id }}
+        ISSUE_NUMBER: ${{ inputs.issue_number }}
+        ALL_RULES: ${{ inputs.all_rules }}
+        CONFIG_PATH: ${{ inputs.config_path }}
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+      run: |
+        SCRIPTS_DIR="$(cd "${{ github.action_path }}/../../scripts/parse-sigma-comment" && pwd)"
+        cd "$SCRIPTS_DIR"
+        node parse-sigma-comment.js

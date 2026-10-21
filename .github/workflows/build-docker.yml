@@ -258,6 +258,7 @@ jobs:
 
           sed -i "s/uses: grafana\/sigma-rule-deployment\/actions\/convert@.*/uses: grafana\/sigma-rule-deployment\/actions\/convert@$ACTION_SHA/g" ./.github/workflows/convert-integrate-comment-test.yml
           sed -i "s/uses: grafana\/sigma-rule-deployment\/actions\/integrate@.*/uses: grafana\/sigma-rule-deployment\/actions\/integrate@$ACTION_SHA/g" ./.github/workflows/convert-integrate-comment-test.yml
+          sed -i "s/uses: grafana\/sigma-rule-deployment\/actions\/parse-comment@.*/uses: grafana\/sigma-rule-deployment\/actions\/parse-comment@$ACTION_SHA/g" ./.github/workflows/convert-integrate-comment-test.yml
 
           # add the action sha so that the integration test can add the check to this PR
           echo "$ACTION_SHA" > action_sha.txt
@@ -367,18 +368,21 @@ jobs:
 
           echo "Integration test PR: [#${TEST_PR_NUMBER}](https://github.com/grafana/sigma-rule-deployment-integration-test/pull/${TEST_PR_NUMBER})" >> "$GITHUB_STEP_SUMMARY"
 
-          # Post the "sigma-convert-all" comment in a loop in case of api failure.
-          COMMENT_BODY=$(printf 'sigma convert all\n\nTriggered by %s#%s, commit %s@%s' \
-            "$GITHUB_REPOSITORY" "$GITHUB_PR_NUMBER" "$GITHUB_REPOSITORY" "$ACTION_SHA")
+          # Post the test comments, each in a loop in case of api failure. Every
+          # comment triggers a separate scenario in the comment-test workflow.
+          for COMMAND in "sigma convert all" "sigma convert github_audit" "sigma integrate github_audit"; do
+            COMMENT_BODY=$(printf '%s\n\nTriggered by %s#%s, commit %s@%s' \
+              "$COMMAND" "$GITHUB_REPOSITORY" "$GITHUB_PR_NUMBER" "$GITHUB_REPOSITORY" "$ACTION_SHA")
 
-          ATTEMPT=0
-          until gh pr comment "$TEST_PR_NUMBER" --body "$COMMENT_BODY"; do
-            ATTEMPT=$((ATTEMPT + 1))
-            if [ "$ATTEMPT" -ge 3 ]; then
-              echo "Could not comment on PR #${TEST_PR_NUMBER}"
-              exit 1
-            fi
-            sleep 5
+            ATTEMPT=0
+            until gh pr comment "$TEST_PR_NUMBER" --body "$COMMENT_BODY"; do
+              ATTEMPT=$((ATTEMPT + 1))
+              if [ "$ATTEMPT" -ge 3 ]; then
+                echo "Could not comment on PR #${TEST_PR_NUMBER}"
+                exit 1
+              fi
+              sleep 5
+            done
           done
       - name: Close the main update PR if it never merged
         if: always()

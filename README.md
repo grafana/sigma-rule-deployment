@@ -30,9 +30,28 @@ Automate the conversion, testing, and deployment of [Sigma rules](https://sigmah
    - See the reusable workflow [convert-integrate.yml](.github/workflows/convert-integrate.yml)
 5. Add a workflow to run the deployment Action on a push to main
    - See the reusable workflow [deploy.yml](.github/workflows/deploy.yml)
-6. Create a PR that adds or modify a converted Sigma rule, and add a comment `sigma convert all` to the PR to see the conversion and integration process in action
+6. Create a PR that adds or modify a converted Sigma rule, and add a comment `sigma convert all` to the PR to see the conversion and integration process in action (see [Comment-driven triggers](#comment-driven-triggers) for the full command grammar)
 7. Once you're happy with the results, merge the PR into main, which will trigger the deployer to provision the Alerting rules to your Grafana instance
 8. With the alert rules successfully provisioned, set up [Alerting notifications](https://grafana.com/docs/grafana/latest/alerting/configure-notifications/) for the relevant folder and/or groups to directly contact affected users. Alternatively you can connect them to [Grafana IRM](https://grafana.com/docs/grafana-cloud/alerting-and-irm/irm/) and use it to manage on-call rotas and simplify alert routing
+
+## Comment-driven triggers
+
+On PRs, members (OWNER, MEMBER or COLLABORATOR) can drive conversion and integration with comment commands:
+
+```
+sigma convert all
+sigma convert <target> [--no-test] [--debug] [--query-time-window <duration>]
+sigma integrate all
+sigma integrate <target> [--no-test] [--debug] [--query-time-window <duration>]
+```
+
+- `convert` runs conversion then integration; `integrate` runs integration only (skips the conversion step).
+- `<target>` is a configuration name from the config file, or a name prefix: `ops` selects every configuration whose name starts with `ops`. Exact matches win over prefix matches. Targets always select whole configurations, never individual rules.
+- `--no-test` skips query testing for the run, overriding the `test_queries` settings in the configuration file.
+- `--debug` enables verbose output (tracebacks, pretty-printed JSON, log lines in query test results).
+- `--query-time-window` overrides the default query testing time range (e.g. `30m`, `6h`, `1d12h`); per-configuration `from`/`to` settings still take precedence.
+
+Invalid commands are answered with a reply showing the usage and the valid configuration names. Comments from other users, and comments that are not commands, are ignored. Commands posted by automation work out of the box: bots (installed GitHub Apps and the repo's own workflows) are trusted by type.
 
 ## FAQ
 
