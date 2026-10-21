@@ -106,9 +106,7 @@ jobs:
           fetch-depth: 0
 
       # Parses `sigma convert|integrate` commands from the comment into the outputs
-      # that drive the steps below. Unset for pull_request events, where the steps
-      # run with the workflow inputs instead. Non-sigma comments and invalid
-      # commands set triggered=false, so the remaining steps are skipped.
+      # that drive the steps below. Unset for comment events.
       - name: Parse sigma comment
         if: github.event_name == 'issue_comment'
         id: parse

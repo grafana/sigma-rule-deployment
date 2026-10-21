@@ -20,7 +20,7 @@ sigma integrate <target> [--no-test] [--debug] [--query-time-window <duration>]
 ## Behavior
 
 1. If the `ALL_RULES` input is `"true"` (non-comment trigger), outputs `triggered=true, action=convert, all_rules=true`.
-2. Untrusted commenters are ignored (`triggered=false`). This check is security-critical. Trusted means: bots (only installed GitHub Apps and the repo's own workflows can comment as a bot, and both are controlled by repo admins — app permissions cannot be queried from a comment, as the collaborators API reports `none` for GitHub Apps), or humans with `OWNER`, `MEMBER` or `COLLABORATOR` association (`MEMBER` covers org members whose repo role comes from any team). A non-bot service account should be granted access as a collaborator, which this check then honors.
+2. Untrusted commenters are ignored (`triggered=false`). This check is security-critical. Trusted means: bots (only installed GitHub Apps and the repo's own workflows can comment as a bot), or humans with `OWNER`, `MEMBER` or `COLLABORATOR` association.
 3. Comments not starting with `sigma` are ignored (`triggered=false`).
 4. On a valid command, the parsed outputs are set and an "eyes" reaction is added to the comment (best effort).
 5. On a parse error (unknown action/target/flag, invalid duration, unresolvable target), `triggered=false` and an `error` output are set, a "confused" reaction is added, and a reply comment is posted showing the usage grammar (plus valid configuration names for unresolvable targets). Parse errors never fail the workflow; only real execution errors (e.g. missing config file) do.
@@ -56,7 +56,7 @@ node parse-sigma-comment.js \
 |----------|--------------|-------------|----------|---------|
 | `COMMENT_BODY` | `--comment-body` | The issue comment text | Yes (comment triggers) | From event payload in GitHub Actions |
 | `COMMENT_AUTHOR_ASSOCIATION` | `--comment-author-association` | Comment author's association (OWNER, MEMBER, ...) | Yes (comment triggers) | From event payload in GitHub Actions |
-| `COMMENT_AUTHOR_TYPE` | `--comment-author-type` | Comment author's type (`Bot` or `User`); bots are trusted | No | From event payload in GitHub Actions |
+| `COMMENT_AUTHOR_TYPE` | `--comment-author-type` | Comment author's type (`Bot` or `User`) | No | From event payload in GitHub Actions |
 | `COMMENT_ID` | `--comment-id` | Comment ID, used for reactions | No | From event payload in GitHub Actions |
 | `ISSUE_NUMBER` | `--issue-number` | PR/issue number, used for reply comments | No | From GitHub Actions context |
 | `ALL_RULES` | `--all-rules` | Workflow `all_rules` input (`"true"`/`"false"`) | No | `false` |

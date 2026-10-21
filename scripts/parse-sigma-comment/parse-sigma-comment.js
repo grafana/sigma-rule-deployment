@@ -300,13 +300,10 @@ async function run(inputs, context, octokit) {
   }
 
   // Security-critical: never parse commands from untrusted commenters.
-  // - Bots are trusted by type: only installed GitHub Apps and the repo's own
+  // - Bots: only installed GitHub Apps and the repo's own
   //   workflows can comment as a bot, and both are controlled by repo admins.
-  //   (App permissions cannot be queried from a comment: the collaborators API
-  //   reports "none" for GitHub Apps regardless of their installation permissions.)
   // - Humans need OWNER, MEMBER or COLLABORATOR association; MEMBER covers org
-  //   members whose repo role comes from any team. A non-bot service account
-  //   should be granted access as a collaborator, which this check then honors.
+  //   members whose repo role comes from any team.
   const isBot = (inputs.commentAuthorType || '').toLowerCase() === 'bot';
   const association = (inputs.commentAuthorAssociation || '').toUpperCase();
   if (!isBot && !TRUSTED_ASSOCIATIONS.includes(association)) {

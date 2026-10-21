@@ -16,7 +16,7 @@ inputs:
     required: false
     default: ""
   comment_author_type:
-    description: "The comment author's type (Bot or User); bots are trusted since only installed apps and the repo's own workflows can comment as a bot"
+    description: "The comment author's type (Bot or User)"
     required: false
     default: ""
   comment_id:

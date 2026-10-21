@@ -51,7 +51,7 @@ sigma integrate <target> [--no-test] [--debug] [--query-time-window <duration>]
 - `--debug` enables verbose output (tracebacks, pretty-printed JSON, log lines in query test results).
 - `--query-time-window` overrides the default query testing time range (e.g. `30m`, `6h`, `1d12h`); per-configuration `from`/`to` settings still take precedence.
 
-Invalid commands are answered with a reply showing the usage and the valid configuration names. Comments from other users, and comments that are not commands, are ignored. Commands posted by automation work out of the box: bots (installed GitHub Apps and the repo's own workflows) are trusted by type.
+Invalid commands are answered with a reply showing the usage and the valid configuration names. Comments from other users, and comments that are not commands, are ignored. Commands posted by automation work out of the box.
 
 ## FAQ
 
