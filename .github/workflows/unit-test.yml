@@ -188,3 +188,13 @@ jobs:
         run: |
           cd scripts/identify-commits
           npm test
+
+      - name: Install dependencies for parse-sigma-comment
+        run: |
+          cd scripts/parse-sigma-comment
+          npm ci
+
+      - name: Run unit tests for parse-sigma-comment
+        run: |
+          cd scripts/parse-sigma-comment
+          npm test

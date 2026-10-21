@@ -1,0 +1,19 @@
+{
+  "name": "parse-sigma-comment",
+  "version": "1.0.0",
+  "description": "Script to parse sigma convert/integrate commands from PR comments",
+  "type": "module",
+  "main": "parse-sigma-comment.js",
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "start": "node parse-sigma-comment.js"
+  },
+  "dependencies": {
+    "@actions/core": "^3.0.0",
+    "@actions/github": "^9.0.0",
+    "js-yaml": "^4.1.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
