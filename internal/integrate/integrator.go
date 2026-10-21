@@ -162,6 +162,37 @@ func (i *Integrator) LoadConfig() error {
 		i.config.Defaults.Integration.ContinueOnError = new(strings.ToLower(v) == TRUE)
 	}
 
+	// CONFIGURATION_FILTER restricts the run to the named configurations (space-separated),
+	// e.g. for a comment-driven run targeting a single configuration. Unknown names are
+	// rejected so a typo fails loudly instead of silently integrating nothing.
+	var configFilter []string
+	if v := strings.TrimSpace(os.Getenv("CONFIGURATION_FILTER")); v != "" {
+		configFilter = strings.Fields(v)
+		validNames := make([]string, 0, len(i.config.Configurations))
+		known := make(map[string]bool, len(i.config.Configurations))
+		for _, cfg := range i.config.Configurations {
+			validNames = append(validNames, cfg.Name)
+			known[cfg.Name] = true
+		}
+		for _, name := range configFilter {
+			if !known[name] {
+				return fmt.Errorf("unknown configuration %q in CONFIGURATION_FILTER (valid configurations: %s)", name, strings.Join(validNames, ", "))
+			}
+		}
+		fmt.Printf("Restricting integration to configurations: %s\n", strings.Join(configFilter, ", "))
+	}
+
+	// INTEGRATOR_SKIP_QUERY_TESTING forces all query testing off, overriding the defaults
+	// and every configuration's test_queries setting. It reuses the existing test_queries
+	// gating (testQueriesEnabledForFile and the query tester) rather than adding a
+	// parallel switch.
+	if strings.ToLower(os.Getenv("INTEGRATOR_SKIP_QUERY_TESTING")) == TRUE {
+		i.config.Defaults.Integration.TestQueries = new(false)
+		for idx := range i.config.Configurations {
+			i.config.Configurations[idx].Integration.TestQueries = new(false)
+		}
+	}
+
 	if !filepath.IsLocal(i.config.Folders.ConversionPath) {
 		return fmt.Errorf("conversion path is not local: %s", i.config.Folders.ConversionPath)
 	}
@@ -180,6 +211,17 @@ func (i *Integrator) LoadConfig() error {
 		if err != nil {
 			return fmt.Errorf("error creating deployment directory: %v", err)
 		}
+	}
+
+	// INTEGRATOR_QUERY_TIME_WINDOW overrides the default query testing time range, e.g.
+	// for a comment-driven run that wants a wider look-back. Per-configuration from/to
+	// settings still take precedence over this default.
+	if v := strings.TrimSpace(os.Getenv("INTEGRATOR_QUERY_TIME_WINDOW")); v != "" {
+		if _, err := shared.ParseDuration(v); err != nil {
+			return fmt.Errorf("invalid INTEGRATOR_QUERY_TIME_WINDOW %q: %w", v, err)
+		}
+		i.config.Defaults.Integration.From = "now-" + v
+		i.config.Defaults.Integration.To = "now"
 	}
 
 	// If from and to are not provided, use the default values
@@ -205,7 +247,7 @@ func (i *Integrator) LoadConfig() error {
 			if err != nil {
 				return fmt.Errorf("failed to walk directory: %w", err)
 			}
-			if !info.IsDir() {
+			if !info.IsDir() && matchesConfigFilter(filepath.Base(path), configFilter) {
 				newUpdatedFiles = append(newUpdatedFiles, path)
 				if testQueriesEnabledForFile(filepath.Base(path), i.config) {
 					filesToBeTested = append(filesToBeTested, path)
@@ -220,11 +262,12 @@ func (i *Integrator) LoadConfig() error {
 		if newUpdatedFiles, err = filterFilesInDir(changedFiles, i.config.Folders.ConversionPath); err != nil {
 			return err
 		}
+		newUpdatedFiles = filterFilesByConfig(newUpdatedFiles, configFilter)
 		testCandidates, err := filterFilesInDir(testFiles, i.config.Folders.ConversionPath)
 		if err != nil {
 			return err
 		}
-		for _, path := range testCandidates {
+		for _, path := range filterFilesByConfig(testCandidates, configFilter) {
 			if testQueriesEnabledForFile(filepath.Base(path), i.config) {
 				filesToBeTested = append(filesToBeTested, path)
 			}
@@ -235,6 +278,9 @@ func (i *Integrator) LoadConfig() error {
 	if err != nil {
 		return err
 	}
+	removedFiles = filterFilesByConfig(removedFiles, configFilter)
+	// manualFiles are deliberately not filtered: they are deployment-side files and the
+	// manual-annotation backfill is config-agnostic and harmless.
 	humanModifiedFiles, err := filterFilesInDir(manualFiles, i.config.Folders.DeploymentPath)
 	if err != nil {
 		return err
@@ -247,6 +293,32 @@ func (i *Integrator) LoadConfig() error {
 	i.manualFiles = humanModifiedFiles
 
 	return nil
+}
+
+// matchesConfigFilter reports whether a conversion output file belongs to one of the
+// selected configurations, using the same "{configName}_" prefix matching as
+// testQueriesEnabledForFile. An empty selection matches every file.
+func matchesConfigFilter(filename string, filter []string) bool {
+	if len(filter) == 0 {
+		return true
+	}
+	_, ok := shared.MatchConfigName(filename, filter)
+	return ok
+}
+
+// filterFilesByConfig keeps only the paths whose base name matches one of the selected
+// configuration names. An empty selection keeps every path.
+func filterFilesByConfig(paths []string, filter []string) []string {
+	if len(filter) == 0 {
+		return paths
+	}
+	filtered := make([]string, 0, len(paths))
+	for _, path := range paths {
+		if matchesConfigFilter(filepath.Base(path), filter) {
+			filtered = append(filtered, path)
+		}
+	}
+	return filtered
 }
 
 // filterFilesInDir keeps only the paths that sit directly inside dir, matching a

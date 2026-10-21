@@ -73,6 +73,17 @@ def _is_manual(output_file: Path) -> bool:
     return existing is not None and _manual_is_set(existing.get(MANUAL_KEY))
 
 
+def _owning_configuration_name(filename: str, names: list[str]) -> str | None:
+    """Return the configuration name whose `{name}_` prefix starts the filename.
+
+    The longest matching name wins, so when one configuration name is a prefix
+    of another (e.g. `aws` and `aws_cloudtrail`), a file is attributed to the
+    more specific configuration.
+    """
+    matches = [name for name in names if name and filename.startswith(f"{name}_")]
+    return max(matches, key=len) if matches else None
+
+
 def convert_rules(
     config: Dynaconf,
     path_prefix: str | Path,
@@ -82,6 +93,7 @@ def convert_rules(
     changed_files: str = "",
     deleted_files: str = "",
     manual_files: str = "",
+    configurations: str = "",
     previous_config: Dynaconf | None = None,
     config_path: str | Path | None = None,
 ) -> None:
@@ -123,6 +135,11 @@ def convert_rules(
         deleted_files (str): The list of deleted files.
         manual_files (str): Space-separated conversion files a human modified since
             the last automation commit; missing manual flags are backfilled onto them.
+        configurations (str): Space-separated configuration names to convert. Empty
+            converts all configurations (the default). Selected configurations
+            convert all of their input files regardless of `changed_files`, and
+            unselected configurations are left completely untouched: no outputs
+            written, no deletions processed, no manual-flag backfill.
         previous_config (Dynaconf | None): The config as it was before the current change,
             used to detect which conversion groups changed.
         config_path (str | Path | None): Path to the config file that was loaded into
@@ -138,6 +155,7 @@ def convert_rules(
         ValueError: No files matched the patterns after applying --file-pattern: {file_pattern}.
         ValueError: Pipeline file path must be relative to the project root.
         ValueError: Error loading rule file {rule_file}.
+        ValueError: Unknown configuration name(s) in `configurations`.
     """
 
     changed_files_set = {
@@ -146,6 +164,7 @@ def convert_rules(
     deleted_files_set = {
         path_prefix / Path(x) for x in deleted_files.split(" ") if x
     }
+    configuration_filter = {x for x in configurations.split(" ") if x}
 
     # Check if the path_prefix is set
     if not path_prefix or path_prefix == Path("."):
@@ -161,8 +180,15 @@ def convert_rules(
     if not path_prefix.is_absolute():
         path_prefix = path_prefix.resolve()
 
-    # Check whether we have any files to process
-    if not all_rules and not changed_files and not deleted_files and not manual_files:
+    # Check whether we have any files to process. A configuration filter means
+    # there is work to do: the selected configurations convert all their inputs.
+    if (
+        not all_rules
+        and not changed_files
+        and not deleted_files
+        and not manual_files
+        and not configuration_filter
+    ):
         print("No changed, deleted or manual files identified, but all_rules is false")
         sys.exit(0)
 
@@ -193,6 +219,25 @@ def convert_rules(
         item = dict(entry.get("conversion") or {})
         item["name"] = entry.get("name")
         conversions.append(item)
+
+    # Restrict the run to the requested configurations, if any. Unselected
+    # configurations are dropped from the list entirely, so nothing downstream
+    # (conversion, deletion, stale-output cleanup) touches them.
+    configuration_names = [name for c in conversions if (name := c.get("name"))]
+    if configuration_filter:
+        unknown_names = configuration_filter - set(configuration_names)
+        if unknown_names:
+            raise ValueError(
+                f"Unknown configuration name(s): {', '.join(sorted(unknown_names))}. "
+                f"Valid configuration names: {', '.join(sorted(n for n in configuration_names if n))}"
+            )
+        conversions = [
+            c for c in conversions if c.get("name") in configuration_filter
+        ]
+        print(
+            f"Filtering conversion to configuration(s): {', '.join(sorted(configuration_filter))}"
+        )
+
     verbose = defaults.pop("verbose", False)
 
     default_target = defaults.get("target", "loki")
@@ -217,6 +262,12 @@ def convert_rules(
         # Only touch files inside the conversion output directory.
         if manual_file.parent != conversions_output_dir:
             continue
+        # With a configuration filter, only backfill files belonging to the
+        # selected configurations; other configurations' files stay untouched.
+        if configuration_filter:
+            owning = _owning_configuration_name(manual_file.name, configuration_names)
+            if owning is None or owning not in configuration_filter:
+                continue
         existing = _read_existing_output(manual_file)
         # A manual key that is already present (any value) reflects a deliberate
         # human choice; do not overwrite it.
@@ -361,8 +412,11 @@ def convert_rules(
             # If we're not converting all rules, skip the conversion if:
             # - the file is not in the list of changed files
             # - none of the pipelines have changed
+            # A configuration filter converts all of the selected
+            # configurations' input files, so it disables this skipping.
             if (
                 not all_rules
+                and not configuration_filter
                 and Path(input_file) not in changed_files_set
                 and not any_pipeline_changed
                 and name not in changed_conversions

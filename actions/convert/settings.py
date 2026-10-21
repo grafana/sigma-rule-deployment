@@ -26,6 +26,8 @@ def parse_args() -> argparse.Namespace:
             - all_rules: Whether to convert all rules (boolean)
             - changed_files: List of changed files (space separated)
             - deleted_files: List of deleted files (space separated)
+            - configurations: Space-separated configuration names to convert
+              (empty converts all configurations)
     """
     parser = argparse.ArgumentParser(
         description="Sigma CLI Conversion",
@@ -71,6 +73,11 @@ def parse_args() -> argparse.Namespace:
         "--manual-files",
         help="List of conversion files a human modified since the last automation commit",
         default=os.environ.get("MANUAL_FILES", ""),
+    )
+    parser.add_argument(
+        "--configurations",
+        help="Space-separated configuration names to convert (empty converts all)",
+        default=os.environ.get("CONFIGURATION_FILTER", ""),
     )
 
     return parser.parse_args()

@@ -2170,3 +2170,201 @@ def test_convert_rules_empty_required_rule_fields_overrides_default(temp_workspa
     assert len(data["rules"]) == 1
     assert list(data["rules"][0].keys()) != ["title"], "the default's required fields must not be applied"
     assert "title" in data["rules"][0] and len(data["rules"][0]) > 1
+
+
+####
+# Configuration filter tests
+####
+
+
+def test_convert_rules_filter_converts_only_selected_configuration(
+    temp_workspace, mock_config_two_groups
+):
+    """A single-name filter converts only that configuration's files."""
+    convert_rules(
+        config=mock_config_two_groups,
+        path_prefix=temp_workspace,
+        configurations="group_a",
+    )
+
+    conversion_dir = temp_workspace / "conversions"
+    assert (conversion_dir / "group_a_test.json").exists()
+    assert not (conversion_dir / "group_b_test.json").exists()
+
+
+def test_convert_rules_filter_multiple_configurations(
+    temp_workspace, mock_config_two_groups
+):
+    """A multi-name filter converts each selected configuration."""
+    convert_rules(
+        config=mock_config_two_groups,
+        path_prefix=temp_workspace,
+        configurations="group_a group_b",
+    )
+
+    conversion_dir = temp_workspace / "conversions"
+    assert (conversion_dir / "group_a_test.json").exists()
+    assert (conversion_dir / "group_b_test.json").exists()
+
+
+@pytest.mark.parametrize(
+    "configurations,unknown",
+    [
+        ("bogus", "bogus"),
+        ("group_a bogus", "bogus"),
+        ("bogus1 group_a bogus2", "bogus1"),
+    ],
+)
+def test_convert_rules_filter_unknown_name_raises(
+    temp_workspace, mock_config_two_groups, configurations, unknown
+):
+    """An unknown configuration name raises a ValueError naming it."""
+    with pytest.raises(ValueError, match=f"Unknown configuration name\\(s\\):.*{unknown}"):
+        convert_rules(
+            config=mock_config_two_groups,
+            path_prefix=temp_workspace,
+            configurations=configurations,
+        )
+
+
+def test_convert_rules_filter_error_lists_valid_names(
+    temp_workspace, mock_config_two_groups
+):
+    """The unknown-name error also lists the valid configuration names."""
+    with pytest.raises(ValueError, match="group_a, group_b"):
+        convert_rules(
+            config=mock_config_two_groups,
+            path_prefix=temp_workspace,
+            configurations="bogus",
+        )
+
+
+def test_convert_rules_filter_converts_all_selected_files(temp_workspace, mock_config):
+    """A filtered run converts all of the selected configuration's input files,
+    even when changed_files is empty and all_rules is false (the filter itself
+    means there is work to do, so the early exit must not trigger)."""
+    convert_rules(
+        config=mock_config,
+        path_prefix=temp_workspace,
+        configurations="test_conversion",
+    )
+
+    output_file = temp_workspace / "conversions" / "test_conversion_test.json"
+    assert output_file.exists()
+
+
+def test_convert_rules_filter_leaves_unselected_outputs_untouched(
+    temp_workspace, mock_config_two_groups
+):
+    """Existing outputs of unselected configurations are neither deleted nor
+    modified, even when their input files are in deleted_files."""
+    conversion_dir = temp_workspace / "conversions"
+    conversion_dir.mkdir()
+    group_b_output = conversion_dir / "group_b_test.json"
+    group_b_content = json.dumps(
+        {"conversion_name": "group_b", "queries": ["KEEP ME"]}
+    ).decode("utf-8")
+    group_b_output.write_text(group_b_content)
+
+    convert_rules(
+        config=mock_config_two_groups,
+        path_prefix=temp_workspace,
+        configurations="group_a",
+        deleted_files="rules/test.yml",
+    )
+
+    # The selected configuration still converted (and its deleted-rule output
+    # cleanup ran only for its own files).
+    assert (conversion_dir / "group_a_test.json").exists()
+    assert group_b_output.read_text() == group_b_content
+
+
+def test_convert_rules_filter_backfills_manual_flag_only_for_selected(
+    temp_workspace, mock_config_two_groups
+):
+    """The manual-flag backfill skips files of unselected configurations."""
+    conversion_dir = temp_workspace / "conversions"
+    conversion_dir.mkdir()
+    group_a_output = conversion_dir / "group_a_test.json"
+    group_a_output.write_text(
+        json.dumps({"queries": ["HUMAN EDIT A"]}).decode("utf-8")
+    )
+    group_b_output = conversion_dir / "group_b_test.json"
+    group_b_content = json.dumps({"queries": ["HUMAN EDIT B"]}).decode("utf-8")
+    group_b_output.write_text(group_b_content)
+
+    convert_rules(
+        config=mock_config_two_groups,
+        path_prefix=temp_workspace,
+        configurations="group_a",
+        manual_files="conversions/group_a_test.json conversions/group_b_test.json",
+    )
+
+    assert json.loads(group_a_output.read_bytes())["manual"] is True
+    assert group_b_output.read_text() == group_b_content
+
+
+@pytest.mark.parametrize(
+    "selected,expect_flagged",
+    [
+        ("aws", False),
+        ("aws_cloudtrail", True),
+        ("aws aws_cloudtrail", True),
+    ],
+)
+def test_convert_rules_filter_backfill_attributes_prefixed_names_correctly(
+    temp_workspace, selected, expect_flagged
+):
+    """When one configuration name is a prefix of another, a file belongs to the
+    longest matching name, so `aws_cloudtrail_test.json` is aws_cloudtrail's,
+    not aws's."""
+    config = DynaconfDict(
+        {
+            "version": 2,
+            "defaults": {
+                "conversion": {
+                    "target": "loki",
+                    "format": "default",
+                    "skip_unsupported": True,
+                    "file_pattern": "*.yml",
+                },
+            },
+            "configurations": [
+                {
+                    "name": "aws",
+                    "conversion": {
+                        "input": ["rules/*.yml"],
+                        "target": "loki",
+                        "format": "default",
+                    },
+                },
+                {
+                    "name": "aws_cloudtrail",
+                    "conversion": {
+                        "input": ["rules/*.yml"],
+                        "target": "text_query_test",
+                        "format": "default",
+                    },
+                },
+            ],
+        }
+    )
+    conversion_dir = temp_workspace / "conversions"
+    conversion_dir.mkdir()
+    cloudtrail_output = conversion_dir / "aws_cloudtrail_test.json"
+    cloudtrail_output.write_text(
+        json.dumps({"queries": ["HUMAN EDIT"]}).decode("utf-8")
+    )
+
+    convert_rules(
+        config=config,
+        path_prefix=temp_workspace,
+        configurations=selected,
+        manual_files="conversions/aws_cloudtrail_test.json",
+    )
+
+    data = json.loads(cloudtrail_output.read_bytes())
+    if expect_flagged:
+        assert data["manual"] is True
+    else:
+        assert "manual" not in data

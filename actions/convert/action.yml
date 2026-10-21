@@ -31,6 +31,10 @@ inputs:
     description: "Whether to use the changed files from the base branch"
     required: false
     default: "false"
+  configurations:
+    description: "Space-separated configuration names to convert. Empty converts all configurations."
+    required: false
+    default: ""
 
 outputs:
   conversion_errors:
@@ -133,6 +137,7 @@ runs:
         CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
         DELETED_FILES: ${{ steps.changed-files.outputs.deleted_files }}
         MANUAL_FILES: ${{ steps.changed-files.outputs.manual_files }}
+        CONFIGURATION_FILTER: ${{ inputs.configurations }}
         IMAGE_REF: ${{ steps.image-ref.outputs.image_ref }}
       run: |
         docker run --rm \
@@ -148,6 +153,7 @@ runs:
             -e CHANGED_FILES="$CHANGED_FILES" \
             -e DELETED_FILES="$DELETED_FILES" \
             -e MANUAL_FILES="$MANUAL_FILES" \
+            -e CONFIGURATION_FILTER="$CONFIGURATION_FILTER" \
             "ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:$IMAGE_REF" \
             convert
 
