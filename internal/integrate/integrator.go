@@ -169,24 +169,16 @@ func (i *Integrator) LoadConfig() error {
 	if v := strings.TrimSpace(os.Getenv("CONFIGURATION_FILTER")); v != "" {
 		configFilter = strings.Fields(v)
 		validNames := make([]string, 0, len(i.config.Configurations))
-		selected := make(map[string]bool, len(i.config.Configurations))
+		known := make(map[string]bool, len(i.config.Configurations))
 		for _, cfg := range i.config.Configurations {
 			validNames = append(validNames, cfg.Name)
-			selected[cfg.Name] = false
+			known[cfg.Name] = true
 		}
 		for _, name := range configFilter {
-			if _, ok := selected[name]; !ok {
+			if !known[name] {
 				return fmt.Errorf("unknown configuration %q in CONFIGURATION_FILTER (valid configurations: %s)", name, strings.Join(validNames, ", "))
 			}
-			selected[name] = true
 		}
-		filtered := make([]model.NamedConfigBlock, 0, len(configFilter))
-		for _, cfg := range i.config.Configurations {
-			if selected[cfg.Name] {
-				filtered = append(filtered, cfg)
-			}
-		}
-		i.config.Configurations = filtered
 		fmt.Printf("Restricting integration to configurations: %s\n", strings.Join(configFilter, ", "))
 	}
 

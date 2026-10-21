@@ -2764,51 +2764,47 @@ func writeFilterTestConfig(t *testing.T) (configPath, convDir, deployDir string)
 
 func TestLoadConfigConfigurationFilter(t *testing.T) {
 	tests := []struct {
-		name            string
-		filter          string
-		allRules        bool
-		filesOnDisk     []string // created in the conversion directory, for the allRules walk
-		changed         []string // base names, joined with the conversion directory
-		deleted         []string
-		testFiles       []string
-		wantAdd         []string
-		wantDel         []string
-		wantTest        []string
-		wantConfigNames []string
-		wantErr         string // substring match; empty means success
+		name        string
+		filter      string
+		allRules    bool
+		filesOnDisk []string // created in the conversion directory, for the allRules walk
+		changed     []string // base names, joined with the conversion directory
+		deleted     []string
+		testFiles   []string
+		wantAdd     []string
+		wantDel     []string
+		wantTest    []string
+		wantErr     string // substring match; empty means success
 	}{
 		{
-			name:            "no filter keeps all files",
-			filter:          "",
-			changed:         []string{"aws_cloudtrail_a.json", "github_audit_b.json"},
-			deleted:         []string{"aws_cloudtrail_c.json", "github_audit_d.json"},
-			testFiles:       []string{"aws_cloudtrail_a.json", "github_audit_b.json"},
-			wantAdd:         []string{"aws_cloudtrail_a.json", "github_audit_b.json"},
-			wantDel:         []string{"aws_cloudtrail_c.json", "github_audit_d.json"},
-			wantTest:        []string{"aws_cloudtrail_a.json", "github_audit_b.json"},
-			wantConfigNames: []string{"aws_cloudtrail", "github_audit"},
+			name:      "no filter keeps all files",
+			filter:    "",
+			changed:   []string{"aws_cloudtrail_a.json", "github_audit_b.json"},
+			deleted:   []string{"aws_cloudtrail_c.json", "github_audit_d.json"},
+			testFiles: []string{"aws_cloudtrail_a.json", "github_audit_b.json"},
+			wantAdd:   []string{"aws_cloudtrail_a.json", "github_audit_b.json"},
+			wantDel:   []string{"aws_cloudtrail_c.json", "github_audit_d.json"},
+			wantTest:  []string{"aws_cloudtrail_a.json", "github_audit_b.json"},
 		},
 		{
-			name:            "single name filters changed, test and removed files",
-			filter:          "aws_cloudtrail",
-			changed:         []string{"aws_cloudtrail_a.json", "github_audit_b.json"},
-			deleted:         []string{"aws_cloudtrail_c.json", "github_audit_d.json"},
-			testFiles:       []string{"aws_cloudtrail_a.json", "github_audit_b.json"},
-			wantAdd:         []string{"aws_cloudtrail_a.json"},
-			wantDel:         []string{"aws_cloudtrail_c.json"},
-			wantTest:        []string{"aws_cloudtrail_a.json"},
-			wantConfigNames: []string{"aws_cloudtrail"},
+			name:      "single name filters changed, test and removed files",
+			filter:    "aws_cloudtrail",
+			changed:   []string{"aws_cloudtrail_a.json", "github_audit_b.json"},
+			deleted:   []string{"aws_cloudtrail_c.json", "github_audit_d.json"},
+			testFiles: []string{"aws_cloudtrail_a.json", "github_audit_b.json"},
+			wantAdd:   []string{"aws_cloudtrail_a.json"},
+			wantDel:   []string{"aws_cloudtrail_c.json"},
+			wantTest:  []string{"aws_cloudtrail_a.json"},
 		},
 		{
-			name:            "multiple names keep both configurations' files",
-			filter:          "aws_cloudtrail github_audit",
-			changed:         []string{"aws_cloudtrail_a.json", "github_audit_b.json"},
-			deleted:         []string{"aws_cloudtrail_c.json", "github_audit_d.json"},
-			testFiles:       []string{"aws_cloudtrail_a.json", "github_audit_b.json"},
-			wantAdd:         []string{"aws_cloudtrail_a.json", "github_audit_b.json"},
-			wantDel:         []string{"aws_cloudtrail_c.json", "github_audit_d.json"},
-			wantTest:        []string{"aws_cloudtrail_a.json", "github_audit_b.json"},
-			wantConfigNames: []string{"aws_cloudtrail", "github_audit"},
+			name:      "multiple names keep both configurations' files",
+			filter:    "aws_cloudtrail github_audit",
+			changed:   []string{"aws_cloudtrail_a.json", "github_audit_b.json"},
+			deleted:   []string{"aws_cloudtrail_c.json", "github_audit_d.json"},
+			testFiles: []string{"aws_cloudtrail_a.json", "github_audit_b.json"},
+			wantAdd:   []string{"aws_cloudtrail_a.json", "github_audit_b.json"},
+			wantDel:   []string{"aws_cloudtrail_c.json", "github_audit_d.json"},
+			wantTest:  []string{"aws_cloudtrail_a.json", "github_audit_b.json"},
 		},
 		{
 			name:    "unknown name errors and lists the valid names",
@@ -2816,14 +2812,13 @@ func TestLoadConfigConfigurationFilter(t *testing.T) {
 			wantErr: `unknown configuration "bogus" in CONFIGURATION_FILTER (valid configurations: aws_cloudtrail, github_audit)`,
 		},
 		{
-			name:            "all rules walk only includes the selected configurations' files",
-			filter:          "github_audit",
-			allRules:        true,
-			filesOnDisk:     []string{"aws_cloudtrail_a.json", "github_audit_b.json"},
-			wantAdd:         []string{"github_audit_b.json"},
-			wantDel:         []string{},
-			wantTest:        []string{"github_audit_b.json"},
-			wantConfigNames: []string{"github_audit"},
+			name:        "all rules walk only includes the selected configurations' files",
+			filter:      "github_audit",
+			allRules:    true,
+			filesOnDisk: []string{"aws_cloudtrail_a.json", "github_audit_b.json"},
+			wantAdd:     []string{"github_audit_b.json"},
+			wantDel:     []string{},
+			wantTest:    []string{"github_audit_b.json"},
 		},
 	}
 	for _, tc := range tests {
@@ -2866,11 +2861,88 @@ func TestLoadConfigConfigurationFilter(t *testing.T) {
 			assert.Equal(t, join(tc.wantDel), i.removedFiles)
 			assert.Equal(t, join(tc.wantTest), i.testFiles)
 
+			// The filter scopes file selection only; it must not mutate the
+			// configuration list, which the orphan cleanup in DoCleanup depends on.
 			configNames := make([]string, 0, len(i.config.Configurations))
 			for _, cfg := range i.config.Configurations {
 				configNames = append(configNames, cfg.Name)
 			}
-			assert.Equal(t, tc.wantConfigNames, configNames)
+			assert.Equal(t, []string{"aws_cloudtrail", "github_audit"}, configNames)
+		})
+	}
+}
+
+func TestConfigurationFilterCleanupPreservesUnselectedFiles(t *testing.T) {
+	tests := []struct {
+		name          string
+		filter        string
+		wantSurviving []string // conversion file base names that must exist after cleanup
+		wantDeleted   []string // conversion file base names that must be removed by cleanup
+	}{
+		{
+			name:          "filtered run preserves unselected configurations' files",
+			filter:        "github_audit",
+			wantSurviving: []string{"aws_cloudtrail_rule.json", "github_audit_rule.json"},
+			wantDeleted:   []string{"ghost_rule.json"},
+		},
+		{
+			name:          "unfiltered run cleans only true orphans",
+			filter:        "",
+			wantSurviving: []string{"aws_cloudtrail_rule.json", "github_audit_rule.json"},
+			wantDeleted:   []string{"ghost_rule.json"},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			configPath, convDir, deployDir := writeFilterTestConfig(t)
+
+			// One conversion file per name: two belonging to configurations in the
+			// config, one ("ghost") whose configuration is genuinely absent. Each gets
+			// a deployment file referencing it, so the deployment orphan check follows
+			// the conversion cleanup's outcome.
+			for _, name := range []string{"aws_cloudtrail", "github_audit", "ghost"} {
+				convObject := model.ConversionOutput{
+					ConversionName: name,
+					Queries:        []string{"{job=`test`} | json"},
+					Rules:          []model.SigmaRule{{ID: "996f8884-9144-40e7-ac63-29090ccde9a0", Title: "Rule"}},
+				}
+				convBytes, err := json.Marshal(convObject)
+				require.NoError(t, err)
+				convFile := filepath.Join(convDir, name+"_rule.json")
+				require.NoError(t, os.WriteFile(convFile, convBytes, 0o600))
+
+				rule := &model.ProvisionedAlertRule{
+					UID:         "deadbeef",
+					Title:       "Rule",
+					RuleGroup:   "Test Rules",
+					Annotations: map[string]string{"ConversionFile": convFile},
+				}
+				deployFile := filepath.Join(deployDir, "alert_rule_"+name+"_rule_deadbeef.json")
+				require.NoError(t, writeRuleToFile(rule, deployFile, false))
+			}
+
+			t.Setenv("INTEGRATOR_CONFIG_PATH", configPath)
+			t.Setenv("CHANGED_FILES", "")
+			t.Setenv("DELETED_FILES", "")
+			t.Setenv("TEST_FILES", "")
+			t.Setenv("MANUAL_FILES", "")
+			t.Setenv("ALL_RULES", "false")
+			t.Setenv("CONFIGURATION_FILTER", tc.filter)
+
+			i := NewIntegrator()
+			require.NoError(t, i.LoadConfig())
+			require.NoError(t, i.DoCleanup())
+
+			for _, name := range tc.wantSurviving {
+				base := strings.TrimSuffix(name, ".json")
+				assert.FileExists(t, filepath.Join(convDir, name))
+				assert.FileExists(t, filepath.Join(deployDir, "alert_rule_"+base+"_deadbeef.json"))
+			}
+			for _, name := range tc.wantDeleted {
+				base := strings.TrimSuffix(name, ".json")
+				assert.NoFileExists(t, filepath.Join(convDir, name))
+				assert.NoFileExists(t, filepath.Join(deployDir, "alert_rule_"+base+"_deadbeef.json"))
+			}
 		})
 	}
 }
