@@ -101,6 +101,63 @@ test('run - untrusted author is ignored', async (t) => {
   assert.strictEqual(octokit.calls.reactions.length, 0);
 });
 
+test('run - bots are trusted by type despite NONE association', async (t) => {
+  const configPath = writeTempConfig(t);
+  const octokit = createMockOctokit();
+
+  const outputs = await run(
+    makeInputs(configPath, {
+      commentBody: 'sigma convert all',
+      commentAuthorAssociation: 'NONE',
+      commentAuthorLogin: 'sigma-rule-deployment-app[bot]',
+      commentAuthorType: 'Bot',
+    }),
+    context,
+    octokit
+  );
+
+  assert.strictEqual(outputs.triggered, 'true');
+  assert.strictEqual(outputs.all_rules, 'true');
+});
+
+test('run - humans with NONE association and no allowlist entry are ignored', async (t) => {
+  const configPath = writeTempConfig(t);
+  const octokit = createMockOctokit();
+
+  const outputs = await run(
+    makeInputs(configPath, {
+      commentBody: 'sigma convert all',
+      commentAuthorAssociation: 'NONE',
+      commentAuthorLogin: 'some-random-user',
+      commentAuthorType: 'User',
+    }),
+    context,
+    octokit
+  );
+
+  assert.strictEqual(outputs.triggered, 'false');
+  assert.strictEqual(octokit.calls.reactions.length, 0);
+});
+
+test('run - unknown author type with NONE association fails closed', async (t) => {
+  const configPath = writeTempConfig(t);
+  const octokit = createMockOctokit();
+
+  const outputs = await run(
+    makeInputs(configPath, {
+      commentBody: 'sigma convert all',
+      commentAuthorAssociation: 'NONE',
+      commentAuthorLogin: 'sigma-rule-deployment-app[bot]',
+      commentAuthorType: '',
+    }),
+    context,
+    octokit
+  );
+
+  assert.strictEqual(outputs.triggered, 'false');
+  assert.strictEqual(octokit.calls.reactions.length, 0);
+});
+
 test('run - trusted associations are accepted', async (t) => {
   const configPath = writeTempConfig(t);
 

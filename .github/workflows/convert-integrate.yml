@@ -99,79 +99,62 @@ jobs:
             return pullRequest.head.ref;
           result-encoding: string
 
-      - name: Check whether to convert all rules and react
-        id: convert_all
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        env:
-          ALL_RULES: ${{ inputs.all_rules }}
-        with:
-          script: |
-            const allRules = process.env.ALL_RULES === 'true';
-            let convertAll = allRules;
-            
-            // Check comment body if this is an issue_comment event
-            if (context.eventName === 'issue_comment' && context.payload.comment) {
-              const trustedAssociations = ['OWNER', 'MEMBER', 'COLLABORATOR'];
-              const authorAssociation = context.payload.comment.author_association;
-              if (!trustedAssociations.includes(authorAssociation)) {
-                console.log(`Ignoring comment from ${context.payload.comment.user.login} (association: ${authorAssociation})`);
-                core.setOutput('convert_all', 'false');
-                return;
-              }
-
-              const commentBody = context.payload.comment.body.toLowerCase();
-
-              if (commentBody.startsWith('sigma') && commentBody.includes('convert all')) {
-                convertAll = true;
-
-                // React with eyes emoji
-                try {
-                  await github.rest.reactions.createForIssueComment({
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    comment_id: context.payload.comment.id,
-                    content: 'eyes'
-                  });
-                  console.log(`Reacted to comment ${context.payload.comment.id} with eyes emoji`);
-                } catch (error) {
-                  console.log(`Could not react to comment: ${error.message}`);
-                }
-              }
-            }
-            
-            // Set output for convert_all
-            core.setOutput('convert_all', convertAll.toString());
-            console.log(`convert_all set to: ${convertAll}`);
-
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event_name == 'issue_comment' && steps.get-pr-branch.outputs.result || github.head_ref }}
           fetch-depth: 0
 
+      # Parses `sigma convert|integrate` commands from the comment into the outputs
+      # that drive the steps below. Unset for comment events.
+      - name: Parse sigma comment
+        if: github.event_name == 'issue_comment'
+        id: parse
+        uses: $/actions/parse-comment
+        with:
+          comment_body: ${{ github.event.comment.body }}
+          comment_author_association: ${{ github.event.comment.author_association }}
+          comment_author_login: ${{ github.event.comment.user.login }}
+          comment_author_type: ${{ github.event.comment.user.type }}
+          comment_id: ${{ github.event.comment.id }}
+          issue_number: ${{ github.event.issue.number }}
+          all_rules: ${{ inputs.all_rules }}
+          config_path: ${{ inputs.config_path }}
+          github_token: ${{ github.token }}
+
       - name: Convert Sigma rules
+        if: github.event_name != 'issue_comment' || (steps.parse.outputs.triggered == 'true' && steps.parse.outputs.action == 'convert')
         uses: $/actions/convert
         with:
           config_path: ${{ inputs.config_path }}
           plugin_packages: ${{ inputs.plugin_packages }}
-          render_traceback: ${{ inputs.render_traceback }}
-          pretty_print: ${{ inputs.pretty_print }}
-          all_rules: ${{ steps.convert_all.outputs.convert_all }}
+          render_traceback: ${{ inputs.render_traceback || steps.parse.outputs.debug == 'true' }}
+          pretty_print: ${{ inputs.pretty_print || steps.parse.outputs.debug == 'true' }}
+          all_rules: ${{ steps.parse.outputs.all_rules == 'true' || (github.event_name != 'issue_comment' && inputs.all_rules) }}
           actions_username: ${{ inputs.actions_username }}
           changed_files_from_base: ${{ inputs.changed_files_from_base }}
+          configurations: ${{ steps.parse.outputs.configurations }}
 
       - name: Integrate queries into alert rules
+        if: github.event_name != 'issue_comment' || steps.parse.outputs.triggered == 'true'
         uses: $/actions/integrate
         with:
           config_path: ${{ inputs.config_path }}
           grafana_sa_token: ${{ secrets.grafana_sa_token || fromJSON(steps.get-secrets.outputs.secrets || '{}').GRAFANA_SA_TOKEN }}
-          pretty_print: ${{ inputs.pretty_print }}
-          output_log_lines: ${{ inputs.output_log_lines }}
-          all_rules: ${{ steps.convert_all.outputs.convert_all }}
+          pretty_print: ${{ inputs.pretty_print || steps.parse.outputs.debug == 'true' }}
+          output_log_lines: ${{ inputs.output_log_lines || steps.parse.outputs.debug == 'true' }}
+          # A targeted run (configurations set) integrates all of the selected
+          # configurations' files: integrate-only commands produce no conversion
+          # diff for the changed-files detection to key off.
+          all_rules: ${{ steps.parse.outputs.all_rules == 'true' || steps.parse.outputs.configurations != '' || (github.event_name != 'issue_comment' && inputs.all_rules) }}
           actions_username: ${{ inputs.actions_username }}
           changed_files_from_base: ${{ inputs.changed_files_from_base }}
+          configurations: ${{ steps.parse.outputs.configurations }}
+          skip_query_testing: ${{ steps.parse.outputs.no_test == 'true' }}
+          query_time_window: ${{ steps.parse.outputs.query_time_window }}
 
       - name: Commit queries and alert rules
+        if: github.event_name != 'issue_comment' || steps.parse.outputs.triggered == 'true'
         uses: stefanzweifel/git-auto-commit-action@4a55954c782fc1ea30b9056cd3e7a2b40ca8887d # v7.2.0
         with:
           commit_message: "Sigma Rules Deployment"
