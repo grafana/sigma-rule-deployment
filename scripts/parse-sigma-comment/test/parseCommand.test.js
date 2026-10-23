@@ -155,3 +155,22 @@ test('parseCommand - --query-time-window without value', () => {
     return true;
   });
 });
+
+test('parseCommand - ignores everything after the first line', () => {
+  const command = parseCommand('sigma convert all\n\nTriggered by grafana/sigma-rule-deployment#419, commit grafana/sigma-rule-deployment@761f9e0');
+  assert.strictEqual(command.action, 'convert');
+  assert.strictEqual(command.allRules, true);
+});
+
+test('parseCommand - flags on the first line with a trailer after', () => {
+  const command = parseCommand('sigma convert aws_cloudtrail --no-test --query-time-window 6h\nsome explanation\nacross lines');
+  assert.strictEqual(command.target, 'aws_cloudtrail');
+  assert.strictEqual(command.noTest, true);
+  assert.strictEqual(command.queryTimeWindow, '6h');
+});
+
+test('parseCommand - CRLF line endings in a multi-line comment', () => {
+  const command = parseCommand('sigma integrate all\r\n\r\nTriggered by automation');
+  assert.strictEqual(command.action, 'integrate');
+  assert.strictEqual(command.allRules, true);
+});

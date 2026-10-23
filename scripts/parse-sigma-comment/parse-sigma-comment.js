@@ -129,7 +129,10 @@ function getContext() {
  * Throws ParseError on any grammar violation.
  */
 function parseCommand(commentBody) {
-  const tokens = commentBody.trim().split(/\s+/);
+  // Commands are single-line; anything after the first line (automation
+  // trailers, explanations) is ignored.
+  const firstLine = commentBody.split(/\r?\n/, 1)[0];
+  const tokens = firstLine.trim().split(/\s+/);
 
   // tokens[0] is 'sigma' (validated by the caller)
   const actionToken = tokens[1]?.toLowerCase();
