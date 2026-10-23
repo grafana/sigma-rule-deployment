@@ -20,10 +20,14 @@ type DatasourceQuery interface {
 }
 
 // HTTPDatasourceQuery is the default implementation of DatasourceQuery
-type HTTPDatasourceQuery struct{}
+type HTTPDatasourceQuery struct {
+	// health, when set, stops requests to an instance that has stopped responding, so one that
+	// has been retired doesn't time out once for every query tested against it
+	health *shared.InstanceHealth
+}
 
 // DefaultDatasourceQuery is the default implementation used throughout the application
-var DefaultDatasourceQuery DatasourceQuery = &HTTPDatasourceQuery{}
+var DefaultDatasourceQuery DatasourceQuery = &HTTPDatasourceQuery{health: shared.NewInstanceHealth(shared.DefaultUnavailableAfter)}
 
 type GrafanaDatasource struct {
 	ID                int             `json:"id,omitempty"`
@@ -210,7 +214,7 @@ func (h *HTTPDatasourceQuery) ExecuteQuery(
 	}
 
 	// Create Grafana client for the request
-	client := shared.NewGrafanaClient(baseURL, apiKey, "sigma-rule-deployment/integrator", timeout)
+	client := shared.NewGrafanaClient(baseURL, apiKey, "sigma-rule-deployment/integrator", timeout).WithHealth(h.health)
 
 	// Use url.JoinPath to construct the path relative to baseURL
 	queryPath, err := url.JoinPath("api/ds/query")
@@ -258,7 +262,7 @@ func (h *HTTPDatasourceQuery) getDatasourceByUID(
 	uid, baseURL, apiKey string, timeout time.Duration,
 ) (*GrafanaDatasource, error) {
 	// Create Grafana client for the request
-	client := shared.NewGrafanaClient(baseURL, apiKey, "sigma-rule-deployment/integrator", timeout)
+	client := shared.NewGrafanaClient(baseURL, apiKey, "sigma-rule-deployment/integrator", timeout).WithHealth(h.health)
 
 	// Construct the path
 	path, err := url.JoinPath("api/datasources/uid", uid)

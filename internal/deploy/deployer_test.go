@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -2170,4 +2171,82 @@ func TestDeployRemovesAlertsOfDeletedConfiguration(t *testing.T) {
 			assert.Equal(t, tt.wantDeleted, deleted)
 		})
 	}
+}
+
+// TestDeployStopsRequestingAnInstanceThatStoppedResponding verifies that removing the alerts of a
+// configuration that was deployed to a retired instance doesn't time out once for every alert:
+// after a few failed requests the instance is skipped, and the instances that respond are not.
+func TestDeployStopsRequestingAnInstanceThatStoppedResponding(t *testing.T) {
+	const retiredAlerts = 25
+	var retiredRequests, liveDeletes atomic.Int32
+
+	// The retired instance accepts connections but never answers in time
+	retired := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		retiredRequests.Add(1)
+		select {
+		case <-r.Context().Done():
+		case <-time.After(2 * time.Second):
+		}
+	}))
+	defer retired.Close()
+	live := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/api/v1/provisioning/alert-rules/") && r.Method == http.MethodGet:
+			w.WriteHeader(http.StatusNotFound)
+		case strings.HasPrefix(r.URL.Path, "/api/v1/provisioning/alert-rules/") && r.Method == http.MethodDelete:
+			liveDeletes.Add(1)
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer live.Close()
+
+	tmpDir, err := os.MkdirTemp(".", "test-retired-instance-*")
+	assert.NoError(t, err)
+	t.Cleanup(func() { os.RemoveAll(tmpDir) })
+	removed := make([]string, 0, retiredAlerts+1)
+	for i := range retiredAlerts {
+		removed = append(removed, filepath.Join(tmpDir, fmt.Sprintf("alert_rule_gone_rule_uid%d.json", i)))
+	}
+	removed = append(removed, filepath.Join(tmpDir, "alert_rule_kept_rule_ukept.json"))
+	t.Setenv("DELETED_FILES", strings.Join(removed, " "))
+	t.Setenv("ADDED_FILES", "")
+	t.Setenv("MODIFIED_FILES", "")
+	t.Setenv("COPIED_FILES", "")
+
+	currentConfig := "version: 2\nfolders:\n  deployment_path: \"" + tmpDir + "\"\n" +
+		"defaults:\n  integration:\n    folder_id: f\n    org_id: 1\n    time_window: 5m\n" +
+		"  deployment:\n    grafana_instance: " + live.URL + "\n" +
+		"configurations:\n  - name: kept\n"
+	// The retired instance had its own configuration, with a short timeout, that has since been removed
+	previousConfig := currentConfig + "  - name: gone\n    deployment:\n      grafana_instance: " + retired.URL + "\n      timeout: 30ms\n"
+	writeTestDeployerConfig(t, currentConfig)
+	previousFile, err := os.CreateTemp(".", "test_previous_config_*.yml")
+	assert.NoError(t, err)
+	t.Cleanup(func() { os.Remove(previousFile.Name()) })
+	_, err = previousFile.WriteString(previousConfig)
+	assert.NoError(t, err)
+	assert.NoError(t, previousFile.Close())
+	t.Setenv("PREVIOUS_CONFIG_PATH", previousFile.Name())
+
+	ctx := context.Background()
+	d := NewDeployer()
+	assert.NoError(t, d.LoadConfig(ctx))
+	d.SetClient()
+	assert.NoError(t, d.ConfigNormalMode())
+
+	start := time.Now()
+	_, _, deleted, err := d.Deploy(ctx)
+	assert.NoError(t, err, "an instance that is no longer configured must not fail the deployment")
+
+	assert.Equal(t, int32(shared.DefaultUnavailableAfter), retiredRequests.Load(), "only the requests that show the instance isn't responding are made")
+	assert.Equal(t, []string{retired.URL + "/"}, d.health.Unavailable())
+	// The first alert makes two requests and the second the third, which marks it unavailable and
+	// leaves the second alert's deletion to fail at once; every later alert is skipped
+	assert.Equal(t, retiredAlerts-2, d.skippedRemovals[retired.URL+"/"], "the rest are skipped without waiting")
+	assert.Less(t, time.Since(start), 2*time.Second)
+	assert.Equal(t, int32(1), liveDeletes.Load(), "the instance that responds is unaffected")
+	assert.Equal(t, []AlertDeployment{{UID: "ukept", Title: "ukept", Instance: live.URL + "/"}}, deleted)
 }

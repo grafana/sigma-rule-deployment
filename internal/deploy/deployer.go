@@ -85,6 +85,8 @@ type Deployer struct {
 	previousDefault      []*shared.GrafanaClient                      // the default instances in the previous config, nil if there was no previous config
 	freshRemovals        []alertRemoval                               // alerts found on specific instances to delete in fresh deploy mode
 	groupsToUpdate       map[*shared.GrafanaClient]map[ruleGroup]bool // rule groups touched on each Grafana instance, for interval updates
+	health               *shared.InstanceHealth                       // which instances have stopped responding, shared by every client
+	skippedRemovals      map[string]int                               // removals not attempted on each unavailable instance, by base URL
 }
 
 // AlertDeployment identifies a deployed alert and its display title.
@@ -100,6 +102,8 @@ func NewDeployer() *Deployer {
 	return &Deployer{
 		groupsToUpdate:       map[*shared.GrafanaClient]map[ruleGroup]bool{},
 		perConversionClients: map[string][]*shared.GrafanaClient{},
+		health:               shared.NewInstanceHealth(shared.DefaultUnavailableAfter),
+		skippedRemovals:      map[string]int{},
 	}
 }
 
@@ -259,7 +263,7 @@ func (d *Deployer) newClient(endpoint string, timeout time.Duration) (*shared.Gr
 	if err != nil {
 		return nil, err
 	}
-	return shared.NewGrafanaClient(endpoint, token, "sigma-rule-deployment/deployer", timeout), nil
+	return shared.NewGrafanaClient(endpoint, token, "sigma-rule-deployment/deployer", timeout).WithHealth(d.health), nil
 }
 
 // SetClient creates the clients for the default instances. A default instance with no token
@@ -267,6 +271,14 @@ func (d *Deployer) newClient(endpoint string, timeout time.Duration) (*shared.Gr
 // instance a configuration uses, so this only leaves out default instances that are all overridden.
 // An alert file that matches no configuration is deployed to the default instances, and fails
 // then if one of them has no token.
+// logUnavailableInstances reports the instances that stopped responding during the run, and the
+// removals that were not attempted on them.
+func (d *Deployer) logUnavailableInstances() {
+	for _, baseURL := range d.health.Unavailable() {
+		log.Printf("Warning: %s stopped responding and was skipped; %d removal(s) were not attempted on it", sanitizeForLog(baseURL), d.skippedRemovals[baseURL]) //nolint:gosec // G706: baseURL sanitized with sanitizeForLog before logging
+	}
+}
+
 func (d *Deployer) SetClient() {
 	d.clients = make([]*shared.GrafanaClient, 0, len(d.config.endpoints))
 	d.defaultTokenErr = nil
@@ -289,6 +301,7 @@ func (d *Deployer) IsFreshDeploy() bool {
 }
 
 func (d *Deployer) Deploy(ctx context.Context) ([]AlertDeployment, []AlertDeployment, []AlertDeployment, error) {
+	defer d.logUnavailableInstances()
 	// Lists to store the alerts that were created, updated and deleted at any point during the deployment
 	alertsCreated := make([]AlertDeployment, 0, len(d.config.alertsToAdd))
 	alertsUpdated := make([]AlertDeployment, 0, len(d.config.alertsToUpdate))
@@ -316,6 +329,19 @@ func (d *Deployer) Deploy(ctx context.Context) ([]AlertDeployment, []AlertDeploy
 	for _, removal := range removals {
 		for _, client := range slices.Concat(removal.clients, removal.bestEffort) {
 			d.client = client
+			// An instance that has stopped responding is skipped, rather than waiting for each
+			// of its removals to time out. It only matters for an instance no longer in the
+			// config: for any other the deployment fails.
+			if err := d.health.Check(client.BaseURL()); err != nil {
+				if slices.Contains(removal.bestEffort, client) {
+					if d.skippedRemovals == nil {
+						d.skippedRemovals = map[string]int{}
+					}
+					d.skippedRemovals[client.BaseURL()]++
+					continue
+				}
+				return alertsCreated, alertsUpdated, alertsDeleted, err
+			}
 			alertTitle := d.getAlertTitle(ctx, removal.uid)
 			uid, err := d.deleteAlert(ctx, removal.uid)
 			if err != nil {
