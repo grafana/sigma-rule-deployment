@@ -88,6 +88,6 @@ runs:
         CONFIG_PATH: ${{ inputs.config_path }}
         GITHUB_TOKEN: ${{ inputs.github_token }}
       run: |
+        # Run from the caller's workspace (no cd) so a relative config_path resolves against it
         SCRIPTS_DIR="$(cd "${{ github.action_path }}/../../scripts/parse-sigma-comment" && pwd)"
-        cd "$SCRIPTS_DIR"
-        node parse-sigma-comment.js
+        node "$SCRIPTS_DIR/parse-sigma-comment.js"
