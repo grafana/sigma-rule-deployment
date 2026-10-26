@@ -17,7 +17,7 @@ You usually don't need to add the flag yourself. When you edit a generated file 
 
 ## Hand a file back to automation
 
-To let the Actions manage a file again, set the flag to false: `"manual": false` in a conversion file, or `"manual": "false"` in an alert rule file's annotations. The next run regenerates the file.
+To let the Actions manage a file again, set the flag to false: `"manual": false` in a conversion file, or `"manual": "false"` in an alert rule file's annotations. The Actions regenerate the file the next time its Sigma rule is converted, for example, when you change the rule or comment `sigma convert <CONFIGURATION_NAME>`.
 
 > [!IMPORTANT]
 > Don't delete the flag. Automatic detection can't tell a deleted flag from any other human edit, so the next run adds the flag back.

@@ -55,8 +55,8 @@ A setting in a configuration overrides the matching setting in `defaults`. How t
 
 | Type of setting  | Examples                                                                                                     | Behavior in a configuration                                                                                                                                                                              |
 | ---------------- | ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Text and numbers | `rule_group`, `time_window`, `folder_id`, `org_id`, `data_source`, `from`, `to`, `json_indent`               | Replaces the default. An empty text value counts as not set, so the default still applies. A `json_indent` of `0` is a real value that overrides the default.                                          |
-| Booleans         | `test_queries`, `show_log_lines`, `show_sample_values`, `continue_on_error`, `template_all_rules`            | Replaces the default when set, including `false` to turn off a default of `true`. When neither is set, the value is `false`.                                                                            |
+| Text and numbers | `rule_group`, `time_window`, `folder_id`, `org_id`, `data_source`, `from`, `to`, `json_indent`               | Replaces the default. An empty text value counts as not set, so the default still applies, except for the conversion `target` and `format`. A `json_indent` of `0` is a real value that overrides the default.                                          |
+| Booleans         | `test_queries`, `show_log_lines`, `show_sample_values`, `continue_on_error`, `template_all_rules`            | Replaces the default when set, including `false` to turn off a default of `true`. When neither is set, the setting's own default applies, which is `false` for most booleans.                                                                            |
 | Lists and maps   | `pipelines`, `filters`, `backend_options`, `required_rule_fields`, `template_labels`, `template_annotations` | Replaces the default entirely. Lists and maps aren't merged, so repeat any default entries you want to keep. Set `[]` or `{}` to remove the default. Leave the key out to keep it.                      |
 
 In the following example, `okta_audit` skips query testing and gets only the `Level` and `Team` labels. It doesn't get the default `Product` label. `gcp_k8s` keeps all the defaults.
@@ -82,7 +82,7 @@ configurations:
         Team: identity
 ```
 
-The `continue_on_query_testing_errors` input of the convert and integrate workflow sets the default for `continue_on_error`, so it takes precedence over `defaults.integration.continue_on_error`. A configuration's own `continue_on_error` still overrides it.
+The `continue_on_query_testing_errors` input of the integrate Action sets the default for `continue_on_error`, so it takes precedence over `defaults.integration.continue_on_error`. The input defaults to `true`. A configuration's own `continue_on_error` still overrides it.
 
 ## Validate the file
 

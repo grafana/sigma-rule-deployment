@@ -30,20 +30,20 @@ The Loki backend is included. Install any other backend with the `plugin_package
 
 ## Choose the query model
 
-The integrate stage picks a built-in query model from `integration.data_source_type`. If you don't set it, it uses the conversion `target` instead. For Loki and Elasticsearch, the backend name, `loki` or `elasticsearch`, is enough. For the other native data sources, set `data_source_type` to the plugin type ID, or use a backend name from the following table as the `target`.
+The integrate stage picks a built-in query model from `integration.data_source_type`. If you don't set it, it uses the conversion `target` instead. For Loki, `target: loki` is enough. For Elasticsearch, set `data_source_type: elasticsearch`, because the Elasticsearch backend's targets, such as `lucene` or `esql`, don't identify the data source. For the other native data sources, set `data_source_type` to the plugin type ID. Where the following table lists a `target`, that target selects the model too, so you can leave `data_source_type` out.
 
 | Data source         | `data_source_type`                       | Also selected by `target` | What the query must return                                                                                                                                      |
 | ------------------- | ---------------------------------------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Azure Data Explorer | `grafana-azure-data-explorer-datasource` |                           | A time series: KQL that ends `summarize ... by bin(<time>, <step>) \| order by <time> asc`. The data source must have a default database and cluster configured. |
 | Datadog             | `grafana-datadog-datasource`             | `datadog`                 | A [logs search](https://grafana.com/docs/plugins/grafana-datadog-datasource/latest/alerting/) in aggregate mode, returning the count of matching logs.            |
-| OpenSearch          | `grafana-opensearch-datasource`          | `opensearch`              | A Lucene query. The model counts matching documents per date histogram bucket, using the data source's time field.                                               |
+| OpenSearch          | `grafana-opensearch-datasource`          |                           | A Lucene query. The model counts matching documents per date histogram bucket, using the data source's time field.                                               |
 | Splunk              | `grafana-splunk-datasource`              | `splunk`                  | SPL that returns numeric values with a time field, for example, `... \| timechart span=1m count`.                                                                |
 | SQLite              | `frser-sqlite-datasource`                | `sqlite`                  | SQL returning a column named `time`, in Unix seconds, and a numeric column.                                                                                      |
-| SurrealDB           | `fiskaly-surrealdb-datasource`           | `surrealql`               | SurrealQL run in raw mode. The plugin doesn't document alerting, so test carefully.                                                                              |
+| SurrealDB           | `fiskaly-surrealdb-datasource`           |                           | SurrealQL run in raw mode. The plugin doesn't document alerting, so test carefully.                                                                              |
 | ClickHouse          | `grafana-clickhouse-datasource`          | `clickhouse`              | SQL returning a time series, using `$__timeFilter(<COLUMN>)`, or a single numeric value.                                                                         |
 | Quickwit            | `quickwit-quickwit-datasource`           | `quickwit`                | A Lucene query. The model counts matching documents per date histogram bucket, using the index's timestamp field.                                                |
 | Parseable           | `parseable-parseable-datasource`         | `parseable`               | SQL returning a single numeric row, for example, `SELECT COUNT(*) FROM "stream" WHERE ...`.                                                                      |
-| Dataset             | `sentinelone-dataset-datasource`         | `sentinelone-pq`          | A PowerQuery returning a timestamp and numeric columns.                                                                                                          |
+| Dataset             | `sentinelone-dataset-datasource`         |                           | A PowerQuery returning a timestamp and numeric columns.                                                                                                          |
 
 The Azure KQL backend, `kusto`, isn't in the table because its queries can run on either Azure Monitor or Azure Data Explorer. Set `data_source_type` to choose.
 
@@ -51,7 +51,7 @@ The Azure KQL backend, `kusto`, isn't in the table because its queries can run o
 
 Grafana [alert rules](https://grafana.com/docs/grafana/latest/alerting/fundamentals/alert-rules/) need metric queries, which return numbers over time. Many Sigma backends produce log queries, which return matching log lines. How the two fit together depends on the data source.
 
-Some data sources, such as Loki, can [apply metric functions](https://grafana.com/docs/loki/latest/query/metric_queries/) to log queries, and the Loki model turns a log query into a metric query for you. Other data sources, such as Elasticsearch, can't express a metric in their query language, but their response can include metric data, such as counts. The query model for those data sources asks for that metric data. A converted Sigma correlation rule usually produces a metric query already.
+Some data sources, such as Loki, can [apply metric functions](https://grafana.com/docs/loki/latest/query/metric_queries/) to log queries, and the integrate stage turns a Loki log query into a metric query for you by wrapping it in `sum(count_over_time(...[$__auto]))`. It does this whenever the data source type is `loki`, even with a custom query model. Other data sources, such as Elasticsearch, can't express a metric in their query language, but their response can include metric data, such as counts. The query model for those data sources asks for that metric data. A converted Sigma correlation rule usually produces a metric query already.
 
 If the built-in model for your data source doesn't produce a usable metric, supply a custom query model.
 

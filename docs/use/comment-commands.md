@@ -39,9 +39,9 @@ The workflow only acts on comments from users whose association with the reposit
 
 ## Result
 
-The workflow reacts to a valid command with 👀 and runs it. When it finishes, it commits the generated files to the pull request branch and updates the result comments.
+The workflow reacts to a valid command with 👀 and runs it. It hides the previous result comments, posts new ones, and commits the generated files to the pull request branch.
 
-If the command is invalid, for example, an unknown flag or a target that matches no configuration, the workflow reacts with 😕 and replies with the usage and the list of valid configuration names. An invalid command never fails the workflow.
+If the command is invalid, for example, an unknown flag or a target that matches no configuration, the workflow reacts with 😕 and replies with the usage. If the target matched no configuration, the reply also lists the valid configuration names. An invalid command never fails the workflow.
 
 ## Related pages
 

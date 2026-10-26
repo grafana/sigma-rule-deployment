@@ -23,7 +23,7 @@ For the required roles and step-by-step instructions, refer to [Create a Grafana
 
 ## Add rules and pipelines
 
-Add your Sigma rules to a `rules/` folder, and any Sigma pipelines to a `pipelines/` folder. Each rule needs an `id` and a `title`. If you don't have rules yet, start with a few from the [SigmaHQ rule repository](https://github.com/SigmaHQ/sigma/tree/master/rules) that match a log source you collect.
+Add your Sigma rules to a `rules/` folder, and any Sigma pipelines to a `pipelines/` folder. Each rule needs a UUID `id` and a `title`. If you don't have rules yet, start with a few from the [SigmaHQ rule repository](https://github.com/SigmaHQ/sigma/tree/master/rules) that match a log source you collect.
 
 For the recommended layout and the rule requirements, refer to [Organize rules and pipelines](set-up/rules-and-pipelines.md).
 
@@ -76,7 +76,7 @@ Merge the workflows to your main branch before you continue. Comment commands on
 
 Create a branch, add or change a Sigma rule, and open a pull request.
 
-The convert and integrate workflow runs and commits the generated files to your branch in a "Sigma Rules Deployment" commit. It then comments on the pull request with links to the generated files and, with query testing on, the query test results.
+The convert and integrate workflow runs and commits the generated files to your branch in a "Sigma Rules Deployment" commit. The convert and integrate stages also comment on the pull request with links to the generated files and, with query testing on, the query test results.
 
 To convert every rule, not only the ones you changed, comment `sigma convert all` on the pull request. Refer to [Comment commands](use/comment-commands.md).
 
@@ -86,7 +86,7 @@ When you're happy with the results, merge the pull request. The deploy workflow 
 
 ## Result
 
-In Grafana, go to **Alerting** > **Alert rules**. Your alert rules are in the folder you configured, with labels and annotations that link each one back to its Sigma rule.
+In Grafana, go to **Alerting** > **Alert rules**. Your alert rules are in the folder you configured, with annotations that link each one back to its Sigma rule.
 
 ## Next steps
 

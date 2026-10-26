@@ -150,14 +150,14 @@ review before publishing.
 When `main` is ready to release:
 
 1. Choose the version number using [Semantic Versioning](https://semver.org/). Version numbers
-   must match `\d+\.\d+\.\d+(-[0-9A-Za-z-]+)?`.
+   must match `\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?`, for example `v1.2.0` or `v1.2.0-beta.1`.
 2. Check out `main` and create a signed tag named after the version with a `v` prefix, for example
    `git tag --sign --message="Release vX.Y.Z" vX.Y.Z`.
 3. Push the tag, for example `git push --tags`. This triggers the
    [SBOM on Release](.github/workflows/sbom-immutable-release.yml) workflow, which exports the
    SPDX SBOM from Socket, creates a **draft** release with generated notes, and attaches the SBOM
    as the `sigma-rule-deployment-vX.Y.Z.spdx.json` asset. The release is marked as a pre-release
-   when the tag starts with `v0.` or has an `-alpha`, `-beta`, or `-rcN` suffix.
+   when the tag starts with `v0.` or has any `-` suffix, such as `-alpha`, `-beta`, or `-rc1`.
 4. Open the draft release in GitHub. Review the generated release notes, check the pre-release
    flag, and confirm the `.spdx.json` SBOM asset is attached. It must be there now, because
    immutable releases prevent adding assets after publishing.

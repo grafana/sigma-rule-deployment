@@ -107,7 +107,7 @@ jobs:
 - Query testing is optional but recommended for validation.
 - Requires a valid Grafana Service Account token with appropriate permissions.
 - When configurations test queries on different Grafana instances, set `grafana_sa_token` to a JSON object that maps each instance URL to its token. Refer to [Use more than one Grafana instance](../../docs/set-up/grafana-service-account.md#use-more-than-one-grafana-instance).
-- Tests queries against the past hour of data to validate syntax and execution.
+- By default, tests queries against the past hour of data to validate syntax and execution. Override the range with the `query_time_window` input, or with `from` and `to` in the configuration.
 - Results are written to a JSON file whose path is exposed via the `test_query_results_file` output, rather than being included in the output value directly — this keeps large rulesets from overflowing environment-variable size limits in later workflow steps.
 
 ### File Management

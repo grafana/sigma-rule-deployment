@@ -6,7 +6,7 @@ The deploy stage keeps the alert rules in Grafana in step with the alert rule fi
 
 By default, the [deploy workflow](../set-up/workflows.md#deploy) runs after every push to your main branch that changes the alert rule files. It only processes the files that changed in the push: it creates alert rules for new files, updates them for changed files, and deletes them for removed files.
 
-When the deployment finishes, the workflow comments the created, updated, and deleted alert rules on the pull request that was merged. If one alert rule fails, the workflow still processes the rest and reports every result.
+When the deployment finishes, the workflow comments the created, updated, and deleted alert rules on the pull request that was merged. If an alert rule fails to deploy, the deployment stops at that rule, and the comment reports the error.
 
 ## Fresh deployments
 
@@ -50,11 +50,11 @@ An alert rule file that matches no configuration deploys to the default instance
 
 When you remove an alert rule file, the deploy stage deletes its alert rule from every instance the configuration deployed it to. It reads those instances from the configuration file as it was before the push. So if you remove a configuration, or change its `grafana_instance`, in the same change as its alert rule files, the old instances are still cleaned up.
 
-If an instance in the old configuration is no longer reachable, for example, because it was shut down, the deploy stage logs a warning and carries on.
+If an instance that's only in the old configuration is no longer reachable, for example, because it was shut down, the deploy stage logs a warning and carries on. An unreachable instance that's still in the configuration fails the deployment.
 
 There's no previous configuration to read on a first deployment, a manually triggered run, after a force-push, or when the previous file isn't a valid v2 configuration. In those cases, the deploy stage says so and deletes the alert rule from the instances in the current configuration instead.
 
-Removing a configuration or an instance without removing its alert rule files doesn't delete anything. To clean up, run a fresh deployment or delete the alert rules in Grafana.
+When you remove a configuration, the integrate stage removes its conversion and alert rule files from the pull request, so the deploy stage deletes its alert rules after you merge. Removing an instance from `grafana_instance` doesn't remove any files, so it doesn't delete anything from that instance. To clean it up, run a fresh deployment or delete the alert rules in Grafana.
 
 ## Trace a deployed alert rule
 

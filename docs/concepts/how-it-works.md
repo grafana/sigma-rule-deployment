@@ -57,7 +57,7 @@ The Actions run as four stages. The first three run on pull requests, so you can
 1. **Integrate.** The Grafana Query Integrator reads the conversion files and writes a Grafana alert rule, a _deployment file_, for each one. If you enable query testing, it also runs each query against your data source and reports the results on the pull request.
 1. **Deploy.** After you merge, the Sigma Rule Deployer creates, updates, and deletes alert rules in Grafana to match the deployment files.
 
-The convert and integrate stages commit the generated files back to your pull request branch in a commit named "Sigma Rules Deployment". Reviewers see the exact queries and alert rules that will be deployed, alongside the rule changes that produced them.
+The convert and integrate stages commit the generated files back to your pull request branch in a commit named "Sigma Rules Deployment". Reviewers see the exact queries and alert rules that the deploy stage provisions, alongside the rule changes that produced them.
 
 The following diagram shows how the workflows interact with you, your repository, and Grafana over the life of a pull request.
 
@@ -81,8 +81,8 @@ sequenceDiagram
         CI->>Grafana: Run each query against the data source
         Grafana-->>CI: Query results
     end
-    CI->>Repo: Commit conversion and alert rule files to the pull request branch
     CI-->>Dev: Pull request comments with the generated files and test results
+    CI->>Repo: Commit conversion and alert rule files to the pull request branch
     Dev->>Repo: Merge the pull request to main
     Repo->>Deploy: Run on the push of changed alert rule files
     Deploy->>Grafana: Create, update, and delete alert rules (provisioning API)
@@ -92,7 +92,7 @@ sequenceDiagram
 
 ## Generated files
 
-Your configuration file names two folders, and the Actions own the files in them.
+Your configuration file defines two folders, and the Actions own the files in them.
 
 The `conversion_path` folder holds one JSON conversion file per Sigma rule file and configuration, named `<CONFIGURATION_NAME>_<RULE_FILE_NAME>.json`. Each file contains the converted queries and the rule metadata that the integrate stage uses.
 

@@ -4,7 +4,7 @@ Your rule repository holds Sigma rules, the Sigma pipelines that adapt them to y
 
 ## Repository layout
 
-The Actions don't require a fixed layout, because the configuration file names every path. Following the [SigmaHQ/sigma](https://github.com/SigmaHQ/sigma) convention of `rules*` folders for rules and a `pipelines` folder for pipelines keeps your repository familiar to anyone who knows Sigma, and matches the paths the workflow templates watch.
+The Actions don't require a fixed layout, because the configuration file sets every path. Following the [SigmaHQ/sigma](https://github.com/SigmaHQ/sigma) convention of `rules*` folders for rules and a `pipelines` folder for pipelines keeps your repository familiar to anyone who knows Sigma, and matches the paths the workflow templates watch.
 
 ```text
 your-repo/
@@ -27,7 +27,7 @@ Group rules in a way that maps cleanly onto configurations, for example, by log 
 
 ## Rule requirements
 
-Every rule file must be a valid [Sigma rule](https://sigmahq.io/docs/basics/rules.html) and must include the `id` and `title` [metadata fields](https://sigmahq.io/docs/basics/rules.html#available-sigma-metadata-fields). The integrate stage uses them to identify and name the alert rule.
+Every rule file must be a valid [Sigma rule](https://sigmahq.io/docs/basics/rules.html) and must include the `id` and `title` [metadata fields](https://sigmahq.io/docs/basics/rules.html#available-sigma-metadata-fields). The `id` must be a UUID, as the Sigma specification requires. The integrate stage uses the two fields to identify and name the alert rule, and fails if an `id` isn't a valid UUID.
 
 A [correlation rule](https://sigmahq.io/docs/meta/correlations.html) must be in the same file as every rule it references. Combine them with YAML's multiple-document separator, `---`.
 
@@ -36,7 +36,7 @@ A [correlation rule](https://sigmahq.io/docs/meta/correlations.html) must be in 
 
 ## Pipelines
 
-[Sigma pipelines](https://sigmahq.io/docs/digging-deeper/pipelines.html) are YAML files that map Sigma's generic field names onto the fields in your data and apply backend-specific transformations. Each configuration lists the pipelines to apply in its `conversion.pipelines` setting, either as file paths relative to the repository root or as the names of pipelines that an installed backend plugin provides.
+[Sigma pipelines](https://sigmahq.io/docs/digging-deeper/pipelines.html) are YAML files that map Sigma's generic field names onto the fields in your data and apply backend-specific transformations. Each configuration lists the pipelines to apply in its `conversion.pipelines` setting, either as paths relative to the repository root or as the names of pipelines that an installed backend plugin provides.
 
 ![Create a folder for your pipelines](../../assets/Pipelines.png "Pipelines")
 

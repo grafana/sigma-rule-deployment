@@ -1,6 +1,6 @@
 # Alert rule labels and annotations
 
-The integrate stage adds labels and annotations to every alert rule it builds. Some are built in, and you can add your own as templates filled in from the Sigma rule's metadata, for example, its level or log source. Labels drive [notification policies](https://grafana.com/docs/grafana/latest/alerting/fundamentals/notifications/notification-policies/), so templated labels let you route alerts by severity, product, or team.
+The integrate stage adds built-in annotations to every alert rule it builds, and you can add your own labels and annotations as templates filled in from the Sigma rule's metadata, for example, its level or log source. Labels drive [notification policies](https://grafana.com/docs/grafana/latest/alerting/fundamentals/notifications/notification-policies/), so templated labels let you route alerts by severity, product, or team.
 
 ## Template labels and annotations
 
@@ -35,7 +35,7 @@ The conversion file only contains the rule fields listed in `conversion.required
 
 ### Template functions
 
-Templates can use these string functions from Go's `strings` package: `toUpper`, `toLower`, `title`, `trim`, `trimSpace`, `trimPrefix`, `trimSuffix`, `trimLeft`, `trimRight`, `hasPrefix`, `hasSuffix`, `contains`, `containsAny`, `replace`, `replaceAll`, `split`, `splitAfter`, `splitAfterN`, `splitN`, `join`, `fields`, `index`, `lastIndex`, `indexAny`, `lastIndexAny`, `count`, `repeat`, `compare`, and `equalFold`.
+Templates can use these string functions, most of them from Go's `strings` package: `toUpper`, `toLower`, `title`, `trim`, `trimSpace`, `trimPrefix`, `trimSuffix`, `trimLeft`, `trimRight`, `hasPrefix`, `hasSuffix`, `contains`, `containsAny`, `replace`, `replaceAll`, `split`, `splitAfter`, `splitAfterN`, `splitN`, `join`, `fields`, `index`, `lastIndex`, `indexAny`, `lastIndexAny`, `count`, `repeat`, `compare`, and `equalFold`.
 
 For example, the following label is `CLOUDTRAIL` for a rule with `logsource.service: cloudtrail`:
 
@@ -68,7 +68,7 @@ Every alert rule gets the following annotations, so you can trace it back to its
 
 | Annotation           | Value                                                    |
 | -------------------- | -------------------------------------------------------- |
-| `Query`              | The converted query.                                     |
+| `Query`              | The first converted query, before any Loki metric wrapping. |
 | `TimeWindow`         | The `time_window` the query uses.                        |
 | `Lookback`           | The `lookback` the query uses.                           |
 | `LogSourceUid`       | The UID of the data source.                              |

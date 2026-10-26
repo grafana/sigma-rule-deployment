@@ -4,7 +4,7 @@ The Actions authenticate to Grafana with a [service account](https://grafana.com
 
 ## Before you begin
 
-You need a Grafana instance, either in [Grafana Cloud](https://grafana.com/docs/grafana-cloud/get-started/) or self-managed, and a user with [permission to create service accounts](https://grafana.com/docs/grafana/latest/administration/service-accounts/#before-you-begin). You also need admin access to the GitHub repository that holds your rules, so you can add secrets.
+You need a Grafana instance, either in [Grafana Cloud](https://grafana.com/docs/grafana-cloud/get-started/) or self-managed, and a user with [permission to create service accounts](https://grafana.com/docs/grafana/latest/administration/service-accounts/#before-you-begin). You also need administrator access to the GitHub repository that holds your rules, so you can add secrets.
 
 ## Create the service account
 
@@ -42,8 +42,8 @@ If your configurations deploy to more than one Grafana instance, each instance n
 
 ```json
 {
-  "https://prod.grafana.net": "<PROD_TOKEN>",
-  "https://staging.grafana.net": "<STAGING_TOKEN>"
+  "https://<PROD_STACK>.grafana.net": "<PROD_TOKEN>",
+  "https://<STAGING_STACK>.grafana.net": "<STAGING_TOKEN>"
 }
 ```
 
@@ -51,7 +51,7 @@ With a JSON object, the following rules apply:
 
 - Every instance a configuration tests queries against or deploys to must have a token. The deploy stage fails before it deploys anything if a token is missing, so no alert rule is skipped silently.
 - An instance only ever uses its own token. There's no fallback token.
-- URLs match regardless of case, a default port, or a trailing slash, so `https://Prod.grafana.net/` matches `https://prod.grafana.net`.
+- URLs match regardless of the case of the host name, a default port, or a trailing slash, so `https://Example.grafana.net/` matches `https://example.grafana.net`.
 - The Actions mask each token in the logs, as well as the object as a whole.
 
 If you use one instance, or several instances that share a token, store the plain token instead. The Actions use it for every instance.

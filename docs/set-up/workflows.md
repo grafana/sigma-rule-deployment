@@ -85,6 +85,8 @@ jobs:
         with:
           persist-credentials: false
       - uses: ibiqlik/action-yamllint@<YAMLLINT_COMMIT_SHA> # <YAMLLINT_RELEASE_TAG>
+        with:
+          file_or_dir: rules/
 
   sigma-rules-validator:
     runs-on: ubuntu-latest
@@ -114,7 +116,7 @@ The validator accepts the following inputs:
 > [!IMPORTANT]
 > The validator doesn't support files with more than one YAML document, which correlation rules need. Leave the folder that holds your correlation rules out of `paths`. Refer to [Rule requirements](rules-and-pipelines.md#rule-requirements).
 
-yamllint reads its settings from a `.yamllint` file in the root of your repository. The following configuration is based on the one the [SigmaHQ rule repository](https://github.com/SigmaHQ/sigma/blob/master/.yamllint) uses. It expects 4-space indentation, like the SigmaHQ rules, but leaves your workflow files out of that check, and it turns off the line length limit because Sigma rules often have long lines.
+yamllint reads its settings from a `.yamllint` file in the root of your repository. The following configuration is based on the one the [SigmaHQ rule repository](https://github.com/SigmaHQ/sigma/blob/master/.yamllint) uses. It turns off the line length limit, because Sigma rules often have long lines, and expects 4-space indentation, like the SigmaHQ rules. Your configuration file and workflows probably use 2-space indentation, which is why the workflow only lints the `rules/` folder.
 
 ```yaml
 # https://yamllint.readthedocs.io/en/latest/configuration.html
@@ -182,15 +184,15 @@ The reusable workflow accepts the following inputs:
 | `output_log_lines`                 | boolean | Include log lines in the query test results.                                                                                                | `false`               |
 | `all_rules`                        | boolean | Convert and integrate every rule on every run, not only the rules that changed.                                                              | `false`               |
 | `actions_username`                 | string  | User name of the automation that commits the generated files. The Actions use it to tell automated commits from human edits.                | `github-actions[bot]` |
-| `changed_files_from_base`          | boolean | Detect changed files against the pull request base branch instead of the last automation commit.                                            | `false`               |
-| `continue_on_query_testing_errors` | boolean | Finish integration when query testing fails, and report the errors. Sets the default for the `continue_on_error` configuration setting.     | `true`                |
-| `vault_path`                       | string  | For use within Grafana Labs: read the token from Grafana's internal Vault instead of `grafana_sa_token`.                                    | `""`                  |
+| `changed_files_from_base`          | boolean | Intended to detect changed files against the pull request base branch. Currently broken: setting it to `true` stops conversion from finding changes and makes integration fail, so leave it `false`. | `false`               |
+| `continue_on_query_testing_errors` | boolean | Finish integration when query testing fails, and report the errors. Currently not passed on to the integrate Action, so it has no effect, and the Action's default of `true` applies. | `true`                |
+| `vault_path`                       | string  | For use within Grafana Labs: read the token from the Grafana Labs internal Vault instead of `grafana_sa_token`.                                    | `""`                  |
 
 It accepts the following secret:
 
 | Secret             | Description                                                                                                                                                 |
 | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `grafana_sa_token` | Token used to test queries, or a JSON object of tokens for each instance. Needs the **Data sources: Reader** role. Optional: without it, queries aren't tested. |
+| `grafana_sa_token` | Token used to test queries, or a JSON object of tokens for each instance. Needs the **Data sources: Reader** role. If you don't pass it, set `test_queries: false`, or query tests fail to authenticate. |
 
 ## Deploy
 
@@ -226,14 +228,14 @@ The reusable workflow accepts the following inputs:
 | -------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------- |
 | `config_path`  | string  | Path to the configuration file. Required.                                                                                           | None    |
 | `fresh_deploy` | boolean | Delete every alert rule in the configured folders and recreate them from the deployment files. Destructive. Refer to [Deployments](../use/deployments.md#fresh-deployments). | `false` |
-| `vault_path`   | string  | For use within Grafana Labs: read the token from Grafana's internal Vault instead of `grafana_sa_token`.                            | `""`    |
+| `vault_path`   | string  | For use within Grafana Labs: read the token from the Grafana Labs internal Vault instead of `grafana_sa_token`.                            | `""`    |
 
 It accepts the following secrets:
 
 | Secret                | Description                                                                                                                                                                                       |
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `grafana_sa_token`    | Token used to provision alert rules, or a JSON object of tokens for each instance. Needs the alerting roles listed in [Create a Grafana service account token](grafana-service-account.md).       |
-| `custom_github_token` | GitHub token used to comment on pull requests. Defaults to the workflow's `GITHUB_TOKEN`.                                                                                                         |
+| `custom_github_token` | GitHub token for the deploy Action. Currently has no effect: the pull request comments always use the workflow's `GITHUB_TOKEN`. |
 
 ## Build your own workflows
 
