@@ -2,7 +2,7 @@
 
 Thanks for contributing! This document covers local development on **this** repository —
 the Action suite itself. If you're looking to _use_ the Actions in your own rule repo,
-see [GettingStarted.md](GettingStarted.md) instead.
+see the [documentation](docs/README.md) instead.
 
 ## Repository layout
 
@@ -25,6 +25,7 @@ Actions and helper scripts that wrap it.
 | `.github/scripts/`                                            | Branch creation and verified-commit helpers used by workflows            | Bash      |
 | `config/`                                                     | Config JSON schema, example config, reusable workflow templates          | YAML/JSON |
 | `integration-test/`                                           | Fixtures copied into the integration test repo on every PR               | YAML/JSON |
+| `docs/`                                                       | User documentation                                                       | Markdown  |
 | `Dockerfile`, `entrypoint.sh`                                 | The published image and its subcommand dispatch                          | —         |
 
 ## Prerequisites
@@ -129,11 +130,38 @@ the minimum per job. Keep it that way.
 [`config/config-example-v2.yml`](config/config-example-v2.yml) together, since the
 [`validate`](actions/validate/README.md) action checks user configs against the schema.
 
-**Documentation.** Each Action's `README.md` is its reference documentation. If you change
-inputs, outputs, or behaviour, update that README in the same PR — and
-[GettingStarted.md](GettingStarted.md) too if the change affects setup.
+**Documentation.** User documentation lives in [`docs/`](docs/README.md), and each Action's
+`README.md` is the reference for its inputs and outputs. If you change inputs, outputs, or
+behaviour, update the Action's README and the affected `docs/` pages in the same PR. A
+configuration change also updates the
+[configuration reference](docs/configure/configuration-reference.md).
 
 ## Releasing
 
-See [Releasing](README.md#releasing) in the README. Note that releases are immutable, so the
-SBOM must be attached while the release is still a draft — the tag push automates this.
+We use Git tags to mark released versions, and automation to push the matching Docker image and
+attach a Software Bill of Materials (SBOM) to the release.
+
+This repository has [immutable releases](https://docs.github.com/en/code-security/concepts/supply-chain-security/immutable-releases)
+enabled, so a release's assets are locked once it's published and can't be added, changed, or
+deleted. The SBOM must therefore be attached while the release is still a **draft**. Pushing the
+release tag does this for you: it creates the draft release and attaches the SBOM for you to
+review before publishing.
+
+When `main` is ready to release:
+
+1. Choose the version number using [Semantic Versioning](https://semver.org/). Version numbers
+   must match `\d+\.\d+\.\d+(-[0-9A-Za-z-]+)?`.
+2. Check out `main` and create a signed tag named after the version with a `v` prefix, for example
+   `git tag --sign --message="Release vX.Y.Z" vX.Y.Z`.
+3. Push the tag, for example `git push --tags`. This triggers the
+   [SBOM on Release](.github/workflows/sbom-immutable-release.yml) workflow, which exports the
+   SPDX SBOM from Socket, creates a **draft** release with generated notes, and attaches the SBOM
+   as the `sigma-rule-deployment-vX.Y.Z.spdx.json` asset. The release is marked as a pre-release
+   when the tag starts with `v0.` or has an `-alpha`, `-beta`, or `-rcN` suffix.
+4. Open the draft release in GitHub. Review the generated release notes, check the pre-release
+   flag, and confirm the `.spdx.json` SBOM asset is attached. It must be there now, because
+   immutable releases prevent adding assets after publishing.
+5. Publish the draft release.
+6. Check that the [Build & Integration Test Image](.github/workflows/build-docker.yml) workflow,
+   which pushes the tagged image to the GitHub Container Registry (GHCR) on publish, completed
+   successfully for the release.

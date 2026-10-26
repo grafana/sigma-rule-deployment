@@ -1,236 +1,47 @@
-# Sigma Rule Deployment GitHub Actions Suite
-
-Automate the conversion, testing, and deployment of [Sigma rules](https://sigmahq.io/) to [Grafana Alerting](https://grafana.com/docs/grafana/latest/alerting/) rules with GitHub Actions using a [Detection as Code](./README.md#what-is-detection-as-code) approach using a declarative configuration file.
-
-## Available Actions
-
-- [**Config Validator**](./actions/validate/README.md): Validates configuration files against the JSON schema to ensure proper structure and required fields before processing.
-- [**Sigma Rule Validation**](./actions/sigma-validation/README.md): Before converting and deploying your Sigma rules, we strongly recommend validating them to ensure they conform to the [Sigma specification](https://sigmahq.io/docs/). Use the [SigmaHQ Sigma Rules Validator](https://github.com/SigmaHQ/sigma-rules-validator) GitHub Action to automatically validate your rules in your CI/CD pipeline.
-- [**Sigma Rule Converter**](./actions/convert/README.md): Converts Sigma rules to target query languages using `sigma-cli`. Supports dynamic plugin installation, custom configurations, and output management, producing JSON output files containing converted queries and rule metadata.
-- [**Grafana Query Integrator**](./actions/integrate/README.md): Processes the JSON output from the Sigma Rule Converter and generates Grafana-compatible alert rule configurations, bridging the gap between converted Sigma rules and Grafana alerting.
-- [**Sigma Rule Deployer**](./actions/deploy/README.md): Deploys alert rule files to Grafana, supporting both incremental deployments (only changed files) and fresh deployments (complete replacement).
-
-## Usage
-
-1. Create a GitHub repository and add the [Sigma rules](https://sigmahq.io/docs/basics/rules.html) and [pipelines](https://sigmahq.io/docs/digging-deeper/pipelines.html) you want to convert
-   - Following the main [SigmaHQ/sigma](https://github.com/SigmaHQ/sigma) convention, we put our rules into folders starting with `rules`, and we put our Sigma pipelines in a `pipelines` folder
-   - Note that any [Sigma correlation rules](https://sigmahq.io/docs/meta/correlations.html) you want to convert must have the rules they reference in the same file (see [the FAQ](#faq))
-2. Create a [Grafana service account token](https://grafana.com/docs/grafana/latest/administration/service-accounts/) and [add it as a secret](https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions) to your GitHub repository
-   - Ensure the service account is either an Editor and/or has the following [RBAC roles](https://grafana.com/docs/grafana/latest/administration/service-accounts/#assign-roles-to-a-service-account-in-grafana):
-     - Alerting: Access to alert rules provisioning API
-     - Alerting: Rules Reader
-     - Alerting: Rules Writer
-     - Alerting: Set provisioning status
-     - Data sources: Reader
-3. Create a configuration file that defines one or more configurations and add it to the repository
-   - See the sample [configuration file](config/config-example-v2.yml)
-   - See also the [configuration file schema](config/schema-v2.json) for more details
-   - The v1 configuration format is deprecated and no longer supported by the Actions. If you have a v1 file, use the [migration script](scripts/migrate-config-v1-to-v2/README.md) to convert it to v2
-4. Add a workflow to run the conversion/integration Actions on a PR commit or issue comment
-   - See the reusable workflow [convert-integrate.yml](.github/workflows/convert-integrate.yml)
-5. Add a workflow to run the deployment Action on a push to main
-   - See the reusable workflow [deploy.yml](.github/workflows/deploy.yml)
-6. Create a PR that adds or modify a converted Sigma rule, and add a comment `sigma convert all` to the PR to see the conversion and integration process in action (see [Comment-driven triggers](#comment-driven-triggers) for the full command grammar)
-7. Once you're happy with the results, merge the PR into main, which will trigger the deployer to provision the Alerting rules to your Grafana instance
-8. With the alert rules successfully provisioned, set up [Alerting notifications](https://grafana.com/docs/grafana/latest/alerting/configure-notifications/) for the relevant folder and/or groups to directly contact affected users. Alternatively you can connect them to [Grafana IRM](https://grafana.com/docs/grafana-cloud/alerting-and-irm/irm/) and use it to manage on-call rotas and simplify alert routing
+# Sigma Rule Deployment
 
-## Comment-driven triggers
+Sigma Rule Deployment is a suite of GitHub Actions that turns [Sigma rules](https://sigmahq.io/) into [Grafana Alerting](https://grafana.com/docs/grafana/latest/alerting/) rules. Keep your detections and one configuration file in a GitHub repository, and the Actions convert, test, and deploy them through pull requests: Detection as Code for Grafana.
 
-On PRs, members (OWNER, MEMBER or COLLABORATOR) can drive conversion and integration with comment commands:
+- **Convert** Sigma rules into queries for Loki, Elasticsearch, Splunk, and many more data sources with Sigma CLI.
+- **Test** every query against your data source and review the results on the pull request before anything reaches Grafana.
+- **Deploy** the alert rules to one or more Grafana instances when you merge, and clean them up when you remove a rule.
+- **Control** each run from pull request comments, such as `sigma convert all`.
 
-```
-sigma convert all
-sigma convert <target> [--no-test] [--debug] [--query-time-window <duration>]
-sigma integrate all
-sigma integrate <target> [--no-test] [--debug] [--query-time-window <duration>]
-```
+## What is Detection as Code?
 
-- `convert` runs conversion then integration; `integrate` runs integration only (skips the conversion step).
-- `<target>` is a configuration name from the config file, or a name prefix: `ops` selects every configuration whose name starts with `ops`. Exact matches win over prefix matches. Targets always select whole configurations, never individual rules.
-- `--no-test` skips query testing for the run, overriding the `test_queries` settings in the configuration file.
-- `--debug` enables verbose output (tracebacks, pretty-printed JSON, log lines in query test results).
-- `--query-time-window` overrides the default query testing time range (e.g. `30m`, `6h`, `1d12h`); per-configuration `from`/`to` settings still take precedence.
+Detection as Code means managing security detections the way you manage software. Rules live as readable files in Git, every change goes through review, and automation deploys them, so you always know which detections run in production, who changed them, and why.
 
-Invalid commands are answered with a reply showing the usage and the valid configuration names. Comments from other users, and comments that are not commands, are ignored. Commands posted by automation work out of the box.
+Sigma Rule Deployment brings this to Grafana. [Sigma](https://sigmahq.io/) gives you a vendor-neutral rule format with [thousands of community rules](https://github.com/SigmaHQ/sigma), and the Actions turn those rules into alert rules for your data source. Refer to [How Sigma Rule Deployment works](docs/concepts/how-it-works.md) for the full picture.
 
-## FAQ
+## Get started
 
-### What backends/data sources do you support?
+Follow [Get started](docs/get-started.md) to set up a rule repository and deploy your first alert rules.
 
-These Actions can convert rules using **any** Sigma backend and produce valid alert rules for **any** data source, however, to date they have only been thoroughly tested with Loki and Elasticsearch. In particular, converting log queries into metric queries so they can be used correctly with Grafana Managed Alerting is dependent on the backend supporting that option or by modifying the generated queries using the `query_model` option.
+## Documentation
 
-Relevent conversion backends and data sources that can be used in Grafana include:
+The [documentation](docs/README.md) covers setup, configuration, and day-to-day use, including:
 
-| Sigma Backend                                                                          | Data Source                                                                                                    | Supported Integration Method |
-| -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ---------------------------- |
-| [Grafana Loki](https://github.com/grafana/pySigma-backend-loki)                        | [Loki data source](https://grafana.com/docs/loki/latest/)                                                      | Native                       |
-| [Elasticsearch](https://github.com/SigmaHQ/pySigma-backend-elasticsearch)              | [Elasticsearch data source](https://grafana.com/docs/grafana/latest/datasources/elasticsearch/)                | Native                       |
-| [Azure KQL](https://github.com/AttackIQ/pySigma-backend-kusto)                         | [Azure Data Explorer data source](https://grafana.com/grafana/plugins/grafana-azure-data-explorer-datasource/) | Native                       |
-| [Azure KQL](https://github.com/AttackIQ/pySigma-backend-kusto)                         | [Azure Monitor data source](https://grafana.com/docs/grafana/latest/datasources/azure-monitor/)                | Custom Model                 |
-| [Datadog](https://github.com/SigmaHQ/pySigma-backend-datadog)                          | [Datadog data source](https://grafana.com/grafana/plugins/grafana-datadog-datasource/)                         | Native                       |
-| [Opensearch](https://github.com/SigmaHQ/pySigma-backend-opensearch)                    | [Opensearch data source](https://grafana.com/grafana/plugins/grafana-opensearch-datasource/)                   | Native                       |
-| [Splunk](https://github.com/SigmaHQ/pySigma-backend-splunk)                            | [Splunk data source](https://grafana.com/grafana/plugins/grafana-splunk-datasource/)                           | Native                       |
-| [SQLite](https://github.com/SigmaHQ/pySigma-backend-sqlite)                            | [SQLite data source](https://grafana.com/grafana/plugins/frser-sqlite-datasource/)                             | Native                       |
-| [SurrealQL](https://github.com/SigmaHQ/pySigma-backend-surrealql)                      | [SurrealDB data source](https://grafana.com/grafana/plugins/fiskaly-surrealdb-datasource/)                     | Native                       |
-| [ClickHouse](https://github.com/clicksiem/pySigma-backend-clickhouse)                  | [ClickHouse data source](https://grafana.com/grafana/plugins/grafana-clickhouse-datasource/)                   | Native                       |
-| [Quickwit](https://github.com/sifex/pySigma-backend-quickwit/)                         | [Quickwit data source](https://grafana.com/grafana/plugins/quickwit-quickwit-datasource/)                      | Native                       |
-| [Parseable](https://github.com/parseablehq/pySigma-backend-parseable)                  | [Parseable data source](https://grafana.com/grafana/plugins/parseable-parseable-datasource/)                   | Native                       |
-| [CrowdStrike LogScale](https://github.com/SigmaHQ/pySigma-backend-crowdstrike)         | [Falcon LogScale data source](https://grafana.com/grafana/plugins/grafana-falconlogscale-datasource/)          | Custom Model                 |
-| [SentinelOne PowerQuery](https://github.com/7RedViolin/pySigma-backend-sentinelone-pq) | [Dataset data source](https://grafana.com/grafana/plugins/sentinelone-dataset-datasource/)                     | Native                       |
+- [How Sigma Rule Deployment works](docs/concepts/how-it-works.md)
+- [Set up the workflows](docs/set-up/workflows.md)
+- [Configuration reference](docs/configure/configuration-reference.md)
+- [Data sources and query models](docs/configure/data-sources.md)
+- [FAQ](docs/faq.md)
 
-- **Native**: The data source plugin is supported by the integrate action and the query model is generated automatically. Loki and Elasticsearch are selected by the `target` (or `integration.data_source_type`) being `loki` or `elasticsearch`; the other native data sources are selected by setting `integration.data_source_type` to the plugin's type ID, or by `target` where it is one of the names in the [table below](#native-query-models).
-- **Custom Model**: The data source plugin is supported by the integrate action but the query model must be passed as a custom model in the conversion configuration, as it needs a value specific to your environment (see [How can I use a custom query model for a data source?](#how-can-i-use-a-custom-query-model-for-a-data-source)).
+## Actions
 
-> [!NOTE]
-> Only the Loki and Elasticsearch models have been tested against live data sources. The other native models were derived from each plugin's source code and documentation, so please [raise an issue](https://github.com/grafana/sigma-rule-deployment/issues) if one doesn't work.
+| Action                                                  | What it does                                                                     |
+| ------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| [Config Validator](actions/validate/README.md)          | Validates the configuration file against the JSON schema.                       |
+| [Sigma Rule Converter](actions/convert/README.md)       | Converts Sigma rules into queries with Sigma CLI.                               |
+| [Grafana Query Integrator](actions/integrate/README.md) | Builds Grafana alert rules from the converted queries and tests them.           |
+| [Sigma Rule Deployer](actions/deploy/README.md)         | Deploys the alert rules to Grafana.                                              |
 
-#### Native query models
+Most repositories use the reusable workflows that combine these Actions. Refer to [Set up the workflows](docs/set-up/workflows.md).
 
-| Data source         | `integration.data_source_type`           | Also selected by `target` | What the query needs to return                                                                                                                                   |
-| ------------------- | ---------------------------------------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Azure Data Explorer | `grafana-azure-data-explorer-datasource` |                           | A time series: KQL that ends `summarize ... by bin(<time>, <step>) \| order by <time> asc`. The data source must have a default database and cluster configured. |
-| Datadog             | `grafana-datadog-datasource`             | `datadog`                 | A [logs search](https://grafana.com/docs/plugins/grafana-datadog-datasource/latest/alerting/) in aggregate mode, returning the count of matching logs            |
-| OpenSearch          | `grafana-opensearch-datasource`          | `opensearch`              | A Lucene query; the model counts matching documents per date histogram bucket, using the data source's time field                                                |
-| Splunk              | `grafana-splunk-datasource`              | `splunk`                  | SPL that returns numeric values with a time field, e.g., `... \| timechart span=1m count`                                                                        |
-| SQLite              | `frser-sqlite-datasource`                | `sqlite`                  | SQL returning a column named `time` (Unix seconds) and a numeric column                                                                                          |
-| SurrealDB           | `fiskaly-surrealdb-datasource`           | `surrealql`               | SurrealQL run in raw mode. Alerting is not documented by the plugin, so test carefully                                                                           |
-| ClickHouse          | `grafana-clickhouse-datasource`          | `clickhouse`              | SQL returning a time series (using `$__timeFilter(col)`) or a single numeric value                                                                               |
-| Quickwit            | `quickwit-quickwit-datasource`           | `quickwit`                | A Lucene query; the model counts matching documents per date histogram bucket, using the index's timestamp field                                                 |
-| Parseable           | `parseable-parseable-datasource`         | `parseable`               | SQL returning a single numeric row, e.g., `SELECT COUNT(*) FROM "stream" WHERE ...`                                                                              |
-| Dataset             | `sentinelone-dataset-datasource`         | `sentinelone-pq`          | A PowerQuery returning a timestamp and numeric columns                                                                                                           |
+## Contributing
 
-The `target` names are the Sigma backend names, so `kusto` (Azure KQL) is deliberately not listed, as it can be used with either Azure Monitor or Azure Data Explorer.
+To develop the Actions themselves, refer to [CONTRIBUTING.md](CONTRIBUTING.md). To report a bug or request a feature, [open an issue](https://github.com/grafana/sigma-rule-deployment/issues).
 
-### Why can't I use log queries with alert rules?
+## License
 
-> [!IMPORTANT]
-> [Alert rules](https://grafana.com/docs/grafana/latest/alerting/fundamentals/alert-rules/) only work with metric queries, not log queries.
-
-#### 1. Data source compatibility
-
-Data source plugins vary in their support for metric queries and the generated query from the convert action for Sigma rules will often only produce a log query, not a metric query. In contrast, a converted Sigma Correlation rule will generally produce a metric query, which can be used directly in the alert rule.
-
-- **Native support**: Some data sources, such as Loki, can [apply metric functions](https://grafana.com/docs/loki/latest/query/metric_queries/) to log queries
-- **Limited support**: Other data source, including the [Elasticsearch data source](https://grafana.com/docs/grafana/latest/datasources/elasticsearch/), do not support metric queries through their native query language, but their log query response can include metric metadata (e.g., counts)
-
-#### 2. Custom query models
-
-For data sources that lack native metric query support, you must provide a custom query model using the `query_model` configuration option (see [How can I use a custom query model for a data source?](#how-can-i-use-a-custom-query-model-for-a-data-source)).
-
-The query model is a JSON object that defines the data source query structure for query execution.
-
-<!-- #### SQL expressions for metric queries
-
-When using the `query_model` option, you can leverage Grafana [SQL Expressions](https://grafana.com/docs/grafana/latest/panels-visualizations/query-transform-data/sql-expressions/) to transform log queries into metric queries:
-
-```sql
-SELECT COUNT(*) FROM A
-```
-
-**Note**: SQL expressions are only [compatible](https://grafana.com/docs/grafana/latest/panels-visualizations/query-transform-data/sql-expressions/#compatible-data-sources) with certain data source plugins. -->
-
-### How can I use a custom query model for a data source?
-
-To ensure the data source plugin can execute your queries, you may need to provide a bespoke `query_model` in the `integration` section of the configuration (either in `defaults.integration` or in a configuration's own `integration` block). You do this by specifing a [fmt.Sprintf](https://pkg.go.dev/fmt#pkg-overview) formatted JSON string, which receives the following arguments:
-
-1. the ref ID for the query
-2. the UID for the data source
-3. the query, escaped as a JSON string
-
-An example query model would be:
-
-```yaml
-query_model: '{"refId":"%s","datasource":{"type":"my_data_source_type","uid":"%s"},"query":"%s","customKey":"customValue"}'
-```
-
-Or for Elasticsearch:
-
-```yaml
-query_model: '{"refId":"%s","datasource":{"type":"elasticsearch","uid":"%s"},"query":"%s","alias":"","metrics":[{"type":"count","id":"1"}],"bucketAggs":[{"type":"date_histogram","id":"2","settings":{"interval":"auto"}}],"intervalMs":2000,"maxDataPoints":1354,"timeField":"@timestamp"}'
-```
-
-The query model is passed to `fmt.Sprintf`, so you can also use indexed verbs (`%[1]s` for the ref ID, `%[2]s` for the data source UID, `%[3]s` for the query) if a value needs repeating or you need a literal `%` (written `%%`).
-
-The data sources that are not natively supported because they need a value specific to your environment can be configured as follows, replacing the placeholders in angle brackets:
-
-- **Azure Monitor** (Log Analytics): `<RESOURCE_URI>` is the full Azure resource ID of the Log Analytics workspace, e.g., `/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.OperationalInsights/workspaces/<name>`. The KQL must aggregate by time, e.g., `summarize count() by bin(TimeGenerated, 1m)`
-
-  ```yaml
-  query_model: '{"refId":"%s","datasource":{"type":"grafana-azure-monitor-datasource","uid":"%s"},"queryType":"Azure Log Analytics","azureLogAnalytics":{"query":"%s","resultFormat":"time_series","resources":["<RESOURCE_URI>"],"dashboardTime":false}}'
-  ```
-
-- **Falcon LogScale**: `<REPOSITORY>` is the name of the LogScale repository or view to query. Unlike in the query editor, the data source's default repository is not used by alert rules
-
-  ```yaml
-  query_model: '{"refId":"%s","datasource":{"type":"grafana-falconlogscale-datasource","uid":"%s"},"queryType":"LQL","formatAs":"metrics","repository":"<REPOSITORY>","lsql":"%s"}'
-  ```
-
-- **Datadog metrics**: the native Datadog model runs a logs search, but if your query is a [Datadog metrics query](https://docs.datadoghq.com/metrics/) (e.g., `avg:system.cpu.user{*}`) use
-
-  ```yaml
-  query_model: '{"refId":"%s","datasource":{"type":"grafana-datadog-datasource","uid":"%s"},"queryType":"raw_query","rawQuery":true,"query":"%s"}'
-  ```
-
-Other than the `refId` and `datasource` (which are required by Grafana), the keys used for the query model are data source dependent. They can be identified by testing a query against the data source with the [Query inspector](https://grafana.com/docs/grafana/latest/explore/explore-inspector/) open, going to the Query tab, and examining the items used in the `request.data.queries` list.
-
-### Are there any restrictions on the Sigma rule files?
-
-The main restriction are they need to be valid Sigma rules, including the `id` and `title` [metadata fields](https://sigmahq.io/docs/basics/rules.html#available-sigma-metadata-fields). If you are using [Correlation rules](https://github.com/SigmaHQ/sigma-specification/blob/main/specification/sigma-correlation-rules-specification.md), the rule files must contain **all** the referenced rules within the rule file (using [YAML's multiple document feature](https://gettaurus.org/docs/YAMLTutorial/#YAML-Multi-Documents), i.e., combined with `---`).
-
-> [!IMPORTANT]
-> The [Sigma Rules Validator](https://github.com/SigmaHQ/sigma-rules-validator) action does not currently work with multiple documents in a single YAML and hence we recommend storing such rules in a separate directory from the Sigma rules. More info can be found [here](./actions/sigma-validation/README.md)
-
-### What value should be provided for the `data_source` field in the `integration` settings?
-
-This should be the UID (Unique IDentifier) of the data source, not the data source name. You can find the UID for a data source by opening the Explore page, selecting the relevant data source, and examining the page URL for the text `"datasource":"XXX"` - that value (i.e., `XXX`) is the UID.
-
-### What impact do the Loki backend options `add_line_filters` and `case_sensitive` have on my queries?
-
-The pySigma Loki backend supports two optional boolean flags:
-
-1. `add_line_filters`: adds an additional line filter to each query without one, using the longest values being searched for, to help reduce the volume of results being parsed
-2. `case_sensitive`: changes the default behaviour of Sigma string matches to be case sensitive
-
-The imapct of these two flags are different:
-
-1. Line filters can basically be enabled in all contexts - it's a performance enhancement that should never affect the results a query brings back
-2. Changing the case sensitivity of Sigma rules carries some risk. Whilst some logs, like audit logs should be case sensitive, others may not be which _could_ mean certain rules potentially miss logs with it enabled, and some rules may not bring back **any** results. In general, if there's **any** possibility the values being searched for in the rules are user-entered, we would strongly recommend using `case_sensitive: false` (which is also the default), otherwise it can usually be true as its queries will be more performant (but you may want to try testing it with a known example)
-
-### How do these Actions interact?
-
-![Sequence Diagram](./assets/sequence-diagram.png)
-
-### What is Detection as Code?
-
-Detection as Code (DaC) is a practice where security detection rules are:
-
-- Stored as structured, human-readable files
-- Managed in a version-controlled environment (like Git) to track all changes
-- Deployed through automated pipelines to ensure consistency and traceability
-
-The goal is to manage the entire lifecycle, from developing accurate detection rules to deploying the database queries and configuring alert systems, all within a single, versioned environment.
-
-#### How does Sigma Rule Deployment implement DaC?
-
-This project helps you achieve Detection as Code using Sigma rules, GitHub, and Grafana:
-
-- Sigma rules provide a standardized format for storing detection logic with thousands of community examples
-- Sigma CLI converts these rules into queries compatible with multiple database systems (Loki, Elasticsearch, etc.)
-- Grafana executes those queries on a schedule and triggers alerts via Grafana IRM when detections occur
-
-Sigma Rule Deployment automates this workflow: it provides GitHub Actions to convert Sigma rules to queries, validates their functionality, and provisions them to Grafana as alert rules; making security monitoring more reliable and maintainable.
-
-## Releasing
-
-To release new versions of sigma-rule-deployment, we use Git tags to denote an officially released version, and automation to push the appropriately tagged Docker image and attach a Software Bill of Materials (SBOM) to the release.
-
-This repository has [immutable releases](https://docs.github.com/en/code-security/concepts/supply-chain-security/immutable-releases) enabled, which means a release's assets are locked once it is published and can no longer be added, modified, or deleted. The SBOM must therefore be attached while the release is still a **draft**, before it is published. Pushing the release tag automates this: it creates the draft release and attaches the SBOM for you to review before publishing.
-
-When the main branch is in a state that is ready to release, the process is as follows:
-
-1. Determine the correct version number using the [Semantic Versioning](https://semver.org/) methodology. All version numbers should be in the format `\d+\.\d+\.\d+(-[0-9A-Za-z-]+)?`
-2. Checkout `main` and create a signed tag for the release, named the version number prefixed with a v, e.g., `git tag --sign --message="Release vX.X.X" vX.X.X`
-3. Push the tag to GitHub, e.g., `git push --tags`. This triggers the ["SBOM on Release"](.github/workflows/sbom-release.yml) workflow, which exports the SPDX SBOM from Socket, creates a **draft** release with auto-generated notes, and attaches the SBOM as the `sigma-rule-deployment-vX.X.X.spdx.json` asset. The release is automatically marked as a pre-release when the tag starts with `v0.` or has a `-alpha/beta/rcX` suffix.
-4. Open the auto-created **draft** release in GitHub. Review and adjust the generated release notes, confirm the pre-release flag is correct, and check that the `.spdx.json` SBOM asset is attached. (The SBOM must be present now, because immutable releases prevent adding assets after publishing.)
-5. Publish the draft release.
-6. Validate that the ["Build & Integration Test Image"](.github/workflows/build-docker.yml) action, which pushes the tagged image to the GitHub Container Registry (GHCR) on publish, has completed successfully for the release.
+Sigma Rule Deployment is licensed under the [Apache License 2.0](LICENSE).

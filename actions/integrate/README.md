@@ -6,6 +6,8 @@
 
 The Grafana Query Integrator action bridges the gap between converted Sigma rules and Grafana alerting by creating properly formatted alert rule files. It processes the JSON output from the Sigma Rule Converter and generates Grafana-compatible alert rule configurations. This action should be used after the Sigma Rule Converter and before the Sigma Rule Deployer in your CI/CD pipeline.
 
+Most repositories run this Action through the reusable convert and integrate workflow. For setup and configuration, refer to the [documentation](../../docs/README.md).
+
 ## Inputs
 
 | Name                               | Description                                                                                          | Required | Default               |
@@ -18,6 +20,9 @@ The Grafana Query Integrator action bridges the gap between converted Sigma rule
 | `changed_files_from_base`          | Whether to use the changed files from the base branch                                                | No       | `false`               |
 | `actions_username`                 | The username of the actions user                                                                     | No       | `github-actions[bot]` |
 | `continue_on_query_testing_errors` | Continue integration process even when query testing fails, but print errors and continue the action. This sets the default for `continue_on_error`, so it takes precedence over `defaults.integration.continue_on_error`, but a configuration's own `continue_on_error` still overrides it | No       | `true`                |
+| `configurations`                   | Space-separated configuration names to restrict the integration to. Empty integrates all configurations | No | `""` |
+| `skip_query_testing`               | Skip all query testing, overriding the `test_queries` settings in the configuration file | No | `false` |
+| `query_time_window`                | Duration, for example `30m`, `6h`, or `1d12h`, that overrides the default query testing time range. Per-configuration `from` and `to` settings still take precedence | No | `""` |
 
 ## Outputs
 
@@ -95,13 +100,13 @@ jobs:
 - The config file must include `folders.conversion_path` and `folders.deployment_path` settings.
 - Data source configurations should include connection details and authentication.
 - Alert rule templates define the structure and default values for generated rules.
-- With `template_all_rules: true`, use `{{ highestLevel . }}` in a templated label or annotation to select the highest Sigma level in the file (`informational` < `low` < `medium` < `high` < `critical`). The helper is only registered when `template_all_rules` is enabled, so using it otherwise fails template parsing.
+- Labels and annotations can be templated from Sigma rule metadata. Refer to [Alert rule labels and annotations](../../docs/configure/labels-and-annotations.md).
 
 ### Query Testing
 
 - Query testing is optional but recommended for validation.
 - Requires a valid Grafana Service Account token with appropriate permissions.
-- When configurations test queries on different Grafana instances, set `grafana_sa_token` to a JSON object that maps each instance URL, as written in `grafana_instance`, to its token (for example `{"https://prod.grafana.net": "glsa_prod_token", "https://staging.grafana.net": "glsa_staging_token"}`). A plain token is used for every instance. With a JSON object, every instance a configuration tests against must have a token, and an instance never uses another's. See the [Sigma Rule Deployer](../deploy/README.md) for the matching rules.
+- When configurations test queries on different Grafana instances, set `grafana_sa_token` to a JSON object that maps each instance URL to its token. Refer to [Use more than one Grafana instance](../../docs/set-up/grafana-service-account.md#use-more-than-one-grafana-instance).
 - Tests queries against the past hour of data to validate syntax and execution.
 - Results are written to a JSON file whose path is exposed via the `test_query_results_file` output, rather than being included in the output value directly — this keeps large rulesets from overflowing environment-variable size limits in later workflow steps.
 
@@ -111,7 +116,7 @@ jobs:
 - Only processes files that have been modified since the last commit (or base branch).
 - Use `all_rules: true` to process all conversion files regardless of changes.
 - Obsolete alert rule files are automatically removed when corresponding conversion files are deleted.
-- **Preserving manual edits**: an alert rule file whose `annotations` contain `"manual": "true"` is never overwritten or deleted by the integrator (including orphaned-file cleanup). If you edit an alert rule file directly without the annotation, the action detects the human change against the last automation commit and backfills `"manual": "true"` automatically, preserving your edit on this and future runs. To hand the file back to automation, set the annotation to `"manual": "false"` (don't just delete it — the backfill can't distinguish a deleted flag from a normal edit and would re-add it).
+- **Preserving manual edits**: an alert rule file whose `annotations` contain `"manual": "true"` is never overwritten or deleted by the integrator. Refer to [Preserve manual modifications](../../docs/use/manual-modifications.md).
 
 ### Best Practices
 

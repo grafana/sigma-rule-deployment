@@ -4,7 +4,7 @@ A GitHub Action that validates sigma-rule-deployment configuration files against
 
 ## Overview
 
-The Config Validator action should be used as a validation step before running conversion, integration, and deployment actions. It helps catch configuration errors early in your CI/CD pipeline.
+The Config Validator action should be used as a validation step before running conversion, integration, and deployment actions. It helps catch configuration errors early in your CI/CD pipeline. For the workflow setup, refer to [Validate the configuration](../../docs/set-up/workflows.md#validate-the-configuration), and for the configuration file itself, refer to [Configuration file](../../docs/configure/README.md).
 
 ## Inputs
 
