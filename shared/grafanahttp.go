@@ -5,8 +5,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -20,6 +22,7 @@ type GrafanaClient struct {
 	timeout   time.Duration
 	userAgent string
 	client    *http.Client
+	health    *InstanceHealth
 }
 
 // defaultPorts are the ports a URL leaves out, by scheme. Its keys are the schemes of a Grafana URL.
@@ -60,6 +63,13 @@ func (c *GrafanaClient) BaseURL() string {
 // Timeout returns the request timeout of the client.
 func (c *GrafanaClient) Timeout() time.Duration {
 	return c.timeout
+}
+
+// WithHealth makes the client share the health of its instance with the other clients given the
+// same tracker, so none of them keeps requesting an instance that has stopped responding.
+func (c *GrafanaClient) WithHealth(health *InstanceHealth) *GrafanaClient {
+	c.health = health
+	return c
 }
 
 // NewGrafanaClient creates a new Grafana HTTP client
@@ -111,12 +121,30 @@ func (c *GrafanaClient) Do(ctx context.Context, method, path string, body io.Rea
 		return nil, fmt.Errorf("request URL host %q does not match client base URL", req.URL.Host)
 	}
 
-	resp, err := c.client.Do(req) //nolint:gosec // G704: req.URL.Hostname() validated to match client base URL above
-	if err != nil {
-		return nil, fmt.Errorf("failed to execute request: %w", err)
+	// Don't wait for an instance that has already stopped responding
+	if err := c.health.Check(c.baseURL); err != nil {
+		return nil, err
 	}
 
+	resp, err := c.client.Do(req) //nolint:gosec // G704: req.URL.Hostname() validated to match client base URL above
+	if err != nil {
+		// A request the caller cancelled says nothing about the instance
+		if !errors.Is(err, context.Canceled) {
+			c.recordOutcome(err, 0)
+		}
+		return nil, fmt.Errorf("failed to execute request: %w", err)
+	}
+	c.recordOutcome(nil, resp.StatusCode)
+
 	return resp, nil
+}
+
+// recordOutcome records the outcome of a request in the health of the instance, and logs when it
+// is the one that marks the instance unavailable.
+func (c *GrafanaClient) recordOutcome(err error, statusCode int) {
+	if c.health.Record(c.baseURL, err, statusCode) {
+		log.Printf("Warning: %s did not respond to %d consecutive requests, so it is skipped for the rest of the run", c.baseURL, c.health.threshold)
+	}
 }
 
 // Get performs a GET request
