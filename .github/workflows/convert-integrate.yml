@@ -155,7 +155,7 @@ jobs:
 
       - name: Commit queries and alert rules
         if: github.event_name != 'issue_comment' || steps.parse.outputs.triggered == 'true'
-        uses: stefanzweifel/git-auto-commit-action@4a55954c782fc1ea30b9056cd3e7a2b40ca8887d # v7.2.0
+        uses: stefanzweifel/git-auto-commit-action@d0b01107b5db882071f96de5dd4b54961ea93f4c # v7.2.1
         with:
           commit_message: "Sigma Rules Deployment"
           branch: ${{ github.event_name == 'issue_comment' && steps.get-pr-branch.outputs.result || github.head_ref }}
