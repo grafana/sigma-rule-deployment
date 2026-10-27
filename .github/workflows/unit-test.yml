@@ -169,6 +169,9 @@ jobs:
           node-version: "25"
           package-manager-cache: false
 
+      - name: Run unit tests for determine-image-ref
+        run: node --test scripts/determine-image-ref/test/*.test.mjs
+
       - name: Install dependencies for comment-sigma-results
         run: |
           cd scripts/comment-sigma-results
