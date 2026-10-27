@@ -26,10 +26,16 @@ REPO_ROOT="$(cd "$GITHUB_ACTION_PATH/../.." && pwd)"
 # Output: image_ref=sha-abc123def456
 ```
 
+Run the tests from the repository root (requires Node.js):
+
+```bash
+node --test scripts/determine-image-ref/test/*.test.mjs
+```
+
 ## Input
 
 - `ACTION_REF` - GitHub action reference (provided as command-line argument or environment variable)
-  - Can be a version tag (e.g., `v1.2.3`)
+  - Can be a version tag (e.g., `v1`, `v1.2`, `v1.2.3`, or `v1.2.3-rc.1`)
   - Can be `latest`
   - Can be a commit SHA
 
@@ -39,7 +45,9 @@ The script outputs `image_ref` to `$GITHUB_OUTPUT` (in GitHub Actions) or stdout
 
 ### Logic
 
-1. **Version Tag**: If `ACTION_REF` matches pattern `^v[0-9]+(\.[0-9]+)*(\.[0-9]+)?$` (e.g., `v1.2.3`)
+1. **Version Tag**: If `ACTION_REF` matches the original numeric version pattern or is `v` followed by a valid [Semantic Version](https://semver.org/)
+   - The original pattern, `^v[0-9]+(\.[0-9]+)*(\.[0-9]+)?$`, continues to accept any number of numeric components, including leading zeroes (e.g., `v1`, `v1.2`, `v01.2.3`, and `v1.2.3.4`)
+   - Semantic Versions use the official regex adapted for Bash, adding support for prereleases and build metadata according to SemVer rules
    - Output: `image_ref=$ACTION_REF`
 
 2. **Latest**: If `ACTION_REF` equals `latest`
@@ -60,6 +68,13 @@ This script standardizes the behavior across all actions:
 |------------|------------------|
 | `v1.2.3` | `v1.2.3` |
 | `v0.1.0` | `v0.1.0` |
+| `v1.2.3-rc.1` | `v1.2.3-rc.1` |
+| `v1.2.3+build.001` | `v1.2.3+build.001` |
+| `v1` | `v1` |
+| `v1.2` | `v1.2` |
+| `v1.3` | `v1.3` |
+| `v01.2.3` | `v01.2.3` |
+| `v1.2.3.4` | `v1.2.3.4` |
 | `latest` | `main` |
 | `abc123` | `sha-abc123` |
 | `main` | `sha-main` |

@@ -22,8 +22,14 @@ if [ -z "$ACTION_REF" ]; then
   exit 1
 fi
 
-# Check if the ACTION_REF is a tag (starts with v followed by numbers/dots)
-if [[ "$ACTION_REF" =~ ^v[0-9]+(\.[0-9]+)*(\.[0-9]+)?$ ]]; then
+# Official SemVer regex: https://semver.org/#is-there-a-suggested-regular-expression-regex-to-check-a-semver-string
+# Adapted for Bash ERE: \d becomes [0-9], (?:...) becomes (...), and the v tag prefix is required.
+SEMVER_REGEX='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*)(\.(0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*))*))?(\+([0-9a-zA-Z-]+(\.[0-9a-zA-Z-]+)*))?$'
+# Preserve every numeric version tag accepted by the original script.
+LEGACY_VERSION_REGEX='^v[0-9]+(\.[0-9]+)*(\.[0-9]+)?$'
+
+# Accept the original numeric version tags and v-prefixed Semantic Versions.
+if [[ "$ACTION_REF" =~ $LEGACY_VERSION_REGEX || "$ACTION_REF" =~ $SEMVER_REGEX ]]; then
   IMAGE_REF="$ACTION_REF"
   echo "Using tag: $ACTION_REF"
 elif [[ "$ACTION_REF" == "latest" ]]; then
