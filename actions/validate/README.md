@@ -4,15 +4,15 @@ A GitHub Action that validates sigma-rule-deployment configuration files against
 
 ## Overview
 
-The Config Validator action should be used as a validation step before running conversion, integration, and deployment actions. It helps catch configuration errors early in your CI/CD pipeline.
+The Config Validator action should be used as a validation step before running conversion, integration, and deployment actions. It helps catch configuration errors early in your CI/CD pipeline. For the workflow setup, refer to [Validate the configuration](../../docs/set-up/workflows.md#validate-the-configuration), and for the configuration file itself, refer to [Configuration file](../../docs/configure/README.md).
 
 ## Inputs
 
 | Input            | Description                                                                                                                                  | Required | Default                 |
 | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ----------------------- |
 | `config_file`    | Path to the configuration file to validate, relative to the root of the repository                                                          | No       | `config.yml`            |
-| `v2_schema_file` | Path to the v2 JSON schema file, relative to the root of the repository. Defaults to the schema bundled with this action                    | No       | `config/schema-v2.json` |
-| `v1_schema_file` | Path to the v1 JSON schema file, relative to the root of the repository. Only used to recognise a v1 config. Defaults to the bundled schema | No       | `config/schema.json`    |
+| `v2_schema_file` | Path to the v2 JSON schema file, relative to the root of the repository. Defaults to the schema bundled with this action                    | No       | `""` (bundled schema)   |
+| `v1_schema_file` | Path to the v1 JSON schema file, relative to the root of the repository. Only used to recognise a v1 config. Defaults to the bundled schema | No       | `""` (bundled schema)   |
 | `github_token`   | GitHub token used to post a PR comment with a suggested v2 configuration when a v1 configuration is detected. If omitted, no comment is posted | No       | `""`                    |
 
 ## Usage
