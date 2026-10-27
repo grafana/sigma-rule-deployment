@@ -160,7 +160,6 @@ jobs:
   convert-integrate:
     permissions:
       contents: write # to commit the generated files
-      id-token: write
       packages: read # to pull the Action Docker image
       pull-requests: write # to comment on the pull request
     uses: grafana/sigma-rule-deployment/.github/workflows/convert-integrate.yml@<COMMIT_SHA> # <RELEASE_TAG>
@@ -212,7 +211,6 @@ jobs:
   deploy:
     permissions:
       contents: read # to read the deployment files
-      id-token: write
       packages: read # to pull the Action Docker image
       pull-requests: write # to comment on the merged pull request
     uses: grafana/sigma-rule-deployment/.github/workflows/deploy.yml@<COMMIT_SHA> # <RELEASE_TAG>

@@ -19,7 +19,6 @@ Actions and helper scripts that wrap it.
 | `shared/`                                                     | Config loading, Grafana HTTP client, utilities                           | Go        |
 | `actions/convert/`                                            | Sigma → query conversion via sigma-cli                                   | Python    |
 | `actions/{convert,integrate,deploy,validate}/action.yml`      | Composite Actions                                                        | YAML      |
-| `actions/sigma-validation/`                                   | Documentation only — wraps the upstream SigmaHQ validator                | —         |
 | `scripts/comment-sigma-results/`, `scripts/identify-commits/` | PR comment handling and commit identification                            | Node      |
 | `scripts/determine-image-ref/`                                | Maps an action ref to a Docker image tag                                 | Bash      |
 | `.github/scripts/`                                            | Branch creation and verified-commit helpers used by workflows            | Bash      |
