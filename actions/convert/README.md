@@ -6,6 +6,8 @@
 
 The Sigma Rule Converter action transforms Sigma detection rules into target-specific query languages (such as Loki, Elasticsearch, Splunk, etc.) using the Sigma CLI toolchain. It processes YAML-based Sigma rules and generates JSON output files containing converted queries and rule metadata. This action should be used as the first step in your CI/CD pipeline, typically triggered by changes to Sigma rule files in pull requests.
 
+Most repositories run this Action through the reusable convert and integrate workflow. For setup and configuration, refer to the [documentation](../../docs/README.md).
+
 ## Inputs
 
 | Name                      | Description                                                                                                                           | Required | Default                 |
@@ -17,6 +19,7 @@ The Sigma Rule Converter action transforms Sigma detection rules into target-spe
 | `all_rules`               | Whether to convert all rules, regardless of changes (`true/false`).                                                                   | No       | `false`                 |
 | `actions_username`        | The username of the github actions bot committer.                                                                                     | No       | `"github-actions[bot]"` |
 | `changed_files_from_base` | Calculate changes from PR base.                                                                                                       | No       | `"false"`               |
+| `configurations`          | Space-separated configuration names to convert. Empty converts all configurations.                                                    | No       | `""`                    |
 
 ## Usage
 
@@ -105,8 +108,8 @@ jobs:
   - `input_file`: Path to the original Sigma rule file
   - `rules`: List of rule metadata including ID, title, description, severity, and query
   - `output_file`: Path to the output file relative to the repository root
-- For correlation rules to work correctly, all the related rules must be present in the same file using the `---` notation (multi document) in YAML.
-- **Preserving manual edits**: a conversion file with a top-level `"manual": true` is never overwritten or deleted by the converter. If you edit a conversion file directly (without the flag), the action detects the human change against the last automation commit and backfills `"manual": true` automatically, so your edit is preserved on this and future runs. To hand the file back to automation, set `"manual": false` (don't just delete the key — the backfill can't distinguish a deleted flag from a normal edit and would re-add it).
+- For correlation rules to work correctly, all the related rules must be present in the same file. Refer to [Rule requirements](../../docs/set-up/rules-and-pipelines.md#rule-requirements).
+- **Preserving manual edits**: a conversion file with a top-level `"manual": true` is never overwritten or deleted by the converter. Refer to [Preserve manual modifications](../../docs/use/manual-modifications.md).
 
 ## External Dependencies
 

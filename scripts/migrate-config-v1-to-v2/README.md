@@ -5,7 +5,7 @@ Migrates a v1 `sigma-rule-deployment` configuration file to the v2 format.
 ## What it does
 
 - Splits `conversion_defaults` into separate `defaults.conversion` and `defaults.integration` sub-blocks
-- Moves integration-bound fields (`rule_group`, `time_window`, `lookback`, `data_source`, `query_model`) out of each `conversions[]` item into an `integration` sub-block
+- Moves integration-bound fields (`rule_group`, `time_window`, `lookback`, `data_source`, `data_source_type`, `query_model`) out of each `conversions[]` item into an `integration` sub-block
 - Renames `conversions[]` to `configurations[]`
 - Moves the top-level `deployment` block to `defaults.deployment`
 - Preserves `folders` unchanged
