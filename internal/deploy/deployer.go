@@ -85,6 +85,7 @@ type Deployer struct {
 	previousDefault      []*shared.GrafanaClient                      // the default instances in the previous config, nil if there was no previous config
 	freshRemovals        []alertRemoval                               // alerts found on specific instances to delete in fresh deploy mode
 	groupsToUpdate       map[*shared.GrafanaClient]map[ruleGroup]bool // rule groups touched on each Grafana instance, for interval updates
+	configFilter         []string                                     // configurations selected by CONFIGURATION_FILTER; empty deploys all
 }
 
 // AlertDeployment identifies a deployed alert and its display title.
@@ -477,6 +478,25 @@ func (d *Deployer) LoadConfig(_ context.Context) error {
 	}
 	d.config.folderOrgPairs = []folderOrg{{folderUID: d.config.folderUID, orgID: d.config.orgID}}
 
+	// CONFIGURATION_FILTER restricts the deployment to the named configurations (space-separated),
+	// e.g. to deploy one environment at a time from a config that covers several. Unknown names are
+	// rejected so a typo fails loudly instead of silently deploying nothing.
+	if v := strings.TrimSpace(os.Getenv("CONFIGURATION_FILTER")); v != "" {
+		d.configFilter = strings.Fields(v)
+		validNames := make([]string, 0, len(configYAML.Configurations))
+		known := make(map[string]bool, len(configYAML.Configurations))
+		for _, cfg := range configYAML.Configurations {
+			validNames = append(validNames, cfg.Name)
+			known[cfg.Name] = true
+		}
+		for _, name := range d.configFilter {
+			if !known[name] {
+				return fmt.Errorf("unknown configuration %q in CONFIGURATION_FILTER (valid configurations: %s)", name, strings.Join(validNames, ", "))
+			}
+		}
+		log.Printf("Restricting deployment to configurations: %s\n", strings.Join(d.configFilter, ", "))
+	}
+
 	// Parse timeout if provided
 	if configYAML.Defaults.Deployment.Timeout != "" {
 		parsedTimeout, err := shared.ParseDuration(configYAML.Defaults.Deployment.Timeout)
@@ -505,6 +525,12 @@ func (d *Deployer) LoadConfig(_ context.Context) error {
 	d.configNames = make([]string, 0, len(configYAML.Configurations))
 	for _, cfg := range configYAML.Configurations {
 		d.configNames = append(d.configNames, cfg.Name)
+		if !d.configSelected(cfg.Name) {
+			// Unselected configurations are never deployed to, so their instances need no
+			// token and no client: a filtered deployment only authenticates to the instances
+			// of the configurations it deploys.
+			continue
+		}
 		instances := cfg.Deployment.GrafanaInstance.WithDefault(configYAML.Defaults.Deployment.GrafanaInstance)
 		if len(instances) == 0 {
 			return fmt.Errorf("configuration %q has no Grafana instance: set grafana_instance in defaults.deployment or in the configuration's deployment block", cfg.Name)
@@ -557,6 +583,12 @@ func (d *Deployer) LoadConfig(_ context.Context) error {
 	seenFolderOrgPairs := map[folderOrg]bool{d.config.folderOrgPairs[0]: true}
 	d.config.endpointPairs = make(map[string][]folderOrg)
 	for _, config := range configYAML.Configurations {
+		if !d.configSelected(config.Name) {
+			// Unselected configurations contribute no intervals or (folder, org) pairs, so a
+			// filtered fresh deploy only cleans the folders of the configurations it deploys,
+			// and a conflicting interval in an unselected configuration can't fail the run.
+			continue
+		}
 		interval := defaultInterval
 		if config.Integration.TimeWindow != "" {
 			interval = config.Integration.TimeWindow
@@ -682,11 +714,35 @@ func (d *Deployer) ConfigNormalMode() error {
 	// This helps to avoid issues where we have both an alert being deleted and another one created in a single PR,
 	// as Git would typically consider this as a rename (which poses isues for our deployment logic)
 
-	d.config.alertsToAdd = alertsToAdd
-	d.config.alertsToRemove = alertsToDelete
-	d.config.alertsToUpdate = alertsToUpdate
+	d.config.alertsToAdd = d.filterAlertFiles(alertsToAdd)
+	d.config.alertsToRemove = d.filterAlertFiles(alertsToDelete)
+	d.config.alertsToUpdate = d.filterAlertFiles(alertsToUpdate)
 
 	return nil
+}
+
+// configSelected reports whether a configuration is part of the deployment. With no
+// CONFIGURATION_FILTER every configuration is selected.
+func (d *Deployer) configSelected(name string) bool {
+	if len(d.configFilter) == 0 {
+		return true
+	}
+	return slices.Contains(d.configFilter, name)
+}
+
+// filterAlertFiles keeps only the alert files that belong to the selected configurations,
+// using the "{configName}_" filename prefix matching. With no filter it keeps every file.
+func (d *Deployer) filterAlertFiles(files []string) []string {
+	if len(d.configFilter) == 0 {
+		return files
+	}
+	filtered := make([]string, 0, len(files))
+	for _, file := range files {
+		if _, ok := shared.MatchConfigName(alertFileConfigPart(filepath.Base(file)), d.configFilter); ok {
+			filtered = append(filtered, file)
+		}
+	}
+	return filtered
 }
 
 func (d *Deployer) ConfigFreshDeployment(ctx context.Context) error {
@@ -722,7 +778,7 @@ func (d *Deployer) ConfigFreshDeployment(ctx context.Context) error {
 			freshRemovals = append(freshRemovals, alertRemoval{uid: uid, clients: []*shared.GrafanaClient{client}})
 		}
 	}
-	d.config.alertsToAdd = alertsToAdd
+	d.config.alertsToAdd = d.filterAlertFiles(alertsToAdd)
 	d.config.alertsToRemove = []string{}
 	d.freshRemovals = freshRemovals
 	d.config.alertsToUpdate = []string{}

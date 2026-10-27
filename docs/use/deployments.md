@@ -46,6 +46,16 @@ Each configuration must resolve at least one Grafana instance, from its own `dep
 
 An alert rule file that matches no configuration deploys to the default instances.
 
+## Deploy a subset of configurations
+
+Set the `configurations` input to restrict a deployment to named configurations (space-separated), for example, to deploy one environment at a time from a configuration file that covers several. Alert rule files are matched to configurations by the `{configuration-name}_` filename prefix, the same way they are routed to instances. Unknown names fail the deployment.
+
+A filtered deployment:
+
+- only creates, updates, and deletes the alert rule files of the selected configurations, in both incremental and fresh deployments
+- only requires tokens for the instances the selected configurations deploy to, so a workflow can deploy a subset of the configurations with only their instances' tokens
+- in a fresh deployment, only cleans the folders and orgs of the selected configurations on each instance
+
 ## Remove rules, configurations, and instances
 
 When you remove an alert rule file, the deploy stage deletes its alert rule from every instance the configuration deployed it to. It reads those instances from the configuration file as it was before the push. So if you remove a configuration, or change its `grafana_instance`, in the same change as its alert rule files, the old instances are still cleaned up.

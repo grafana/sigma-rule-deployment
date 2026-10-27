@@ -1365,6 +1365,164 @@ func TestClientsForAlertFileOverlappingConfigNames(t *testing.T) {
 
 // writeTestDeployerConfig writes a config file and an empty deployment folder into the working
 // directory (config paths must be local) and points the deployer at them via the environment.
+
+func TestLoadConfigConfigurationFilter(t *testing.T) {
+	testCases := []struct {
+		name    string
+		filter  string
+		want    []string
+		wantErr string
+	}{
+		{name: "empty filter selects all configurations", filter: "", want: nil},
+		{name: "single configuration", filter: "group2_config", want: []string{"group2_config"}},
+		{name: "multiple configurations", filter: "group1_config group3_config", want: []string{"group1_config", "group3_config"}},
+		{name: "unknown configuration fails loudly", filter: "group1_config bogus", wantErr: `unknown configuration "bogus" in CONFIGURATION_FILTER (valid configurations: group1_config, group2_config, group3_config, group4_config)`},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("CONFIG_PATH", "test_config.yml")
+			t.Setenv("DEPLOYER_GRAFANA_SA_TOKEN", "my-test-token")
+			t.Setenv("CONFIGURATION_FILTER", tc.filter)
+
+			d := NewDeployer()
+			err := d.LoadConfig(context.Background())
+			if tc.wantErr != "" {
+				assert.ErrorContains(t, err, tc.wantErr)
+				return
+			}
+			assert.NoError(t, err)
+			assert.Equal(t, tc.want, d.configFilter)
+		})
+	}
+}
+
+func TestConfigNormalModeConfigurationFilter(t *testing.T) {
+	testCases := []struct {
+		name        string
+		filter      string
+		wantAdded   []string
+		wantRemoved []string
+		wantUpdated []string
+	}{
+		{
+			name:        "empty filter keeps every file",
+			filter:      "",
+			wantAdded:   []string{"deployments/alert_rule_conv_a_rule_one_aaaa1111.json", "deployments/alert_rule_conv_b_rule_two_bbbb2222.json"},
+			wantRemoved: []string{"deployments/alert_rule_conv_a_old_cccc3333.json", "deployments/alert_rule_conv_b_old_dddd4444.json"},
+			wantUpdated: []string{"deployments/alert_rule_conv_a_mod_eeee5555.json", "deployments/alert_rule_conv_b_mod_ffff6666.json"},
+		},
+		{
+			name:        "filter keeps only the selected configuration files",
+			filter:      "conv_a",
+			wantAdded:   []string{"deployments/alert_rule_conv_a_rule_one_aaaa1111.json"},
+			wantRemoved: []string{"deployments/alert_rule_conv_a_old_cccc3333.json"},
+			wantUpdated: []string{"deployments/alert_rule_conv_a_mod_eeee5555.json"},
+		},
+		{
+			name:        "longest configuration name wins",
+			filter:      "conv_b",
+			wantAdded:   []string{"deployments/alert_rule_conv_b_rule_two_bbbb2222.json"},
+			wantRemoved: []string{"deployments/alert_rule_conv_b_old_dddd4444.json"},
+			wantUpdated: []string{"deployments/alert_rule_conv_b_mod_ffff6666.json"},
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			writeTestDeployerConfig(t, "version: 2\nfolders:\n  deployment_path: \"./deployments\"\n"+
+				"defaults:\n  integration:\n    folder_id: fy\n    org_id: 1\n"+
+				"  deployment:\n    grafana_instance: https://default.grafana.example\n"+
+				"configurations:\n  - name: conv_a\n  - name: conv_b\n")
+			t.Setenv("CONFIGURATION_FILTER", tc.filter)
+			t.Setenv("ADDED_FILES", "deployments/alert_rule_conv_a_rule_one_aaaa1111.json deployments/alert_rule_conv_b_rule_two_bbbb2222.json")
+			t.Setenv("DELETED_FILES", "deployments/alert_rule_conv_a_old_cccc3333.json deployments/alert_rule_conv_b_old_dddd4444.json")
+			t.Setenv("MODIFIED_FILES", "deployments/alert_rule_conv_a_mod_eeee5555.json deployments/alert_rule_conv_b_mod_ffff6666.json")
+
+			d := NewDeployer()
+			assert.NoError(t, d.LoadConfig(context.Background()))
+			assert.NoError(t, d.ConfigNormalMode())
+			assert.Equal(t, tc.wantAdded, d.config.alertsToAdd)
+			assert.Equal(t, tc.wantRemoved, d.config.alertsToRemove)
+			assert.Equal(t, tc.wantUpdated, d.config.alertsToUpdate)
+		})
+	}
+}
+
+func TestLoadConfigFilterScopesTokenRequirement(t *testing.T) {
+	testCases := []struct {
+		name    string
+		filter  string
+		wantErr string
+	}{
+		{name: "selected configuration has a token", filter: "conv_a"},
+		{name: "unselected configuration needs no token", filter: "conv_b", wantErr: "there is no Grafana token for instance https://b.grafana.example"},
+		{name: "every configuration needs a token without a filter", filter: "", wantErr: "there is no Grafana token for instance https://b.grafana.example"},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			writeTestDeployerConfig(t, "version: 2\nfolders:\n  deployment_path: \"./deployments\"\n"+
+				"defaults:\n  integration:\n    folder_id: fy\n    org_id: 1\n"+
+				"configurations:\n"+
+				"  - name: conv_a\n    deployment:\n      grafana_instance: https://a.grafana.example\n"+
+				"  - name: conv_b\n    deployment:\n      grafana_instance: https://b.grafana.example\n")
+			t.Setenv("DEPLOYER_GRAFANA_SA_TOKEN", `{"https://a.grafana.example":"tok-a"}`)
+			t.Setenv("CONFIGURATION_FILTER", tc.filter)
+
+			d := NewDeployer()
+			err := d.LoadConfig(context.Background())
+			if tc.wantErr != "" {
+				assert.ErrorContains(t, err, tc.wantErr)
+				return
+			}
+			assert.NoError(t, err)
+		})
+	}
+}
+
+// TestFreshDeployConfigurationFilter verifies a filtered fresh deploy only deploys the selected
+// configuration's files and only cleans the instances that configuration deploys to.
+func TestFreshDeployConfigurationFilter(t *testing.T) {
+	var requestsX int
+	serverX := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requestsX++
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`[]`))
+	}))
+	defer serverX.Close()
+	serverY := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/api/v1/provisioning/alert-rules" {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`[{"uid":"stale-y","title":"s","folderUID":"fy","orgID":1}]`))
+			return
+		}
+		t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer serverY.Close()
+
+	tmpDir, err := os.MkdirTemp(".", "test-fresh-filter-*")
+	assert.NoError(t, err)
+	t.Cleanup(func() { os.RemoveAll(tmpDir) })
+	for _, name := range []string{"alert_rule_conv_x_one_aaaa1111.json", "alert_rule_conv_y_two_bbbb2222.json"} {
+		assert.NoError(t, os.WriteFile(filepath.Join(tmpDir, name), []byte(`{"uid":"u","title":"t","ruleGroup":"g","folderUID":"fy","orgID":1}`), 0o600))
+	}
+
+	writeTestDeployerConfig(t, "version: 2\nfolders:\n  deployment_path: \""+tmpDir+"\"\n"+
+		"defaults:\n  integration:\n    folder_id: fy\n    org_id: 1\n"+
+		"configurations:\n"+
+		"  - name: conv_x\n    deployment:\n      grafana_instance: "+serverX.URL+"\n"+
+		"  - name: conv_y\n    deployment:\n      grafana_instance: "+serverY.URL+"\n")
+	t.Setenv("DEPLOYER_FRESH_DEPLOY", "true")
+	t.Setenv("CONFIGURATION_FILTER", "conv_y")
+
+	d := NewDeployer()
+	assert.NoError(t, d.LoadConfig(context.Background()))
+	d.SetClient()
+	assert.NoError(t, d.ConfigFreshDeployment(context.Background()))
+
+	assert.Equal(t, []string{filepath.Join(tmpDir, "alert_rule_conv_y_two_bbbb2222.json")}, d.config.alertsToAdd)
+	assert.Equal(t, 0, requestsX, "conv_x is not selected, so its instance must not be listed")
+}
+
 func writeTestDeployerConfig(t *testing.T, content string) {
 	t.Helper()
 	configFile, err := os.CreateTemp(".", "test_deployer_config_*.yml")

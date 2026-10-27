@@ -16,6 +16,7 @@ Most repositories run this Action through the reusable deploy workflow. For setu
 | `grafana_sa_token` | Service account token for Grafana, or a JSON object of tokens per instance (see below)                                                                                                                | Yes      | `""`                  |
 | `fresh_deploy`     | If true, ALL the alert rules in the Grafana Alert folder specified in the config will be deleted, and the alerts in the deployment folder will be created from scratch. ⚠️ Warning: destructive action | No       | `false`               |
 | `github_token`     | GitHub token to use for the action.                                                                                                                                                                   | No       | `${{ github.token }}` |
+| `configurations`   | Space-separated configuration names to deploy. Empty deploys all configurations.                                                                                                                  | No       | `""`                |
 
 Note: The token provided in `grafana_sa_token` must have the following permissions:
 

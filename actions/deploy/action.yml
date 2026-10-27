@@ -18,6 +18,11 @@ inputs:
     description: "GitHub token to use for the action."
     required: false
     default: ${{ github.token }}
+  configurations:
+    description: "Space-separated configuration names to deploy. Empty deploys all configurations."
+    required: false
+    default: ""
+
 
 outputs:
   alerts_created:
@@ -104,6 +109,7 @@ runs:
         MODIFIED_FILES: ${{ steps.changed-files.outputs.modified_files }}
         DELETED_FILES: ${{ steps.changed-files.outputs.deleted_files }}
         COPIED_FILES: ${{ steps.changed-files.outputs.copied_files }}
+        CONFIGURATION_FILTER: ${{ inputs.configurations }}
         IMAGE_REF: ${{ steps.image-ref.outputs.image_ref }}
         PREVIOUS_CONFIG_PATH: ${{ steps.previous-config.outputs.previous_config_path }}
       run: |
@@ -121,6 +127,7 @@ runs:
             -e MODIFIED_FILES="$MODIFIED_FILES" \
             -e DELETED_FILES="$DELETED_FILES" \
             -e COPIED_FILES="$COPIED_FILES" \
+            -e CONFIGURATION_FILTER="$CONFIGURATION_FILTER" \
             "ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:$IMAGE_REF" \
             deploy
     - name: Move Output

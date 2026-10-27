@@ -17,6 +17,11 @@ on:
         required: false
         type: string
         default: ""
+      configurations:
+        description: "Space-separated configuration names to deploy. Empty deploys all configurations."
+        required: false
+        type: string
+        default: ""
     secrets:
       grafana_sa_token:
         description: "A Grafana service account token for provisioning the alerts (or a JSON object mapping each Grafana instance URL to its own token), with at least the following roles: Alerting:Access to alert rules provisioning API, Alerting:Rules Reader, Alerting:Rules Writer, Alerting:Set provisioning status"
@@ -57,5 +62,6 @@ jobs:
         with:
           config_path: ${{ inputs.config_path }}
           fresh_deploy: ${{ inputs.fresh_deploy }}
+          configurations: ${{ inputs.configurations }}
           grafana_sa_token: ${{ secrets.grafana_sa_token || fromJSON(steps.get-secrets.outputs.secrets || '{}').GRAFANA_SA_TOKEN }}
           github_token: ${{ secrets.custom_github_token || github.token }}
