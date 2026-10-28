@@ -21,11 +21,11 @@
  *
  * Environment variables (for GitHub Actions):
  *   COMMENT_BODY, COMMENT_AUTHOR_ASSOCIATION, COMMENT_AUTHOR_TYPE, COMMENT_ID,
- *   ISSUE_NUMBER, ALL_RULES, CONFIG_PATH, GITHUB_TOKEN
+ *   ISSUE_NUMBER, CONFIG_PATH, GITHUB_TOKEN
  *
  * CLI arguments (for local testing):
  *   --comment-body, --comment-author-association, --comment-author-type,
- *   --comment-id, --issue-number, --all-rules, --config-path, --github-token
+ *   --comment-id, --issue-number, --config-path, --github-token
  */
 
 import * as core from '@actions/core';
@@ -69,7 +69,6 @@ function getInputs() {
       commentAuthorType: core.getInput('comment_author_type') || process.env.COMMENT_AUTHOR_TYPE || github.context.payload?.comment?.user?.type || '',
       commentId: core.getInput('comment_id') || process.env.COMMENT_ID || github.context.payload?.comment?.id || '',
       issueNumber: core.getInput('issue_number') || process.env.ISSUE_NUMBER || github.context.issue?.number || '',
-      allRules: core.getInput('all_rules') || process.env.ALL_RULES || 'false',
       configPath: core.getInput('config_path') || process.env.CONFIG_PATH || 'config/config.yml',
       githubToken: core.getInput('github_token') || process.env.GITHUB_TOKEN,
     };
@@ -94,7 +93,6 @@ function getInputs() {
       commentAuthorType: inputs.comment_author_type || process.env.COMMENT_AUTHOR_TYPE || '',
       commentId: inputs.comment_id || process.env.COMMENT_ID || '',
       issueNumber: inputs.issue_number || process.env.ISSUE_NUMBER || '',
-      allRules: inputs.all_rules || process.env.ALL_RULES || 'false',
       configPath: inputs.config_path || process.env.CONFIG_PATH || 'config/config.yml',
       githubToken: inputs.github_token || process.env.GITHUB_TOKEN,
     };
@@ -296,12 +294,6 @@ function buildOutputs(overrides = {}) {
  * ParseErrors are reported, never thrown; anything else is an execution error.
  */
 async function run(inputs, context, octokit) {
-  // Non-comment trigger: the workflow's all_rules input preserves current behavior
-  if (String(inputs.allRules).toLowerCase() === 'true') {
-    console.log('all_rules input is true; converting all rules');
-    return buildOutputs({ triggered: 'true', action: 'convert', all_rules: 'true' });
-  }
-
   // Security-critical: never parse commands from untrusted commenters.
   // - Bots: only installed GitHub Apps and the repo's own
   //   workflows can comment as a bot, and both are controlled by repo admins.

@@ -19,11 +19,10 @@ sigma integrate <target> [--no-test] [--debug] [--query-time-window <duration>]
 
 ## Behavior
 
-1. If the `ALL_RULES` input is `"true"` (non-comment trigger), outputs `triggered=true, action=convert, all_rules=true`.
-2. Untrusted commenters are ignored (`triggered=false`). This check is security-critical. Trusted means: bots (only installed GitHub Apps and the repo's own workflows can comment as a bot), or humans with `OWNER`, `MEMBER` or `COLLABORATOR` association.
-3. Comments not starting with `sigma` are ignored (`triggered=false`).
-4. On a valid command, the parsed outputs are set and an "eyes" reaction is added to the comment (best effort).
-5. On a parse error (unknown action/target/flag, invalid duration, unresolvable target), `triggered=false` and an `error` output are set, a "confused" reaction is added, and a reply comment is posted showing the usage grammar (plus valid configuration names for unresolvable targets). Parse errors never fail the workflow; only real execution errors (e.g. missing config file) do.
+1. Untrusted commenters are ignored (`triggered=false`). This check is security-critical. Trusted means: bots (only installed GitHub Apps and the repo's own workflows can comment as a bot), or humans with `OWNER`, `MEMBER` or `COLLABORATOR` association.
+2. Comments not starting with `sigma` are ignored (`triggered=false`).
+3. On a valid command, the parsed outputs are set and an "eyes" reaction is added to the comment (best effort).
+4. On a parse error (unknown action/target/flag, invalid duration, unresolvable target), `triggered=false` and an `error` output are set, a "confused" reaction is added, and a reply comment is posted showing the usage grammar (plus valid configuration names for unresolvable targets). Parse errors never fail the workflow; only real execution errors (e.g. missing config file) do.
 
 ## Usage
 
@@ -59,7 +58,6 @@ node parse-sigma-comment.js \
 | `COMMENT_AUTHOR_TYPE` | `--comment-author-type` | Comment author's type (`Bot` or `User`) | No | From event payload in GitHub Actions |
 | `COMMENT_ID` | `--comment-id` | Comment ID, used for reactions | No | From event payload in GitHub Actions |
 | `ISSUE_NUMBER` | `--issue-number` | PR/issue number, used for reply comments | No | From GitHub Actions context |
-| `ALL_RULES` | `--all-rules` | Workflow `all_rules` input (`"true"`/`"false"`) | No | `false` |
 | `CONFIG_PATH` | `--config-path` | Path to the v2 config YAML | No | `config/config.yml` |
 | `GITHUB_TOKEN` | `--github-token` | GitHub token for reactions/replies | No | - |
 
@@ -69,7 +67,7 @@ The script outputs the following values to `$GITHUB_OUTPUT` (GitHub Actions) or 
 
 | Output | Description |
 |--------|-------------|
-| `triggered` | `true` when a valid command (or `all_rules` input) should trigger the workflow |
+| `triggered` | `true` when a valid command should trigger the workflow |
 | `action` | `convert` (conversion + integration) or `integrate` (integration only) |
 | `all_rules` | `true` when the target is `all`; `configurations` is then empty (no filter) |
 | `configurations` | Space-separated configuration names the target resolved to (empty for `all`) |

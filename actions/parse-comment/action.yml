@@ -27,10 +27,6 @@ inputs:
     description: "The PR/issue number, used for reply comments"
     required: false
     default: ""
-  all_rules:
-    description: "The workflow's all_rules input, preserving non-comment trigger behavior"
-    required: false
-    default: "false"
   config_path:
     description: "Path to the v2 configuration file, used to resolve command targets"
     required: true
@@ -41,7 +37,7 @@ inputs:
 
 outputs:
   triggered:
-    description: "true when a valid command (or the all_rules input) should trigger the workflow"
+    description: "true when a valid command should trigger the workflow"
     value: ${{ steps.parse.outputs.triggered }}
   action:
     description: "convert (conversion + integration) or integrate (integration only)"
@@ -84,7 +80,6 @@ runs:
         COMMENT_AUTHOR_TYPE: ${{ inputs.comment_author_type }}
         COMMENT_ID: ${{ inputs.comment_id }}
         ISSUE_NUMBER: ${{ inputs.issue_number }}
-        ALL_RULES: ${{ inputs.all_rules }}
         CONFIG_PATH: ${{ inputs.config_path }}
         GITHUB_TOKEN: ${{ inputs.github_token }}
       run: |

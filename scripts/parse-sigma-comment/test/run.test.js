@@ -60,28 +60,46 @@ function makeInputs(configPath, overrides = {}) {
     commentAuthorAssociation: 'MEMBER',
     commentId: '123',
     issueNumber: '456',
-    allRules: 'false',
     configPath,
     githubToken: 'fake-token',
     ...overrides,
   };
 }
 
-test('run - all_rules input path (non-comment trigger)', async (t) => {
+// Regression: the removed all_rules input used to return triggered=true before
+// the author trust check, so any comment from anyone started a full run when a
+// caller set all_rules: true. A stale caller passing it must now be ignored.
+test('run - legacy allRules input does not bypass the trust check', async (t) => {
   const configPath = writeTempConfig(t);
   const octokit = createMockOctokit();
 
-  const outputs = await run(makeInputs(configPath, { allRules: 'true' }), context, octokit);
+  const outputs = await run(
+    makeInputs(configPath, {
+      allRules: 'true',
+      commentBody: 'sigma convert all',
+      commentAuthorAssociation: 'NONE',
+      commentAuthorLogin: 'some-random-user',
+      commentAuthorType: 'User',
+    }),
+    context,
+    octokit
+  );
 
-  assert.strictEqual(outputs.triggered, 'true');
-  assert.strictEqual(outputs.action, 'convert');
-  assert.strictEqual(outputs.all_rules, 'true');
-  assert.strictEqual(outputs.configurations, '');
-  assert.strictEqual(outputs.no_test, 'false');
-  assert.strictEqual(outputs.debug, 'false');
-  assert.strictEqual(outputs.query_time_window, '');
-  assert.strictEqual(outputs.error, '');
-  // No reactions for the non-comment path
+  assert.strictEqual(outputs.triggered, 'false');
+  assert.strictEqual(octokit.calls.reactions.length, 0);
+});
+
+test('run - legacy allRules input does not trigger on arbitrary trusted comments', async (t) => {
+  const configPath = writeTempConfig(t);
+  const octokit = createMockOctokit();
+
+  const outputs = await run(
+    makeInputs(configPath, { allRules: 'true', commentBody: 'looks good to me!' }),
+    context,
+    octokit
+  );
+
+  assert.strictEqual(outputs.triggered, 'false');
   assert.strictEqual(octokit.calls.reactions.length, 0);
 });
 
