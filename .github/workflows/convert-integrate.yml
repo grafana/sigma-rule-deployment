@@ -118,7 +118,6 @@ jobs:
           comment_author_type: ${{ github.event.comment.user.type }}
           comment_id: ${{ github.event.comment.id }}
           issue_number: ${{ github.event.issue.number }}
-          all_rules: ${{ inputs.all_rules }}
           config_path: ${{ inputs.config_path }}
           github_token: ${{ github.token }}
 

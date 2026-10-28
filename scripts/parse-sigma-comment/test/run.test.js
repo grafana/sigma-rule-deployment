@@ -60,30 +60,11 @@ function makeInputs(configPath, overrides = {}) {
     commentAuthorAssociation: 'MEMBER',
     commentId: '123',
     issueNumber: '456',
-    allRules: 'false',
     configPath,
     githubToken: 'fake-token',
     ...overrides,
   };
 }
-
-test('run - all_rules input path (non-comment trigger)', async (t) => {
-  const configPath = writeTempConfig(t);
-  const octokit = createMockOctokit();
-
-  const outputs = await run(makeInputs(configPath, { allRules: 'true' }), context, octokit);
-
-  assert.strictEqual(outputs.triggered, 'true');
-  assert.strictEqual(outputs.action, 'convert');
-  assert.strictEqual(outputs.all_rules, 'true');
-  assert.strictEqual(outputs.configurations, '');
-  assert.strictEqual(outputs.no_test, 'false');
-  assert.strictEqual(outputs.debug, 'false');
-  assert.strictEqual(outputs.query_time_window, '');
-  assert.strictEqual(outputs.error, '');
-  // No reactions for the non-comment path
-  assert.strictEqual(octokit.calls.reactions.length, 0);
-});
 
 test('run - untrusted author is ignored', async (t) => {
   const configPath = writeTempConfig(t);
