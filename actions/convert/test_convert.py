@@ -1325,6 +1325,74 @@ def test_default_correlation_method(
         assert mock_invoke.call_count > 0
 
 
+@pytest.mark.parametrize(
+    "pipelines, expect_template_vars_path",
+    [
+        (["pipelines/a/p1.yml", "pipelines/p2.yml"], True),
+        ([], False),
+    ],
+)
+@patch("glob.glob")
+@patch("os.path.exists")
+@patch("pathlib.Path.is_absolute")
+@patch("pathlib.Path.is_dir")
+@patch("pathlib.Path.mkdir")
+@patch("shutil.rmtree")
+@patch("click.testing.CliRunner.invoke")
+@patch("dynaconf.Dynaconf")
+def test_template_vars_path_shared_across_pipelines(
+    mock_dynaconf,
+    mock_invoke,
+    mock_rmtree,
+    mock_mkdir,
+    mock_is_dir,
+    mock_is_absolute,
+    mock_exists,
+    mock_glob,
+    pipelines,
+    expect_template_vars_path,
+):
+    """Pipelines get one shared --template-vars-path so pySigma 2.x can merge them."""
+    mock_glob.return_value = ["/tmp/test.yml"]
+    mock_exists.return_value = True
+    mock_is_absolute.return_value = False
+    mock_is_dir.return_value = True
+
+    mock_result = MagicMock()
+    mock_result.exception = None
+    mock_result.exit_code = 0
+    mock_result.stdout = "test query output"
+    mock_invoke.return_value = mock_result
+
+    config_dict = DynaconfDict(
+        {
+            "version": 2,
+            "configurations": [
+                {
+                    "name": "test_pipelines",
+                    "conversion": {"input": ["test.yml"], "pipelines": pipelines},
+                }
+            ],
+        }
+    )
+    dynaconf_instance = mock_dynaconf.return_value
+    dynaconf_instance.get.side_effect = lambda key, default=None: config_dict.get(key, default)
+
+    with (
+        patch.object(convert, "is_path", side_effect=lambda p, f: True),
+        patch("pathlib.Path.relative_to", return_value=Path("test.yml")),
+        patch.object(convert, "load_rules", return_value=[{"title": "Test Rule"}]),
+        patch("builtins.open", MagicMock()),
+    ):
+        convert_rules(config=dynaconf_instance, path_prefix="/tmp", all_rules=True)
+
+    call_args = mock_invoke.call_args[1]["args"]
+    if expect_template_vars_path:
+        assert call_args[call_args.index("--template-vars-path") + 1] == "/tmp"
+    else:
+        assert "--template-vars-path" not in call_args
+
+
 def test_convert_rules_deletes_conversion_for_deleted_rule(temp_workspace, mock_config):
     """Test that when a rule is deleted, its associated conversion file is also deleted."""
     # First create a conversion file for the test rule
