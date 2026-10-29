@@ -25,7 +25,8 @@ COPY --from=builder /build/sigma-deployer /usr/local/bin/sigma-deployer
 COPY ./actions/convert ./actions/convert
 
 WORKDIR /app/actions/convert
-RUN apk add --no-cache bash~=5.3 && \
+# g++, re2, abseil and pybind11 are needed to build google-re2 (a pysigma 2.x dependency), which has no musl wheels
+RUN apk add --no-cache bash~=5.3 g++ re2-dev abseil-cpp-dev py3-pybind11-dev && \
     python -m pip install --no-cache-dir --upgrade pip~=25.3.0 && \
     pip install --no-cache-dir uv~=0.9.0
 
