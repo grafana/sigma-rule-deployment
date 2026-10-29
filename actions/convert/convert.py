@@ -443,6 +443,10 @@ def convert_rules(
                 "--target",
                 conversion.get("target", default_target),
                 *pipelines,
+                # pySigma 2.x scopes each pipeline file's policy to its own directory, and pipelines
+                # with different policies can't be merged. Setting one shared path gives them all the
+                # same policy (template vars stay disabled).
+                *(["--template-vars-path", str(path_prefix)] if pipelines else []),
                 "--format",
                 conversion.get("format", default_format),
                 *(
