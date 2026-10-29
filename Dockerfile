@@ -14,6 +14,16 @@ COPY shared/ ./shared/
 # Build the unified sigma-deployer binary
 RUN go build -ldflags="-s -w" -o /build/sigma-deployer ./cmd/sigma-deployer
 
+FROM python:3.14-alpine@sha256:bc62fbcb684904b1bb81a6240041bb60e9c1ee19ddeaf17a6b4297e1cc9c95d2 AS pybuilder
+
+# google-re2 (a pysigma 2.x dependency) has no musl wheels, so build the venv here where the compiler is available
+RUN apk add --no-cache g++ re2-dev abseil-cpp-dev py3-pybind11-dev && \
+    pip install --no-cache-dir uv~=0.9.0
+
+WORKDIR /app/actions/convert
+COPY ./actions/convert/pyproject.toml ./actions/convert/uv.lock ./
+RUN uv sync --frozen --no-dev --no-install-project
+
 FROM python:3.14-alpine@sha256:bc62fbcb684904b1bb81a6240041bb60e9c1ee19ddeaf17a6b4297e1cc9c95d2
 
 WORKDIR /app
@@ -25,8 +35,11 @@ COPY --from=builder /build/sigma-deployer /usr/local/bin/sigma-deployer
 COPY ./actions/convert ./actions/convert
 
 WORKDIR /app/actions/convert
-# g++, re2, abseil and pybind11 are needed to build google-re2 (a pysigma 2.x dependency), which has no musl wheels
-RUN apk add --no-cache bash~=5.3 g++ re2-dev abseil-cpp-dev py3-pybind11-dev && \
+# Prebuilt venv without dev dependencies; UV_NO_DEV stops `uv run` from installing them at startup
+ENV UV_NO_DEV=1
+# re2 is the runtime library for google-re2
+COPY --from=pybuilder /app/actions/convert/.venv ./.venv
+RUN apk add --no-cache bash~=5.3 re2 && \
     python -m pip install --no-cache-dir --upgrade pip~=25.3.0 && \
     pip install --no-cache-dir uv~=0.9.0
 
