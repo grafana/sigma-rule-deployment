@@ -193,6 +193,16 @@ func (i *Integrator) LoadConfig() error {
 		}
 	}
 
+	// INTEGRATOR_SHOW_LOG_LINES forces log lines into the query test results, overriding the
+	// defaults and every configuration's show_log_lines setting, e.g. for a debug run.
+	// When it isn't true, the show_log_lines settings apply as usual.
+	if strings.ToLower(os.Getenv("INTEGRATOR_SHOW_LOG_LINES")) == TRUE {
+		i.config.Defaults.Integration.ShowLogLines = new(true)
+		for idx := range i.config.Configurations {
+			i.config.Configurations[idx].Integration.ShowLogLines = new(true)
+		}
+	}
+
 	if !filepath.IsLocal(i.config.Folders.ConversionPath) {
 		return fmt.Errorf("conversion path is not local: %s", i.config.Folders.ConversionPath)
 	}

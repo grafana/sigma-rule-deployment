@@ -148,6 +148,7 @@ jobs:
           all_rules: ${{ steps.parse.outputs.all_rules == 'true' || steps.parse.outputs.configurations != '' || (github.event_name != 'issue_comment' && inputs.all_rules) }}
           actions_username: ${{ inputs.actions_username }}
           changed_files_from_base: ${{ inputs.changed_files_from_base }}
+          continue_on_query_testing_errors: ${{ inputs.continue_on_query_testing_errors }}
           configurations: ${{ steps.parse.outputs.configurations }}
           skip_query_testing: ${{ steps.parse.outputs.no_test == 'true' }}
           query_time_window: ${{ steps.parse.outputs.query_time_window }}

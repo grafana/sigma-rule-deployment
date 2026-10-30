@@ -2983,6 +2983,40 @@ func TestLoadConfigSkipQueryTesting(t *testing.T) {
 	}
 }
 
+func TestLoadConfigShowLogLines(t *testing.T) {
+	tests := []struct {
+		name string
+		env  string
+		want *bool
+	}{
+		{name: "unset leaves the show_log_lines settings alone", env: "", want: nil},
+		{name: "true forces log lines on", env: "true", want: new(true)},
+		{name: "TRUE is case-insensitive", env: "TRUE", want: new(true)},
+		{name: "false leaves the show_log_lines settings alone", env: "false", want: nil},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			configPath, _, _ := writeFilterTestConfig(t)
+
+			t.Setenv("INTEGRATOR_CONFIG_PATH", configPath)
+			t.Setenv("INTEGRATOR_GRAFANA_SA_TOKEN", "my-test-token")
+			t.Setenv("CHANGED_FILES", "")
+			t.Setenv("DELETED_FILES", "")
+			t.Setenv("TEST_FILES", "")
+			t.Setenv("MANUAL_FILES", "")
+			t.Setenv("ALL_RULES", "false")
+			t.Setenv("INTEGRATOR_SHOW_LOG_LINES", tc.env)
+
+			i := NewIntegrator()
+			require.NoError(t, i.LoadConfig())
+			assert.Equal(t, tc.want, i.config.Defaults.Integration.ShowLogLines)
+			for _, cfg := range i.config.Configurations {
+				assert.Equal(t, tc.want, cfg.Integration.ShowLogLines, "configuration %s", cfg.Name)
+			}
+		})
+	}
+}
+
 func TestLoadConfigQueryTimeWindow(t *testing.T) {
 	tests := []struct {
 		name     string

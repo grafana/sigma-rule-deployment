@@ -82,7 +82,7 @@ configurations:
         Team: identity
 ```
 
-The `continue_on_query_testing_errors` input of the integrate Action sets the default for `continue_on_error`, so it takes precedence over `defaults.integration.continue_on_error`. The input defaults to `true`. A configuration's own `continue_on_error` still overrides it.
+The `continue_on_query_testing_errors` input of the [convert and integrate workflow](../set-up/workflows.md#convert-and-integrate) and of the integrate Action sets the default for `continue_on_error`, so it takes precedence over `defaults.integration.continue_on_error`. The input defaults to `true`. A configuration's own `continue_on_error` still overrides it.
 
 ## Validate the file
 

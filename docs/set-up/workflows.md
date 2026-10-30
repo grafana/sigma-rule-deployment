@@ -180,11 +180,11 @@ The reusable workflow accepts the following inputs:
 | `plugin_packages`                  | string  | Comma-separated list of extra Sigma CLI plugin packages to install. Only packages that start with `pysigma-` are allowed.                   | `""`                  |
 | `render_traceback`                 | boolean | Print full tracebacks when conversion fails.                                                                                                | `false`               |
 | `pretty_print`                     | boolean | Indent the generated JSON files.                                                                                                            | `false`               |
-| `output_log_lines`                 | boolean | Include log lines in the query test results.                                                                                                | `false`               |
+| `output_log_lines`                 | boolean | Include log lines in the query test results for every configuration, overriding [`show_log_lines`](../configure/configuration-reference.md). With `false`, `show_log_lines` decides. The `--debug` comment flag also turns it on. | `false`               |
 | `all_rules`                        | boolean | Convert and integrate every rule on every pull request run, not only the rules that changed. Comment commands ignore it and pick their own target. | `false`               |
 | `actions_username`                 | string  | User name of the automation that commits the generated files. The Actions use it to tell automated commits from human edits.                | `github-actions[bot]` |
 | `changed_files_from_base`          | boolean | Intended to detect changed files against the pull request base branch. Currently broken: setting it to `true` stops conversion from finding changes and makes integration fail, so leave it `false`. | `false`               |
-| `continue_on_query_testing_errors` | boolean | Finish integration when query testing fails, and report the errors. Currently not passed on to the integrate Action, so it has no effect, and the Action's default of `true` applies. | `true`                |
+| `continue_on_query_testing_errors` | boolean | Finish integration when query testing fails, and report the errors. Set it to `false` to fail the integration instead. It sets the default for each configuration's `continue_on_error`, and takes precedence over `defaults.integration.continue_on_error`. | `true`                |
 | `vault_path`                       | string  | For use within Grafana Labs: read the token from the Grafana Labs internal Vault instead of `grafana_sa_token`.                                    | `""`                  |
 
 It accepts the following secret:

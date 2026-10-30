@@ -16,7 +16,7 @@ inputs:
     required: false
     default: "false"
   output_log_lines:
-    description: "Output log lines to the outputs of the test_query_results_file"
+    description: "Include log lines in the query test results for all configurations, overriding their show_log_lines settings; false leaves the show_log_lines settings to decide"
     required: false
     default: "false"
   all_rules:
@@ -145,6 +145,7 @@ runs:
         CONTINUE_ON_QUERY_TESTING_ERRORS: ${{ inputs.continue_on_query_testing_errors }}
         CONFIGURATION_FILTER: ${{ inputs.configurations }}
         INTEGRATOR_SKIP_QUERY_TESTING: ${{ inputs.skip_query_testing }}
+        INTEGRATOR_SHOW_LOG_LINES: ${{ inputs.output_log_lines }}
         INTEGRATOR_QUERY_TIME_WINDOW: ${{ inputs.query_time_window }}
         IMAGE_REF: ${{ steps.image-ref.outputs.image_ref }}
       run: |
@@ -164,6 +165,7 @@ runs:
             -e CONTINUE_ON_QUERY_TESTING_ERRORS="$CONTINUE_ON_QUERY_TESTING_ERRORS" \
             -e CONFIGURATION_FILTER="$CONFIGURATION_FILTER" \
             -e INTEGRATOR_SKIP_QUERY_TESTING="$INTEGRATOR_SKIP_QUERY_TESTING" \
+            -e INTEGRATOR_SHOW_LOG_LINES="$INTEGRATOR_SHOW_LOG_LINES" \
             -e INTEGRATOR_QUERY_TIME_WINDOW="$INTEGRATOR_QUERY_TIME_WINDOW" \
             -e TEST_QUERY_RESULTS_FILE=test-query-results.json \
             "ghcr.io/grafana/sigma-rule-deployment/sigma-rule-deployer:$IMAGE_REF" \
