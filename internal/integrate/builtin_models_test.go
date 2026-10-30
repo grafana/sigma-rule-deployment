@@ -20,15 +20,17 @@ func TestBuiltinQueryModels(t *testing.T) {
 		query = `field="value with \"quotes\""`
 	)
 
-	// Target names that should resolve to each plugin type, in addition to the type itself
+	// Target names that should resolve to each plugin type, in addition to the type itself.
+	// The first name is the target registered by the Sigma backend; any others are legacy
+	// aliases kept for backwards compatibility.
 	aliases := map[string][]string{
-		dsOpenSearch: {"opensearch"},
+		dsOpenSearch: {"opensearch_lucene", "opensearch"},
 		dsQuickwit:   {"quickwit"},
 		dsClickHouse: {"clickhouse"},
 		dsParseable:  {"parseable"},
 		dsSQLite:     {"sqlite"},
-		dsSurrealDB:  {"surrealql"},
-		dsDataset:    {"sentinelone-pq"},
+		dsSurrealDB:  {"surreal_ql", "surrealql"},
+		dsDataset:    {"sentinel_one_pq", "sentinelone-pq"},
 		dsSplunk:     {"splunk"},
 		dsDatadog:    {"datadog"},
 	}

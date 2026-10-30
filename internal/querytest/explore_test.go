@@ -220,7 +220,11 @@ func TestGenerateExploreLinkBuiltinModels(t *testing.T) {
 		"quickwit-quickwit-datasource":           `"date_histogram"`,
 		"sentinelone-dataset-datasource":         `"queryType":"Power Query"`,
 		// Sigma target names resolve to the same models
-		"splunk":     `"rawQuery":true`,
+		"splunk":            `"rawQuery":true`,
+		"opensearch_lucene": `"luceneQueryType":"Metric"`,
+		"surreal_ql":        `"surql":"field=\"value\""`,
+		"sentinel_one_pq":   `"queryType":"Power Query"`,
+		// Legacy alias kept for backwards compatibility
 		"opensearch": `"luceneQueryType":"Metric"`,
 	}
 

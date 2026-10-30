@@ -1053,15 +1053,19 @@ var builtinQueryModels = map[string]string{
 // name doesn't identify the data source. Targets that can run on several data sources
 // (e.g. kusto, which suits both Azure Monitor and Azure Data Explorer) are left out.
 var targetAliases = map[string]string{
+	"opensearch_lucene": dsOpenSearch,
+	"quickwit":          dsQuickwit,
+	"clickhouse":        dsClickHouse,
+	"parseable":         dsParseable,
+	"sqlite":            dsSQLite,
+	"surreal_ql":        dsSurrealDB,
+	"sentinel_one_pq":   dsDataset,
+	"splunk":            dsSplunk,
+	"datadog":           dsDatadog,
+	// Earlier names that don't match the backends' targets, kept for backwards compatibility
 	"opensearch":     dsOpenSearch,
-	"quickwit":       dsQuickwit,
-	"clickhouse":     dsClickHouse,
-	"parseable":      dsParseable,
-	"sqlite":         dsSQLite,
 	"surrealql":      dsSurrealDB,
 	"sentinelone-pq": dsDataset,
-	"splunk":         dsSplunk,
-	"datadog":        dsDatadog,
 }
 
 // BuiltinQueryModel returns the built-in query model template for a data source type,
