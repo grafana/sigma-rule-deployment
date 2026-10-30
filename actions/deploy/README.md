@@ -15,7 +15,7 @@ Most repositories run this Action through the reusable deploy workflow. For setu
 | `config_path`      | Path to the configuration file for the Sigma Rule Deployer                                                                                                                                            | Yes      | `""`                  |
 | `grafana_sa_token` | Service account token for Grafana, or a JSON object of tokens per instance (see below)                                                                                                                | Yes      | `""`                  |
 | `fresh_deploy`     | If true, ALL the alert rules in the Grafana Alert folder specified in the config will be deleted, and the alerts in the deployment folder will be created from scratch. ⚠️ Warning: destructive action | No       | `false`               |
-| `github_token`     | GitHub token to use for the action.                                                                                                                                                                   | No       | `${{ github.token }}` |
+| `github_token`     | GitHub token used to comment the deployment status on the pull requests associated with the pushed commit (see below)                                                                                 | No       | `${{ github.token }}` |
 
 Note: The token provided in `grafana_sa_token` must have the following permissions:
 
@@ -27,6 +27,8 @@ Note: The token provided in `grafana_sa_token` must have the following permissio
 A fresh deployment (`fresh_deploy`) deletes every alert rule in the Grafana folders the configuration uses and then creates all the alerts in the deployment folder. It's destructive, so run it from a manually triggered workflow, and give Sigma Rule Deployment its own Grafana folders.
 
 When configurations deploy to different Grafana instances, set `grafana_sa_token` to a JSON object that maps each instance URL, as written in `grafana_instance`, to its token. Refer to [Use more than one Grafana instance](../../docs/set-up/grafana-service-account.md#use-more-than-one-grafana-instance).
+
+The token provided in `github_token` must be able to read the repository's pull requests and comment on them: grant the job `pull-requests: write` when you use the default `${{ github.token }}`, or give a GitHub App or fine-grained token read and write access to pull requests. Checking out the repository and pulling the Action image use the workflow's `GITHUB_TOKEN`, not `github_token`, so the job also needs `contents: read` and `packages: read`.
 
 For how the deployer chooses instances, runs fresh deployments, and cleans up when you remove alert files, configurations, or instances, refer to [Deployments](../../docs/use/deployments.md).
 

@@ -233,7 +233,7 @@ It accepts the following secrets:
 | Secret                | Description                                                                                                                                                                                       |
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `grafana_sa_token`    | Token used to provision alert rules, or a JSON object of tokens for each instance. Needs the alerting roles listed in [Create a Grafana service account token](grafana-service-account.md).       |
-| `custom_github_token` | GitHub token for the deploy Action. Currently has no effect: the pull request comments always use the workflow's `GITHUB_TOKEN`. |
+| `custom_github_token` | GitHub token the deploy Action uses to comment the deployment status on the merged pull request, for example a GitHub App token to post as the app. Defaults to the workflow's `GITHUB_TOKEN`. It needs read and write access to pull requests in the repository. Pulling the Action image still uses the workflow's `GITHUB_TOKEN`. |
 
 ## Build your own workflows
 

@@ -15,7 +15,7 @@ inputs:
     required: false
     default: "false"
   github_token:
-    description: "GitHub token to use for the action."
+    description: "GitHub token used to comment the deployment status on the pull requests associated with the pushed commit. Needs pull-requests: write."
     required: false
     default: ${{ github.token }}
 
@@ -156,6 +156,7 @@ runs:
         GRAFANA_INSTANCE: ${{ steps.grafana-instance.outputs.grafana_instance }}
         ACTION_PATH: ${{ github.action_path }}
       with:
+          github-token: ${{ inputs.github_token }}
           script: |
             const { buildDeploymentComment, parseDeploymentResults } = require(`${process.env.ACTION_PATH}/deployment-comment.cjs`);
 
@@ -208,6 +209,7 @@ runs:
       env:
         DEPLOYMENT_ERROR: ${{ steps.output.outputs.deployment_error }}
       with:
+          github-token: ${{ inputs.github_token }}
           script: |
             const deploymentError = process.env.DEPLOYMENT_ERROR?.trim();
             const escapedError = deploymentError

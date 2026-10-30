@@ -22,7 +22,7 @@ on:
         description: "A Grafana service account token for provisioning the alerts (or a JSON object mapping each Grafana instance URL to its own token), with at least the following roles: Alerting:Access to alert rules provisioning API, Alerting:Rules Reader, Alerting:Rules Writer, Alerting:Set provisioning status"
         required: false
       custom_github_token:
-        description: "GitHub token to use for the action, using github.token by default"
+        description: "GitHub token used to comment the deployment status on the merged pull request, using github.token by default"
         required: false
 
 jobs:
