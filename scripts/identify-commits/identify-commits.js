@@ -10,10 +10,10 @@
  *   node identify-commits.js
  * 
  * Environment variables (for GitHub Actions):
- *   PULL_REQUEST_NUMBER, ACTIONS_USERNAME, GITHUB_TOKEN
+ *   PULL_REQUEST_NUMBER, ACTIONS_USERNAME, GITHUB_TOKEN, CHANGED_FILES_FROM_BASE
  * 
  * CLI arguments (for local testing):
- *   --pr-number, --actions-username, --token
+ *   --pull-request-number, --actions-username, --github-token, --changed-files-from-base
  */
 
 import * as core from '@actions/core';
@@ -32,6 +32,7 @@ function getInputs() {
       pullRequestNumber: core.getInput('pull_request_number') || process.env.PULL_REQUEST_NUMBER || github.context.issue?.number,
       actionsUsername: core.getInput('actions_username') || process.env.ACTIONS_USERNAME || 'github-actions[bot]',
       githubToken: core.getInput('github_token') || process.env.GITHUB_TOKEN,
+      changedFilesFromBase: (core.getInput('changed_files_from_base') || process.env.CHANGED_FILES_FROM_BASE) === 'true',
     };
   } else {
     // Parse CLI arguments for local testing
@@ -51,6 +52,7 @@ function getInputs() {
       pullRequestNumber: inputs.pull_request_number || process.env.PULL_REQUEST_NUMBER,
       actionsUsername: inputs.actions_username || process.env.ACTIONS_USERNAME || 'github-actions[bot]',
       githubToken: inputs.github_token || process.env.GITHUB_TOKEN,
+      changedFilesFromBase: (inputs.changed_files_from_base || process.env.CHANGED_FILES_FROM_BASE) === 'true',
     };
   }
 }
@@ -80,8 +82,12 @@ function getContext() {
 
 /**
  * Identify relevant commits in a pull request
+ *
+ * diffRef is the ref the changed and deleted input files are calculated against:
+ * the PR base when changedFilesFromBase is set, otherwise previousRef so only the
+ * changes since the last automation commit are processed.
  */
-async function identifyCommits(octokit, context, prNumber, actionsUsername) {
+async function identifyCommits(octokit, context, prNumber, actionsUsername, changedFilesFromBase = false) {
   const iterator = await octokit.paginate(octokit.rest.pulls.listCommits.endpoint.merge({
     owner: context.repo.owner,
     repo: context.repo.repo,
@@ -115,13 +121,15 @@ async function identifyCommits(octokit, context, prNumber, actionsUsername) {
   }
 
   const previousRef = lastCommit || previousCommit;
+  const diffRef = changedFilesFromBase ? baseCommit : previousRef;
 
   return {
     baseCommit,
     previousCommit,
     firstCommit,
     lastCommit,
-    previousRef
+    previousRef,
+    diffRef
   };
 }
 
@@ -134,7 +142,8 @@ function setOutputs(results) {
     'previous-commit': results.previousCommit,
     'first-commit': results.firstCommit,
     'last-commit': results.lastCommit,
-    'previous-ref': results.previousRef
+    'previous-ref': results.previousRef,
+    'diff-ref': results.diffRef
   };
 
   if (process.env.GITHUB_ACTIONS) {
@@ -179,7 +188,8 @@ async function main() {
       octokit,
       context,
       parseInt(inputs.pullRequestNumber, 10),
-      inputs.actionsUsername
+      inputs.actionsUsername,
+      inputs.changedFilesFromBase
     );
 
     // Log results
@@ -188,6 +198,7 @@ async function main() {
     console.log(`PR First Commit: ${results.firstCommit}`);
     console.log(`PR Last Commit by automation: ${results.lastCommit}`);
     console.log(`PR Previous Ref: ${results.previousRef}`);
+    console.log(`PR Diff Ref: ${results.diffRef}`);
 
     // Set outputs
     setOutputs(results);

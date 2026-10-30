@@ -18,7 +18,7 @@ Most repositories run this Action through the reusable convert and integrate wor
 | `pretty_print`            | Whether to pretty print the converted files (`true/false`).                                                                           | No       | `false`                 |
 | `all_rules`               | Whether to convert all rules, regardless of changes (`true/false`).                                                                   | No       | `false`                 |
 | `actions_username`        | The username of the github actions bot committer.                                                                                     | No       | `"github-actions[bot]"` |
-| `changed_files_from_base` | Calculate changes from PR base.                                                                                                       | No       | `"false"`               |
+| `changed_files_from_base` | Detect changed rules, pipelines and config against the PR base instead of the last automation commit (`true/false`).                  | No       | `"false"`               |
 | `configurations`          | Space-separated configuration names to convert. Empty converts all configurations.                                                    | No       | `""`                    |
 
 ## Usage

@@ -11,7 +11,8 @@ test('setOutputs - GitHub Actions mode', () => {
     previousCommit: 'def456',
     firstCommit: 'ghi789',
     lastCommit: 'jkl012',
-    previousRef: 'jkl012'
+    previousRef: 'jkl012',
+    diffRef: 'jkl012'
   };
 
   // Verify it doesn't throw (actual output verification is done in stdout mode test)
@@ -32,7 +33,8 @@ test('setOutputs - non-GitHub Actions mode (stdout)', () => {
     previousCommit: 'def456',
     firstCommit: 'ghi789',
     lastCommit: 'jkl012',
-    previousRef: 'jkl012'
+    previousRef: 'jkl012',
+    diffRef: 'jkl012'
   };
 
   // Capture console.log output
@@ -45,12 +47,13 @@ test('setOutputs - non-GitHub Actions mode (stdout)', () => {
   identifyModule.setOutputs(results);
 
   // Verify outputs were written to stdout
-  assert.strictEqual(logCalls.length, 5);
+  assert.strictEqual(logCalls.length, 6);
   assert(logCalls.some(line => line === 'base-commit=abc123'));
   assert(logCalls.some(line => line === 'previous-commit=def456'));
   assert(logCalls.some(line => line === 'first-commit=ghi789'));
   assert(logCalls.some(line => line === 'last-commit=jkl012'));
   assert(logCalls.some(line => line === 'previous-ref=jkl012'));
+  assert(logCalls.some(line => line === 'diff-ref=jkl012'));
 
   console.log = originalLog;
   process.env.GITHUB_ACTIONS = originalEnv;
@@ -65,7 +68,8 @@ test('setOutputs - handles empty values', () => {
     previousCommit: '',
     firstCommit: '',
     lastCommit: '',
-    previousRef: ''
+    previousRef: '',
+    diffRef: ''
   };
 
   const originalLog = console.log;
@@ -77,9 +81,10 @@ test('setOutputs - handles empty values', () => {
   identifyModule.setOutputs(results);
 
   // Verify empty values are still output
-  assert.strictEqual(logCalls.length, 5);
+  assert.strictEqual(logCalls.length, 6);
   assert(logCalls.some(line => line === 'base-commit='));
   assert(logCalls.some(line => line === 'last-commit='));
+  assert(logCalls.some(line => line === 'diff-ref='));
 
   console.log = originalLog;
   process.env.GITHUB_ACTIONS = originalEnv;

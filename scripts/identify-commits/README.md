@@ -41,6 +41,7 @@ node identify-commits.js
 |----------|-------------|----------|---------|
 | `PULL_REQUEST_NUMBER` | The pull request number | Yes* | From `context.issue.number` in GitHub Actions |
 | `ACTIONS_USERNAME` | Username to identify automation commits | No | `github-actions[bot]` |
+| `CHANGED_FILES_FROM_BASE` | `true` to set `diff-ref` to the PR base instead of `previous-ref` | No | `false` |
 | `GITHUB_TOKEN` | GitHub token for API access | Yes | - |
 | `GITHUB_REPOSITORY` | Repository in format `owner/repo` | Yes (for local) | Auto in GitHub Actions |
 
@@ -57,6 +58,7 @@ The script outputs the following values to `$GITHUB_OUTPUT` (GitHub Actions) or 
 | `first-commit` | First commit in the PR |
 | `last-commit` | Last commit authored by automation user (empty if none) |
 | `previous-ref` | Either `last-commit` or `previous-commit` (used for git diff) |
+| `diff-ref` | Ref the changed and deleted files are calculated against: `base-commit` when `CHANGED_FILES_FROM_BASE` is `true`, otherwise `previous-ref` |
 
 ## How It Works
 
@@ -64,7 +66,8 @@ The script outputs the following values to `$GITHUB_OUTPUT` (GitHub Actions) or 
 2. **Identifies base commit**: Parent of the first commit in the PR
 3. **Tracks automation commits**: Finds commits authored by `ACTIONS_USERNAME`
 4. **Calculates previous ref**: Uses last automation commit if exists, otherwise uses base commit
-5. **Outputs results** for use in subsequent git operations
+5. **Calculates diff ref**: Uses the base commit when `CHANGED_FILES_FROM_BASE` is `true`, otherwise the previous ref
+6. **Outputs results** for use in subsequent git operations
 
 ## Example Output
 
@@ -74,6 +77,7 @@ Last commit or base ref: xyz789ghi012...
 PR First Commit: def456ghi789...
 PR Last Commit by automation: jkl345mno678...
 PR Previous Ref: jkl345mno678...
+PR Diff Ref: jkl345mno678...
 ```
 
 ## Use Cases

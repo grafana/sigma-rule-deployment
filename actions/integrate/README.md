@@ -17,7 +17,7 @@ Most repositories run this Action through the reusable convert and integrate wor
 | `pretty_print`                     | Pretty print the JSON output                                                                         | No       | `false`               |
 | `output_log_lines`                 | Output log lines to the outputs of the test_query_results_file                                       | No       | `false`               |
 | `all_rules`                        | Whether to integrate all rules                                                                       | No       | `false`               |
-| `changed_files_from_base`          | Whether to use the changed files from the base branch                                                | No       | `false`               |
+| `changed_files_from_base`          | Detect changed conversion files against the PR base instead of the last automation commit            | No       | `false`               |
 | `actions_username`                 | The username of the actions user                                                                     | No       | `github-actions[bot]` |
 | `continue_on_query_testing_errors` | Continue integration process even when query testing fails, but print errors and continue the action. This sets the default for `continue_on_error`, so it takes precedence over `defaults.integration.continue_on_error`, but a configuration's own `continue_on_error` still overrides it | No       | `true`                |
 | `configurations`                   | Space-separated configuration names to restrict the integration to. Empty integrates all configurations | No | `""` |
@@ -72,7 +72,7 @@ jobs:
 
 1. **Setup**: The action prepares the environment and retrieves configuration paths from the config file.
 2. **Configuration Loading**: Loads and validates the integration configuration file, extracting conversion and deployment paths.
-3. **File Detection**: Identifies changed conversion files using git diff (either from the last commit or from the base branch).
+3. **File Detection**: Identifies changed conversion files using git diff, either since the last automation commit or, with `changed_files_from_base`, since the pull request base.
 4. **Query Processing**: For each changed conversion file:
    - Parses the JSON output from the Sigma Rule Converter
    - Extracts queries and rule metadata
@@ -113,7 +113,7 @@ jobs:
 ### File Management
 
 - The action automatically detects changed conversion files using git diff.
-- Only processes files that have been modified since the last commit (or base branch).
+- Only processes files that have been modified since the last automation commit (or since the pull request base with `changed_files_from_base: true`).
 - Use `all_rules: true` to process all conversion files regardless of changes.
 - Obsolete alert rule files are automatically removed when corresponding conversion files are deleted.
 - **Preserving manual edits**: an alert rule file whose `annotations` contain `"manual": "true"` is never overwritten or deleted by the integrator. Refer to [Preserve manual modifications](../../docs/use/manual-modifications.md).
