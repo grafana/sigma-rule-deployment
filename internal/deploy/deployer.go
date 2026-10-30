@@ -550,17 +550,13 @@ func (d *Deployer) LoadConfig(_ context.Context) error {
 	}
 
 	// Extract the groups intervals from the conversion config
-	defaultInterval := "5m"
-	if configYAML.Defaults.Integration.TimeWindow != "" {
-		defaultInterval = configYAML.Defaults.Integration.TimeWindow
-	}
 	seenFolderOrgPairs := map[folderOrg]bool{d.config.folderOrgPairs[0]: true}
 	d.config.endpointPairs = make(map[string][]folderOrg)
 	for _, config := range configYAML.Configurations {
-		interval := defaultInterval
-		if config.Integration.TimeWindow != "" {
-			interval = config.Integration.TimeWindow
-		}
+		// This fallback chain must match the one used for the alert's query time range at
+		// integration time (internal/integrate/integrator.go), otherwise the rule group is
+		// evaluated less often than its queries look back and misses events in between.
+		interval := shared.GetConfigValue(config.Integration.TimeWindow, configYAML.Defaults.Integration.TimeWindow, shared.DefaultTimeWindow)
 		intervalDuration, err := shared.ParseDuration(interval)
 		log.Printf("Interval duration from %s: %d", sanitizeForLog(interval), int64(intervalDuration.Seconds())) //nolint:gosec // G706: interval sanitized with sanitizeForLog before logging
 		if err != nil || int64(intervalDuration.Seconds()) <= 0 {

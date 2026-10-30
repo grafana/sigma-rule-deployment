@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/grafana/sigma-rule-deployment/internal/integrate"
 	"github.com/grafana/sigma-rule-deployment/internal/model"
 	"github.com/grafana/sigma-rule-deployment/shared"
 	"github.com/stretchr/testify/assert"
@@ -1625,6 +1626,60 @@ func TestLoadConfigAcceptsDaysInTimeWindowAndTimeout(t *testing.T) {
 		{folderUID: "f", name: "g"}: 86400,
 		{folderUID: "f", name: "h"}: 129600,
 	}, d.config.groupsIntervals)
+}
+
+func TestLoadConfigDefaultTimeWindow(t *testing.T) {
+	t.Run("unset time window uses the shared default", func(t *testing.T) {
+		writeTestDeployerConfig(t, "version: 2\nfolders:\n  deployment_path: \"./deployments\"\n"+
+			"defaults:\n  integration:\n    folder_id: f\n    org_id: 1\n"+
+			"  deployment:\n    grafana_instance: https://myinstance.grafana.com\n"+
+			"configurations:\n  - name: a\n    integration:\n      rule_group: g\n")
+
+		d := NewDeployer()
+		assert.NoError(t, d.LoadConfig(context.Background()))
+		assert.Equal(t, map[ruleGroup]int64{{folderUID: "f", name: "g"}: 300}, d.config.groupsIntervals)
+	})
+
+	t.Run("defaults time window overrides the shared default", func(t *testing.T) {
+		writeTestDeployerConfig(t, "version: 2\nfolders:\n  deployment_path: \"./deployments\"\n"+
+			"defaults:\n  integration:\n    folder_id: f\n    org_id: 1\n    time_window: 1m\n"+
+			"  deployment:\n    grafana_instance: https://myinstance.grafana.com\n"+
+			"configurations:\n  - name: a\n    integration:\n      rule_group: g\n")
+
+		d := NewDeployer()
+		assert.NoError(t, d.LoadConfig(context.Background()))
+		assert.Equal(t, map[ruleGroup]int64{{folderUID: "f", name: "g"}: 60}, d.config.groupsIntervals)
+	})
+}
+
+// TestDefaultTimeWindowQueryCoversEvaluationInterval guards against the integrate and deploy
+// stages drifting apart on the default time window again: with no time_window set, the query
+// time range of the generated alert rule must look back at least as far as the interval its
+// rule group is evaluated at, otherwise events between evaluations are missed.
+func TestDefaultTimeWindowQueryCoversEvaluationInterval(t *testing.T) {
+	writeTestDeployerConfig(t, "version: 2\nfolders:\n  deployment_path: \"./deployments\"\n"+
+		"defaults:\n  integration:\n    folder_id: f\n    org_id: 1\n"+
+		"  deployment:\n    grafana_instance: https://myinstance.grafana.com\n"+
+		"configurations:\n  - name: a\n    integration:\n      rule_group: g\n")
+	d := NewDeployer()
+	assert.NoError(t, d.LoadConfig(context.Background()))
+	evaluationInterval := time.Duration(d.config.groupsIntervals[ruleGroup{folderUID: "f", name: "g"}]) * time.Second
+
+	rule := &model.ProvisionedAlertRule{UID: "5c1c217a"}
+	cfg := model.NamedConfigBlock{
+		Name: "a",
+		ConfigBlock: model.ConfigBlock{
+			Conversion:  model.ConversionConfig{Target: shared.Loki},
+			Integration: model.IntegrationConfig{DataSource: "my_data_source", RuleGroup: "g"},
+		},
+	}
+	err := integrate.NewIntegrator().ConvertToAlert(rule, []string{"{job=`.+`}"}, "Default Time Window", cfg, "conversion.json", "alert.json", model.ConversionOutput{})
+	assert.NoError(t, err)
+	queryLookback := time.Duration(rule.Data[0].RelativeTimeRange.From)
+
+	assert.Equal(t, shared.DefaultTimeWindow, rule.Annotations["TimeWindow"])
+	assert.GreaterOrEqual(t, queryLookback, evaluationInterval, "default query time range must cover the default evaluation interval")
+	assert.Equal(t, evaluationInterval, queryLookback, "integrate and deploy must use the same default time window")
 }
 
 // TestDeployRecordsTheInstanceOfEachAlert verifies each created, updated and deleted alert

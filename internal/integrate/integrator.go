@@ -735,7 +735,7 @@ func validateAlertDestinations(config model.Configuration) error {
 
 func (i *Integrator) ConvertToAlert(rule *model.ProvisionedAlertRule, queries []string, titles string, cfg model.NamedConfigBlock, conversionFile string, integrateFile string, conversionObject model.ConversionOutput) error {
 	datasource := shared.GetConfigValue(cfg.Integration.DataSource, i.config.Defaults.Integration.DataSource, "nil")
-	timewindow := shared.GetConfigValue(cfg.Integration.TimeWindow, i.config.Defaults.Integration.TimeWindow, "1m")
+	timewindow := shared.GetConfigValue(cfg.Integration.TimeWindow, i.config.Defaults.Integration.TimeWindow, shared.DefaultTimeWindow)
 	duration, err := shared.ParseDuration(timewindow)
 	if err != nil {
 		return fmt.Errorf("error parsing time window: %v", err)

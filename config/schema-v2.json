@@ -317,7 +317,7 @@
                 },
                 "time_window": {
                     "$ref": "#/$defs/timeWindow",
-                    "description": "Time window for alert evaluation",
+                    "description": "How far back each alert rule query looks, and how often its rule group is evaluated. Defaults to 5m",
                     "examples": [
                         "5m",
                         "1h",

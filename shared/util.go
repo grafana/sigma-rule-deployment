@@ -18,6 +18,12 @@ const (
 	Elasticsearch = "elasticsearch"
 )
 
+// DefaultTimeWindow is the time_window used when neither a configuration nor the defaults set one.
+// A single time_window sets both how far back each alert rule query looks (integrate stage) and how
+// often its rule group is evaluated (deploy stage), so both stages must share this default:
+// a query that looks back less than the evaluation interval misses events between evaluations.
+const DefaultTimeWindow = "5m"
+
 func GetInputOrDefault(name string, value string) string {
 	envName := "INPUT_" + strings.ToUpper(strings.ReplaceAll(name, " ", "_"))
 

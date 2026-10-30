@@ -513,6 +513,37 @@ func TestConvertToAlert(t *testing.T) {
 	}
 }
 
+func TestConvertToAlertDefaultTimeWindow(t *testing.T) {
+	cfg := model.NamedConfigBlock{
+		Name: "conv",
+		ConfigBlock: model.ConfigBlock{
+			Conversion:  model.ConversionConfig{Target: "loki"},
+			Integration: model.IntegrationConfig{DataSource: "my_data_source", RuleGroup: "Default"},
+		},
+	}
+
+	t.Run("unset time window uses the shared default", func(t *testing.T) {
+		rule := &model.ProvisionedAlertRule{UID: "5c1c217a"}
+		i := NewIntegrator()
+		assert.NoError(t, i.ConvertToAlert(rule, []string{"{job=`.+`}"}, "Alert Rule", cfg, "test_conversion_file.json", "test_integrate_file.json", model.ConversionOutput{}))
+		assert.Equal(t, "5m", shared.DefaultTimeWindow)
+		assert.Equal(t, shared.DefaultTimeWindow, rule.Annotations["TimeWindow"])
+		for _, query := range rule.Data {
+			assert.Equal(t, model.Duration(5*time.Minute), query.RelativeTimeRange.From, "query %s", query.RefID)
+			assert.Equal(t, model.Duration(0), query.RelativeTimeRange.To, "query %s", query.RefID)
+		}
+	})
+
+	t.Run("defaults time window overrides the shared default", func(t *testing.T) {
+		rule := &model.ProvisionedAlertRule{UID: "5c1c217a"}
+		i := NewIntegrator()
+		i.config.Defaults.Integration = model.IntegrationConfig{TimeWindow: "1m"}
+		assert.NoError(t, i.ConvertToAlert(rule, []string{"{job=`.+`}"}, "Alert Rule", cfg, "test_conversion_file.json", "test_integrate_file.json", model.ConversionOutput{}))
+		assert.Equal(t, "1m", rule.Annotations["TimeWindow"])
+		assert.Equal(t, model.Duration(time.Minute), rule.Data[0].RelativeTimeRange.From)
+	})
+}
+
 func TestTemplateFuncs(t *testing.T) {
 	withAllRules := templateFuncs(true)
 	withoutAllRules := templateFuncs(false)
