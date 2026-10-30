@@ -13,7 +13,7 @@ defaults:
   conversion:
     target: loki
     format: default
-    skip_unsupported: true
+    skip_unsupported: true # Skip rules the backend can't convert. Set to false to fail on them instead
     file_pattern: "*.yml"
     required_rule_fields:
       - level

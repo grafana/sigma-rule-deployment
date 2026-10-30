@@ -57,6 +57,36 @@ def _setting(conversion: dict[str, Any], key: str, default: Any) -> Any:
     return default if value is None else value
 
 
+def _skip_unsupported(conversion: dict[str, Any], defaults: dict[str, Any]) -> bool:
+    """Return whether to skip rules the backend can't convert, rather than fail on them.
+
+    `skip_unsupported` defaults to true, and a configuration's value overrides the default.
+    The deprecated `fail_unsupported: true` stands in for `skip_unsupported: false` at a level
+    that doesn't set `skip_unsupported`; `fail_unsupported: false` has no effect.
+    """
+    for settings in (conversion, defaults):
+        skip = settings.get("skip_unsupported")
+        if skip is not None:
+            return skip
+        if settings.get("fail_unsupported"):
+            return False
+    return True
+
+
+def _warn_deprecated_fail_unsupported(settings: dict[str, Any], scope: str) -> None:
+    """Print a deprecation warning if `settings` sets `fail_unsupported`."""
+    fail = settings.get("fail_unsupported")
+    if fail is None:
+        return
+    message = (
+        f"::warning::fail_unsupported in {scope} is deprecated. Use skip_unsupported: false"
+        " to fail on rules the backend can't convert."
+    )
+    if fail and settings.get("skip_unsupported"):
+        message += " It is ignored there, because skip_unsupported: true is also set."
+    print(message)
+
+
 def _manual_is_set(value: Any) -> bool:
     """Return True if a decoded `manual` value marks a file as manually maintained.
 
@@ -239,11 +269,10 @@ def convert_rules(
         )
 
     verbose = defaults.pop("verbose", False)
+    _warn_deprecated_fail_unsupported(defaults, "defaults")
 
     default_target = defaults.get("target", "loki")
     default_format = defaults.get("format", "default")
-    default_skip_unsupported = defaults.get("skip_unsupported", True)
-    default_fail_unsupported = defaults.get("fail_unsupported", False)
     default_encoding = defaults.get("encoding", "utf-8")
     default_pipeline_check = defaults.get("pipeline_check", True)
     default_file_pattern = defaults.get("file_pattern", "*.yml")
@@ -408,6 +437,9 @@ def convert_rules(
             else:
                 pipelines.append(f"--pipeline={pipeline}")
 
+        _warn_deprecated_fail_unsupported(conversion, f"configuration {name!r}")
+        skip_unsupported = _skip_unsupported(conversion, defaults)
+
         for input_file in filtered_files:
             # If we're not converting all rules, skip the conversion if:
             # - the file is not in the list of changed files
@@ -481,15 +513,7 @@ def convert_rules(
                     if not conversion.get("pipeline_check", default_pipeline_check)
                     else ["--pipeline-check"]
                 ),
-                *(
-                    ["--skip-unsupported"]
-                    if conversion.get("skip_unsupported", default_skip_unsupported)
-                    else (
-                        ["--fail-unsupported"]
-                        if conversion.get("fail_unsupported", default_fail_unsupported)
-                        else []
-                    )
-                ),
+                "--skip-unsupported" if skip_unsupported else "--fail-unsupported",
                 "--json-indent",
                 str(_setting(conversion, "json_indent", default_json_indent)),
                 *(["--verbose"] if conversion.get("verbose", verbose) else []),

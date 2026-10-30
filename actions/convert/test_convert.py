@@ -1235,11 +1235,11 @@ def test_convert_rules_command_args(
         if "--disable-pipeline-check" in expected_args:
             assert "--disable-pipeline-check" in call_args
 
-        # For fail-unsupported, we need to check if skip-unsupported is not in the args
+        # Sigma CLI treats --skip-unsupported and --fail-unsupported as one switch,
+        # so exactly one of them is passed
         if "--fail-unsupported" in expected_args:
-            # The actual behavior seems to include --skip-unsupported regardless
-            # of the fail-unsupported setting, so we just check target is present
-            assert "--target" in call_args
+            assert "--fail-unsupported" in call_args
+            assert "--skip-unsupported" not in call_args
 
         if "--verbose" in expected_args:
             assert "--verbose" in call_args
@@ -2206,6 +2206,121 @@ def test_conversion_null_values_inherit_defaults(temp_workspace):
     assert _flag_values(args, "--pipeline=") == [f"--pipeline={temp_workspace}/pipelines/default.yml"]
     assert _flag_values(args, "--filter=") == ["--filter=default_filter"]
     assert _flag_values(args, "--backend-option=") == ["--backend-option=opt=default"]
+
+
+def _unsupported_flags(args):
+    return [a for a in args if a in ("--skip-unsupported", "--fail-unsupported")]
+
+
+@pytest.mark.parametrize(
+    "default_conversion, conversion, expected",
+    [
+        # skip_unsupported defaults to true
+        ({}, {}, ["--skip-unsupported"]),
+        ({"skip_unsupported": False}, {}, ["--fail-unsupported"]),
+        # A configuration's skip_unsupported overrides the default
+        ({"skip_unsupported": False}, {"skip_unsupported": True}, ["--skip-unsupported"]),
+        ({"skip_unsupported": True}, {"skip_unsupported": False}, ["--fail-unsupported"]),
+        # The deprecated fail_unsupported: true on its own still fails the conversion
+        ({}, {"fail_unsupported": True}, ["--fail-unsupported"]),
+        ({"fail_unsupported": True}, {}, ["--fail-unsupported"]),
+        ({"skip_unsupported": True}, {"fail_unsupported": True}, ["--fail-unsupported"]),
+        # A configuration's skip_unsupported overrides a default fail_unsupported
+        ({"fail_unsupported": True}, {"skip_unsupported": True}, ["--skip-unsupported"]),
+        # skip_unsupported wins over fail_unsupported at the same level
+        ({}, {"skip_unsupported": True, "fail_unsupported": True}, ["--skip-unsupported"]),
+        ({"skip_unsupported": True, "fail_unsupported": True}, {}, ["--skip-unsupported"]),
+        # fail_unsupported: false has no effect
+        ({}, {"fail_unsupported": False}, ["--skip-unsupported"]),
+        ({"skip_unsupported": False}, {"fail_unsupported": False}, ["--fail-unsupported"]),
+        # A null fail_unsupported counts as unset
+        ({"fail_unsupported": True}, {"fail_unsupported": None}, ["--fail-unsupported"]),
+    ],
+)
+def test_conversion_skip_unsupported(temp_workspace, default_conversion, conversion, expected):
+    args = _recorded_invoke_args(temp_workspace, default_conversion, conversion)
+    assert _unsupported_flags(args) == expected
+
+
+def _deprecation_warnings(output):
+    return [
+        line
+        for line in output.splitlines()
+        if line.startswith("::warning::fail_unsupported") and "deprecated" in line
+    ]
+
+
+@pytest.mark.parametrize(
+    "default_conversion, conversion, scopes",
+    [
+        ({}, {}, []),
+        ({"skip_unsupported": False}, {"skip_unsupported": True}, []),
+        ({}, {"fail_unsupported": True}, ["configuration 'test_conversion'"]),
+        ({"fail_unsupported": True}, {}, ["defaults"]),
+        # fail_unsupported: false has no effect, but is still deprecated
+        ({}, {"fail_unsupported": False}, ["configuration 'test_conversion'"]),
+        (
+            {"fail_unsupported": True},
+            {"fail_unsupported": True},
+            ["defaults", "configuration 'test_conversion'"],
+        ),
+    ],
+)
+def test_conversion_fail_unsupported_deprecation_warning(
+    temp_workspace, capsys, default_conversion, conversion, scopes
+):
+    _recorded_invoke_args(temp_workspace, default_conversion, conversion)
+    warnings = _deprecation_warnings(capsys.readouterr().out)
+    assert len(warnings) == len(scopes)
+    for warning, scope in zip(warnings, scopes):
+        assert f"fail_unsupported in {scope} is deprecated" in warning
+        assert "skip_unsupported: false" in warning
+        assert "ignored" not in warning
+
+
+@pytest.mark.parametrize(
+    "default_conversion, conversion, scope",
+    [
+        ({}, {"skip_unsupported": True, "fail_unsupported": True}, "configuration 'test_conversion'"),
+        ({"skip_unsupported": True, "fail_unsupported": True}, {}, "defaults"),
+    ],
+)
+def test_conversion_conflicting_unsupported_settings_warn(
+    temp_workspace, capsys, default_conversion, conversion, scope
+):
+    _recorded_invoke_args(temp_workspace, default_conversion, conversion)
+    warnings = _deprecation_warnings(capsys.readouterr().out)
+    assert len(warnings) == 1
+    assert f"fail_unsupported in {scope} is deprecated" in warnings[0]
+    assert "It is ignored there, because skip_unsupported: true is also set" in warnings[0]
+
+
+def test_conversion_fail_unsupported_warns_once_per_configuration(temp_workspace, capsys):
+    """The deprecation warning is printed once per configuration, not once per rule file."""
+    (temp_workspace / "rules" / "other.yml").write_text(
+        (temp_workspace / "rules" / "test.yml").read_text()
+    )
+    config = DynaconfDict(
+        {
+            "version": 2,
+            "defaults": {"conversion": {"target": "loki"}},
+            "configurations": [
+                {
+                    "name": "test_conversion",
+                    "conversion": {"input": ["rules/*.yml"], "fail_unsupported": True},
+                }
+            ],
+        }
+    )
+    with patch("click.testing.CliRunner.invoke") as mock_invoke:
+        mock_result = MagicMock()
+        mock_result.exception = None
+        mock_result.exc_info = None
+        mock_result.stdout = "Parsing Sigma rules\n"
+        mock_invoke.return_value = mock_result
+        convert_rules(config=config, path_prefix=temp_workspace, all_rules=True)
+    assert mock_invoke.call_count == 2
+    assert len(_deprecation_warnings(capsys.readouterr().out)) == 1
 
 
 def test_convert_rules_empty_required_rule_fields_overrides_default(temp_workspace):

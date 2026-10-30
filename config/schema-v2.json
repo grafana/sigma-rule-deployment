@@ -177,11 +177,12 @@
                 },
                 "skip_unsupported": {
                     "type": "boolean",
-                    "description": "Skip conversion of rules that can't be handled by the backend"
+                    "description": "Skip conversion of rules that can't be handled by the backend, instead of failing. Defaults to true. Set to false to fail on them"
                 },
                 "fail_unsupported": {
                     "type": "boolean",
-                    "description": "Whether to fail on unsupported rule features during conversion"
+                    "deprecated": true,
+                    "description": "Deprecated: use skip_unsupported: false instead. true acts as skip_unsupported: false where skip_unsupported isn't set at the same level; false has no effect"
                 },
                 "file_pattern": {
                     "type": "string",
