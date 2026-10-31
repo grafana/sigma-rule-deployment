@@ -22,13 +22,13 @@ func TestBuiltinQueryModels(t *testing.T) {
 
 	// Target names that should resolve to each plugin type, in addition to the type itself
 	aliases := map[string][]string{
-		dsOpenSearch: {"opensearch"},
+		dsOpenSearch: {"opensearch_lucene", "opensearch"},
 		dsQuickwit:   {"quickwit"},
 		dsClickHouse: {"clickhouse"},
 		dsParseable:  {"parseable"},
 		dsSQLite:     {"sqlite"},
-		dsSurrealDB:  {"surrealql"},
-		dsDataset:    {"sentinelone-pq"},
+		dsSurrealDB:  {"surreal_ql", "surrealql"},
+		dsDataset:    {"sentinel_one_pq", "sentinelone-pq"},
 		dsSplunk:     {"splunk"},
 		dsDatadog:    {"datadog"},
 	}
