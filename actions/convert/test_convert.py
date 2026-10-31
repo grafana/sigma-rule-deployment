@@ -2208,6 +2208,30 @@ def test_conversion_null_values_inherit_defaults(temp_workspace):
     assert _flag_values(args, "--backend-option=") == ["--backend-option=opt=default"]
 
 
+@pytest.mark.parametrize(
+    "default_conversion, conversion, expected",
+    [
+        # Neither set: skip_unsupported defaults to true
+        ({}, {}, ["--skip-unsupported"]),
+        # fail_unsupported alone works without turning off skip_unsupported
+        ({"fail_unsupported": True}, {}, ["--fail-unsupported"]),
+        ({}, {"fail_unsupported": True}, ["--fail-unsupported"]),
+        # skip_unsupported alone
+        ({"skip_unsupported": True}, {}, ["--skip-unsupported"]),
+        ({"skip_unsupported": False}, {}, []),
+        # Both set: fail_unsupported takes precedence
+        ({"skip_unsupported": True, "fail_unsupported": True}, {}, ["--fail-unsupported"]),
+        ({"skip_unsupported": False, "fail_unsupported": True}, {}, ["--fail-unsupported"]),
+        ({"fail_unsupported": True}, {"skip_unsupported": True}, ["--fail-unsupported"]),
+        # A configuration can switch off a fail_unsupported default
+        ({"fail_unsupported": True}, {"fail_unsupported": False}, ["--skip-unsupported"]),
+    ],
+)
+def test_conversion_unsupported_flags(temp_workspace, default_conversion, conversion, expected):
+    args = _recorded_invoke_args(temp_workspace, default_conversion, conversion)
+    assert [a for a in args if a in ("--skip-unsupported", "--fail-unsupported")] == expected
+
+
 def test_convert_rules_empty_required_rule_fields_overrides_default(temp_workspace):
     """required_rule_fields: [] in a configuration keeps the whole rule, rather than the default's fields."""
     config = DynaconfDict(

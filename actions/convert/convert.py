@@ -481,12 +481,14 @@ def convert_rules(
                     if not conversion.get("pipeline_check", default_pipeline_check)
                     else ["--pipeline-check"]
                 ),
+                # fail_unsupported takes precedence, so it works without also turning off
+                # skip_unsupported, which defaults to true.
                 *(
-                    ["--skip-unsupported"]
-                    if conversion.get("skip_unsupported", default_skip_unsupported)
+                    ["--fail-unsupported"]
+                    if conversion.get("fail_unsupported", default_fail_unsupported)
                     else (
-                        ["--fail-unsupported"]
-                        if conversion.get("fail_unsupported", default_fail_unsupported)
+                        ["--skip-unsupported"]
+                        if conversion.get("skip_unsupported", default_skip_unsupported)
                         else []
                     )
                 ),
