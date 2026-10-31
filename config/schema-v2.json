@@ -181,7 +181,7 @@
                 },
                 "fail_unsupported": {
                     "type": "boolean",
-                    "description": "Whether to fail on unsupported rule features during conversion"
+                    "description": "Whether to fail on unsupported rule features during conversion. Takes precedence over skip_unsupported"
                 },
                 "file_pattern": {
                     "type": "string",
