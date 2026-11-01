@@ -151,6 +151,7 @@ jobs:
           configurations: ${{ steps.parse.outputs.configurations }}
           skip_query_testing: ${{ steps.parse.outputs.no_test == 'true' }}
           query_time_window: ${{ steps.parse.outputs.query_time_window }}
+          continue_on_query_testing_errors: ${{ inputs.continue_on_query_testing_errors }}
 
       - name: Commit queries and alert rules
         if: github.event_name != 'issue_comment' || steps.parse.outputs.triggered == 'true'
