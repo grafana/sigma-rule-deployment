@@ -8,7 +8,10 @@ name: "External PR Integration Test Instructions"
 # workflow_run executes in the context of the base repository, so it has a
 # write token even for fork PRs. It never checks out or runs the fork's code.
 on:
-  workflow_run:
+  # Safe use of workflow_run: nothing from the fork is checked out, downloaded or
+  # executed, and event values only reach the script through env. The write token
+  # is the point, as fork PR builds can't comment themselves.
+  workflow_run: # zizmor: ignore[dangerous-triggers]
     workflows:
       - "Build & Integration Test Image"
     types:
