@@ -1,0 +1,71 @@
+name: "External PR Integration Test Instructions"
+
+# Fork PRs cannot run the integration test automatically (no secrets, read-only
+# token), so a maintainer dispatches it by hand from the integration-test repo.
+# The build run id that workflow needs is awkward to find, so once the build
+# finishes this posts the inputs and a link to the trigger on the PR.
+#
+# workflow_run executes in the context of the base repository, so it has a
+# write token even for fork PRs. It never checks out or runs the fork's code.
+on:
+  # Safe use of workflow_run: nothing from the fork is checked out, downloaded or
+  # executed, and event values only reach the script through env. The write token
+  # is the point, as fork PR builds can't comment themselves.
+  workflow_run: # zizmor: ignore[dangerous-triggers]
+    workflows:
+      - "Build & Integration Test Image"
+    types:
+      - completed
+
+permissions: {}
+
+jobs:
+  comment:
+    name: "Comment test instructions"
+    # Only fork PR builds; same-repo PRs run the integration test automatically.
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.full_name != github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write # to comment on the fork PR
+    steps:
+      - name: Comment on the pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          # workflow_run.pull_requests is empty for forks, so resolve the PR from the commit.
+          PR_NUMBER=$(gh api "repos/${REPO}/commits/${HEAD_SHA}/pulls" \
+            --jq '[.[] | select(.state == "open" and .base.repo.full_name == "'"${REPO}"'")] | first.number // empty')
+          if ! [[ "$PR_NUMBER" =~ ^[0-9]+$ ]]; then
+            echo "No open pull request found for ${HEAD_SHA}, nothing to comment on"
+            exit 0
+          fi
+
+          MARKER="<!-- external-pr-integration-test -->"
+          TRIGGER_URL="https://github.com/grafana/sigma-rule-deployment-integration-test/actions/workflows/external-pr-integration-test.yml"
+
+          BODY=$(cat <<EOF
+          ${MARKER}
+          **For maintainers:** after reviewing the diff, [run the external integration test](${TRIGGER_URL}) with:
+
+          | Input | Value |
+          | --- | --- |
+          | \`pr_number\` | \`${PR_NUMBER}\` |
+          | \`run_id\` | \`${RUN_ID}\` ([build run](${RUN_URL})) |
+          EOF
+          )
+
+          EXISTING=$(gh api "repos/${REPO}/issues/${PR_NUMBER}/comments" --paginate \
+            --jq '[.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("'"${MARKER}"'")))] | first.id // empty')
+
+          if [ -n "$EXISTING" ]; then
+            gh api --method PATCH "repos/${REPO}/issues/comments/${EXISTING}" -f body="$BODY" > /dev/null
+          else
+            gh api --method POST "repos/${REPO}/issues/${PR_NUMBER}/comments" -f body="$BODY" > /dev/null
+          fi
