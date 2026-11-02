@@ -83,7 +83,6 @@ func TestLoadConfigFromFile_Unsupported(t *testing.T) {
 	require.NotNil(t, cfg.Configurations[0].Conversion.Unsupported)
 	assert.Equal(t, "fail", *cfg.Configurations[0].Conversion.Unsupported)
 	assert.Nil(t, cfg.Configurations[1].Conversion.Unsupported)
-
 }
 
 func TestLoadConfigFromFile_EmptyTemplateMapIsNotNil(t *testing.T) {
