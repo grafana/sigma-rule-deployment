@@ -242,8 +242,7 @@ def convert_rules(
 
     default_target = defaults.get("target", "loki")
     default_format = defaults.get("format", "default")
-    default_skip_unsupported = defaults.get("skip_unsupported", True)
-    default_fail_unsupported = defaults.get("fail_unsupported", False)
+    default_unsupported = defaults.get("unsupported", "skip")
     default_encoding = defaults.get("encoding", "utf-8")
     default_pipeline_check = defaults.get("pipeline_check", True)
     default_file_pattern = defaults.get("file_pattern", "*.yml")
@@ -481,15 +480,7 @@ def convert_rules(
                     if not conversion.get("pipeline_check", default_pipeline_check)
                     else ["--pipeline-check"]
                 ),
-                *(
-                    ["--skip-unsupported"]
-                    if conversion.get("skip_unsupported", default_skip_unsupported)
-                    else (
-                        ["--fail-unsupported"]
-                        if conversion.get("fail_unsupported", default_fail_unsupported)
-                        else []
-                    )
-                ),
+                f"--{_setting(conversion, 'unsupported', default_unsupported)}-unsupported",
                 "--json-indent",
                 str(_setting(conversion, "json_indent", default_json_indent)),
                 *(["--verbose"] if conversion.get("verbose", verbose) else []),

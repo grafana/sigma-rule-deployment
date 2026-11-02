@@ -98,7 +98,8 @@ def test_conversion_defaults_split():
     conv = result["defaults"]["conversion"]
     # Pure conversion fields stay
     assert conv["target"] == "loki"
-    assert conv["skip_unsupported"] is True
+    assert conv["unsupported"] == "skip"
+    assert "skip_unsupported" not in conv
     assert conv["required_rule_fields"] == ["level", "logsource", "author"]
     # Integration-bound field moves out
     assert "data_source" not in conv

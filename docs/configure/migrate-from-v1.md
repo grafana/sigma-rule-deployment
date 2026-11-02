@@ -14,6 +14,7 @@ The v2 format groups every setting by pipeline stage:
 - The top-level `integration` block moves to `defaults.integration`. Where it sets the same setting as `conversion_defaults`, its value wins.
 - In each `conversions` entry, the integration settings `rule_group`, `time_window`, `lookback`, `data_source`, `data_source_type`, and `query_model` move into an `integration` block.
 - `conversions` is renamed to `configurations`.
+- The `skip_unsupported` and `fail_unsupported` booleans are replaced by a single `unsupported` setting, `skip` or `fail`. `skip_unsupported: true` becomes `unsupported: skip` and `skip_unsupported: false` becomes `unsupported: fail`. v1 ignored `fail_unsupported` unless `skip_unsupported` was `false`, so the migration doesn't carry it over separately.
 - The top-level `deployment` block moves to `defaults.deployment`.
 - `folders` stays the same.
 - `version: 2` is added.

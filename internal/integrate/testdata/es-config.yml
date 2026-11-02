@@ -6,7 +6,7 @@ defaults:
   conversion:
     target: esql
     format: default
-    skip_unsupported: true
+    unsupported: skip
     file_pattern: "*.yml"
   integration:
     data_source: grafanacloud-es-logs
