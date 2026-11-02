@@ -15,7 +15,7 @@ import yaml
 
 # Fields that stay in the conversion block in v2
 _CONVERSION_FIELDS = {
-    "target", "format", "skip_unsupported", "fail_unsupported", "file_pattern",
+    "target", "format", "unsupported", "file_pattern",
     "encoding", "pipeline_check", "without_pipeline", "pipelines", "filters",
     "backend_options", "correlation_method", "json_indent", "verbose",
     "required_rule_fields",
@@ -25,6 +25,22 @@ _CONVERSION_FIELDS = {
 _INTEGRATION_FIELDS_FROM_CONVERSION = {
     "rule_group", "time_window", "lookback", "data_source", "data_source_type", "query_model",
 }
+
+
+def _migrate_unsupported(block: dict) -> dict:
+    """Replace the v1 skip_unsupported/fail_unsupported booleans with the v2 unsupported setting.
+
+    v1 passed --skip-unsupported when skip_unsupported was true (the default) and only
+    --fail-unsupported when skip_unsupported was false, so skip_unsupported decides alone.
+    """
+    block = dict(block)
+    skip = block.pop("skip_unsupported", None)
+    fail = block.pop("fail_unsupported", None)
+    if skip is not None:
+        block["unsupported"] = "skip" if skip else "fail"
+    elif fail:
+        block["unsupported"] = "skip"
+    return block
 
 
 def migrate(v1: dict) -> dict:
@@ -41,7 +57,7 @@ def migrate(v1: dict) -> dict:
 
     # Split conversion_defaults: pure conversion fields stay, integration-bound fields move
     if "conversion_defaults" in v1:
-        cd = v1["conversion_defaults"]
+        cd = _migrate_unsupported(v1["conversion_defaults"])
         conv_defaults = {k: v for k, v in cd.items() if k in _CONVERSION_FIELDS}
         if conv_defaults:
             defaults["conversion"] = conv_defaults
@@ -66,7 +82,7 @@ def migrate(v1: dict) -> dict:
     configurations = []
     for item in v1.get("conversions", []):
         conv = {"input": item["input"]}
-        conv.update({k: v for k, v in item.items() if k in _CONVERSION_FIELDS})
+        conv.update({k: v for k, v in _migrate_unsupported(item).items() if k in _CONVERSION_FIELDS})
 
         intg = {k: v for k, v in item.items() if k in _INTEGRATION_FIELDS_FROM_CONVERSION}
 

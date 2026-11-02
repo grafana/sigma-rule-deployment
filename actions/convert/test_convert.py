@@ -21,7 +21,7 @@ def mock_config():
                 "conversion": {
                     "target": "loki",
                     "format": "default",
-                    "skip_unsupported": True,
+                    "unsupported": "skip",
                     "file_pattern": "*.yml",
                 },
             },
@@ -49,7 +49,7 @@ def mock_config_with_correlation_rule():
                 "conversion": {
                     "target": "loki",
                     "format": "default",
-                    "skip_unsupported": True,
+                    "unsupported": "skip",
                     "file_pattern": "*.yml",
                     "encoding": "utf-8",
                 },
@@ -78,7 +78,7 @@ def mock_config_two_groups():
                 "conversion": {
                     "target": "loki",
                     "format": "default",
-                    "skip_unsupported": True,
+                    "unsupported": "skip",
                     "file_pattern": "*.yml",
                 },
             },
@@ -570,7 +570,7 @@ def test_convert_rules_required_rule_fields_per_conversion(temp_workspace):
                 "conversion": {
                     "target": "loki",
                     "format": "default",
-                    "skip_unsupported": True,
+                    "unsupported": "skip",
                     "file_pattern": "*.yml",
                     "required_rule_fields": ["title", "level", "description"],
                 },
@@ -940,11 +940,11 @@ def test_load_rule_empty_file():
         # Test fail unsupported instead of skip
         (
             {
-                "defaults": {"conversion": {"skip_unsupported": False}},
+                "defaults": {"conversion": {"unsupported": "fail"}},
                 "configurations": [
                     {
                         "name": "test_fail",
-                        "conversion": {"input": ["test.yml"], "fail_unsupported": True},
+                        "conversion": {"input": ["test.yml"], "unsupported": "fail"},
                     }
                 ],
             },
@@ -1019,14 +1019,14 @@ def test_load_rule_empty_file():
                 "--verbose",
             ],
         ),
-        # Test overriding skip_unsupported per conversion (default false, conversion true)
+        # Test overriding unsupported per conversion (default fail, conversion skip)
         (
             {
-                "defaults": {"conversion": {"skip_unsupported": False}},
+                "defaults": {"conversion": {"unsupported": "fail"}},
                 "configurations": [
                     {
                         "name": "test_skip",
-                        "conversion": {"input": ["test.yml"], "skip_unsupported": True},
+                        "conversion": {"input": ["test.yml"], "unsupported": "skip"},
                     }
                 ],
             },
@@ -1235,11 +1235,9 @@ def test_convert_rules_command_args(
         if "--disable-pipeline-check" in expected_args:
             assert "--disable-pipeline-check" in call_args
 
-        # For fail-unsupported, we need to check if skip-unsupported is not in the args
         if "--fail-unsupported" in expected_args:
-            # The actual behavior seems to include --skip-unsupported regardless
-            # of the fail-unsupported setting, so we just check target is present
-            assert "--target" in call_args
+            assert "--fail-unsupported" in call_args
+            assert "--skip-unsupported" not in call_args
 
         if "--verbose" in expected_args:
             assert "--verbose" in call_args
@@ -1880,7 +1878,7 @@ def test_convert_rules_default_change_reconverts_all_groups(temp_workspace):
                     # sigma-cli invocation for both groups actually succeeds.
                     "target": "text_query_test",
                     "format": "default",
-                    "skip_unsupported": True,
+                    "unsupported": "skip",
                     "file_pattern": "*.yml",
                 },
             },
@@ -1893,7 +1891,7 @@ def test_convert_rules_default_change_reconverts_all_groups(temp_workspace):
                 "conversion": {
                     "target": "loki",
                     "format": "default",
-                    "skip_unsupported": True,
+                    "unsupported": "skip",
                     "file_pattern": "*.yml",
                 },
             },
@@ -2217,7 +2215,7 @@ def test_convert_rules_empty_required_rule_fields_overrides_default(temp_workspa
                 "conversion": {
                     "target": "loki",
                     "format": "default",
-                    "skip_unsupported": True,
+                    "unsupported": "skip",
                     "file_pattern": "*.yml",
                     "required_rule_fields": ["title"],
                 },
@@ -2393,7 +2391,7 @@ def test_convert_rules_filter_backfill_attributes_prefixed_names_correctly(
                 "conversion": {
                     "target": "loki",
                     "format": "default",
-                    "skip_unsupported": True,
+                    "unsupported": "skip",
                     "file_pattern": "*.yml",
                 },
             },

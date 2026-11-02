@@ -60,11 +60,11 @@ type DeploymentConfig struct {
 // ConversionConfig contains only conversion configuration
 type ConversionConfig struct {
 	// Sigma conversion settings
-	Target          string   `yaml:"target"`
-	Format          string   `yaml:"format"`
-	SkipUnsupported *bool    `yaml:"skip_unsupported,omitempty"`
-	FilePattern     string   `yaml:"file_pattern"`
-	Pipeline        []string `yaml:"pipelines"`
+	Target      string   `yaml:"target"`
+	Format      string   `yaml:"format"`
+	Unsupported *string  `yaml:"unsupported,omitempty"`
+	FilePattern string   `yaml:"file_pattern"`
+	Pipeline    []string `yaml:"pipelines"`
 	// Templating settings
 	// The fields to extract from the rule and store in the conversion file, so they will be available for the integration stage
 	RequiredRuleFields []string `yaml:"required_rule_fields,omitempty"`

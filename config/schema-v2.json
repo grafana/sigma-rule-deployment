@@ -175,13 +175,13 @@
                         "yaml"
                     ]
                 },
-                "skip_unsupported": {
-                    "type": "boolean",
-                    "description": "Skip conversion of rules that can't be handled by the backend"
-                },
-                "fail_unsupported": {
-                    "type": "boolean",
-                    "description": "Whether to fail on unsupported rule features during conversion"
+                "unsupported": {
+                    "type": "string",
+                    "description": "How to handle rules the backend can't convert: skip them or fail the conversion",
+                    "enum": [
+                        "skip",
+                        "fail"
+                    ]
                 },
                 "file_pattern": {
                     "type": "string",
@@ -455,7 +455,7 @@
                 "conversion": {
                     "target": "loki",
                     "format": "default",
-                    "skip_unsupported": true,
+                    "unsupported": "skip",
                     "file_pattern": "*.yml",
                     "required_rule_fields": [
                         "level",

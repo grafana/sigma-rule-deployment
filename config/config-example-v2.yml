@@ -13,7 +13,7 @@ defaults:
   conversion:
     target: loki
     format: default
-    skip_unsupported: true
+    unsupported: skip
     file_pattern: "*.yml"
     required_rule_fields:
       - level

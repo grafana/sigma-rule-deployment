@@ -74,20 +74,15 @@ configurations:
 	assert.Nil(t, unset.ContinueOnError)
 }
 
-func TestLoadConfigFromFile_SkipUnsupportedIsBoolean(t *testing.T) {
-	path := writeConfigFile(t, "version: 2\ndefaults:\n  conversion:\n    skip_unsupported: true\nconfigurations:\n  - name: a\n    conversion:\n      skip_unsupported: false\n  - name: b\n")
+func TestLoadConfigFromFile_Unsupported(t *testing.T) {
+	path := writeConfigFile(t, "version: 2\ndefaults:\n  conversion:\n    unsupported: skip\nconfigurations:\n  - name: a\n    conversion:\n      unsupported: fail\n  - name: b\n")
 	cfg, err := LoadConfigFromFile(path)
 	require.NoError(t, err)
-	require.NotNil(t, cfg.Defaults.Conversion.SkipUnsupported)
-	assert.True(t, *cfg.Defaults.Conversion.SkipUnsupported)
-	require.NotNil(t, cfg.Configurations[0].Conversion.SkipUnsupported)
-	assert.False(t, *cfg.Configurations[0].Conversion.SkipUnsupported)
-	assert.Nil(t, cfg.Configurations[1].Conversion.SkipUnsupported)
-
-	// A quoted string is not a boolean, matching the schema
-	path = writeConfigFile(t, "version: 2\ndefaults:\n  conversion:\n    skip_unsupported: \"true\"\n")
-	_, err = LoadConfigFromFile(path)
-	assert.Error(t, err)
+	require.NotNil(t, cfg.Defaults.Conversion.Unsupported)
+	assert.Equal(t, "skip", *cfg.Defaults.Conversion.Unsupported)
+	require.NotNil(t, cfg.Configurations[0].Conversion.Unsupported)
+	assert.Equal(t, "fail", *cfg.Configurations[0].Conversion.Unsupported)
+	assert.Nil(t, cfg.Configurations[1].Conversion.Unsupported)
 }
 
 func TestLoadConfigFromFile_EmptyTemplateMapIsNotNil(t *testing.T) {
