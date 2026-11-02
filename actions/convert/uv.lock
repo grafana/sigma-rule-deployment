@@ -277,24 +277,12 @@ dev = [
 ]
 
 [[package]]
-name = "diskcache"
-version = "5.6.3"
+name = "diskcache-community"
+version = "5.8.1"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/3f/21/1c1ffc1a039ddcc459db43cc108658f32c57d271d7289a2794e401d0fdb6/diskcache-5.6.3.tar.gz", hash = "sha256:2c3a3fa2743d8535d832ec61c2054a1641f41775aa7c556758a109941e33e4fc", size = 67916, upload-time = "2023-08-31T06:12:00.316Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/9a/b1/ef17a29956f0208c5acbc30247c742739d37135531a0facf26a5752f9382/diskcache_community-5.8.1.tar.gz", hash = "sha256:b780ed4b8381487c53cc778599f745784391c4c7af23c528ece049e008be6197", size = 110767, upload-time = "2026-10-19T02:55:55.94Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/3f/27/4570e78fc0bf5ea0ca45eb1de3818a23787af9b390c0b0a0033a1b8236f9/diskcache-5.6.3-py3-none-any.whl", hash = "sha256:5e31b2d5fbad117cc363ebaf6b689474db18a1f6438bc82358b024abd4c2ca19", size = 45550, upload-time = "2023-08-31T06:11:58.822Z" },
-]
-
-[[package]]
-name = "diskcache-stubs"
-version = "5.6.3.6.20240818"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "typing-extensions" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/cb/d6/b741a916707520349a3853a3f436aaf5df6e06a2c1499636072b1b3ce45d/diskcache_stubs-5.6.3.6.20240818.tar.gz", hash = "sha256:b6eb43899e906b3167a20ac09a9a226f30267a306a96542ea720ebbfc3282796", size = 13524, upload-time = "2024-08-18T07:50:11.943Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/6d/76/288d91c284ac1787f01c8260af5ea89dcfa6c0abc9acd601d01cf6f72f86/diskcache_stubs-5.6.3.6.20240818-py3-none-any.whl", hash = "sha256:e1db90940b344140730976abe79f57f5b43ca296cbb43fa95da0c69b12d5de4f", size = 18391, upload-time = "2024-08-18T07:50:10.723Z" },
+    { url = "https://files.pythonhosted.org/packages/b8/54/82c3738aceba6f4687ba6c808970dbf1036581616e43ef69da6fbfdcd4ae/diskcache_community-5.8.1-py3-none-any.whl", hash = "sha256:4c18c3fec2451154f768764f0f3e97fdddfb2bb4fcff8754fc28fcc88ca1b2ea", size = 71990, upload-time = "2026-10-19T02:55:54.354Z" },
 ]
 
 [[package]]
@@ -824,11 +812,10 @@ wheels = [
 
 [[package]]
 name = "pysigma"
-version = "2.0.1"
+version = "2.0.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "diskcache" },
-    { name = "diskcache-stubs" },
+    { name = "diskcache-community" },
     { name = "google-re2" },
     { name = "jinja2" },
     { name = "jq" },
@@ -838,9 +825,9 @@ dependencies = [
     { name = "requests" },
     { name = "types-pyyaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/9b/c8/8c64a883e79d595a3239ecdaba62368dc1d57df2fa861998e09dfe6e9aa1/pysigma-2.0.1.tar.gz", hash = "sha256:7bb0188e1cfae1bec56da1f5703a091df158925caf32cf033594bab60b97f49f", size = 154258, upload-time = "2026-10-11T21:22:11.289Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/67/94/2463945ca70f2d5135768c1898545a0df85586d1b0e66cc1842a649134b7/pysigma-2.0.2.tar.gz", hash = "sha256:c8fac45d24adfa14aeebcbab95929066116b2dbcc0816498066af56dda039832", size = 154540, upload-time = "2026-11-01T19:18:02.244Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/0c/61/f3bdcaac0528674fda6c5aa4d71d521c0de22adc6a1af4eebf348df80993/pysigma-2.0.1-py3-none-any.whl", hash = "sha256:7769a8f22177e732094312fb4c3a08f9fdd8af152a5905a4c549ff59dc7708e6", size = 185737, upload-time = "2026-10-11T21:22:09.568Z" },
+    { url = "https://files.pythonhosted.org/packages/e8/c0/de77e7cbf0b8d9ee161d8a5206c7b5ef56d5fb98caa1e660f14e0e0002ff/pysigma-2.0.2-py3-none-any.whl", hash = "sha256:8fb128597a5d3812219d4dd17c76426bc480ea9875325c5eeeac114d6d8ebbec", size = 186061, upload-time = "2026-11-01T19:18:00.631Z" },
 ]
 
 [[package]]
