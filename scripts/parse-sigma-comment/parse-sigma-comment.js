@@ -31,7 +31,7 @@
 import * as core from '@actions/core';
 import * as github from '@actions/github';
 import fs from 'node:fs';
-import yaml from 'js-yaml';
+import { load as loadYaml } from 'js-yaml';
 
 const TRUSTED_ASSOCIATIONS = ['OWNER', 'MEMBER', 'COLLABORATOR'];
 
@@ -192,7 +192,7 @@ function loadConfig(configPath) {
   if (!fs.existsSync(configPath)) {
     throw new Error(`Config file not found: ${configPath}`);
   }
-  const config = yaml.load(fs.readFileSync(configPath, 'utf8'));
+  const config = loadYaml(fs.readFileSync(configPath, 'utf8'));
   if (!Array.isArray(config?.configurations)) {
     throw new Error(`Config file ${configPath} does not contain a 'configurations' list`);
   }
