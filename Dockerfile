@@ -17,7 +17,9 @@ RUN go build -ldflags="-s -w" -o /build/sigma-deployer ./cmd/sigma-deployer
 FROM python:3.15-alpine@sha256:20a82dbc2783112ddb91d1534603f802d222a3e63e593cd002eb2ac534e70211 AS pybuilder
 
 # google-re2 (a pysigma 2.x dependency) has no musl wheels, so build the venv here where the compiler is available
-RUN apk add --no-cache g++~=15.2 re2-dev~=2025.11 abseil-cpp-dev~=20250814 py3-pybind11-dev~=3.0 && \
+# PyYAML and jq publish no cp315 musl wheels, so both build from sdist here: pyyaml needs libyaml headers to keep
+# its C extension (pysigma subclasses yaml.CSafeLoader), and jq's autotools configure needs GNU make.
+RUN apk add --no-cache g++~=15.2 make~=4.4 yaml-dev~=0.2 re2-dev~=2025.11 abseil-cpp-dev~=20250814 py3-pybind11-dev~=3.0 && \
     pip install --no-cache-dir uv~=0.9.0
 
 WORKDIR /app/actions/convert
@@ -39,7 +41,7 @@ WORKDIR /app/actions/convert
 ENV UV_NO_DEV=1
 # re2 is the runtime library for google-re2
 COPY --from=pybuilder /app/actions/convert/.venv ./.venv
-RUN apk add --no-cache bash~=5.3 re2~=2025.11 && \
+RUN apk add --no-cache bash~=5.3 re2~=2025.11 yaml~=0.2 && \
     python -m pip install --no-cache-dir --upgrade pip~=25.3.0 && \
     pip install --no-cache-dir uv~=0.9.0
 
