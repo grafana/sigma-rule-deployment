@@ -181,3 +181,8 @@ func MatchConfigName(filename string, names []string) (string, bool) {
 	}
 	return best, found
 }
+
+// SanitizeForLog removes characters that could be used for log injection (e.g. newlines).
+func SanitizeForLog(s string) string {
+	return strings.NewReplacer("\n", " ", "\r", " ").Replace(s)
+}

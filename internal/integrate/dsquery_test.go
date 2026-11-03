@@ -3,9 +3,12 @@ package integrate
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -682,4 +685,50 @@ func TestLokiQueryStructure(t *testing.T) {
 	info := httpmock.GetCallCountInfo()
 	assert.Equal(t, 1, info["GET http://grafana:3000/api/datasources/uid/test-loki"])
 	assert.Equal(t, 1, info["POST http://grafana:3000/api/ds/query"])
+}
+
+// TestHTTPDatasourceQuerySkipsAnInstanceThatStoppedResponding verifies that testing queries against
+// an instance that has stopped responding doesn't time out once for every query.
+func TestHTTPDatasourceQuerySkipsAnInstanceThatStoppedResponding(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		select {
+		case <-r.Context().Done():
+		case <-time.After(2 * time.Second):
+		}
+	}))
+	defer server.Close()
+
+	tests := []struct {
+		name            string
+		query           *HTTPDatasourceQuery
+		wantRequests    int32
+		wantUnavailable bool
+	}{
+		{name: "with health tracking", query: &HTTPDatasourceQuery{health: shared.NewInstanceHealth(shared.DefaultUnavailableAfter)}, wantRequests: shared.DefaultUnavailableAfter, wantUnavailable: true},
+		{name: "without health tracking", query: &HTTPDatasourceQuery{}, wantRequests: 20},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			requests.Store(0)
+			for range 20 {
+				_, err := tt.query.GetDatasource("my-ds", server.URL, "tok", 20*time.Millisecond)
+				assert.Error(t, err)
+			}
+			assert.Equal(t, tt.wantRequests, requests.Load())
+
+			// Callers can tell that the instance was skipped from the errors, however they are wrapped
+			_, err := tt.query.GetDatasource("my-ds", server.URL, "tok", 20*time.Millisecond)
+			assert.Equal(t, tt.wantUnavailable, errors.Is(err, shared.ErrInstanceUnavailable), "GetDatasource: %v", err)
+			_, err = tt.query.ExecuteQuery("{}", "my-ds", server.URL, "tok", "A", "now-1h", "now", "", 20*time.Millisecond)
+			assert.Equal(t, tt.wantUnavailable, errors.Is(err, shared.ErrInstanceUnavailable), "ExecuteQuery: %v", err)
+		})
+	}
+}
+
+func TestDefaultDatasourceQueryTracksHealth(t *testing.T) {
+	query, ok := DefaultDatasourceQuery.(*HTTPDatasourceQuery)
+	assert.True(t, ok)
+	assert.NotNil(t, query.health)
 }

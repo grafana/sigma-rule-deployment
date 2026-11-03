@@ -52,6 +52,8 @@ When you remove an alert rule file, the deploy stage deletes its alert rule from
 
 If an instance that's only in the old configuration is no longer reachable, for example, because it was shut down, the deploy stage logs a warning and carries on. An unreachable instance that's still in the configuration fails the deployment.
 
+An instance that stops responding isn't asked again and again. After three consecutive failed requests (no response, a timeout, or a 502, 503 or 504 from a gateway), the deploy stage skips the instance for the rest of the run and logs a warning. Any other response, even an error such as 401 or 404, shows the instance is up. This matters most for a retired instance, whose removals are skipped instead of each waiting for the request timeout. Query testing in the integrate stage skips an unresponsive instance in the same way.
+
 There's no previous configuration to read on a first deployment, a manually triggered run, after a force-push, or when the previous file isn't a valid v2 configuration. In those cases, the deploy stage says so and deletes the alert rule from the instances in the current configuration instead.
 
 When you remove a configuration, the integrate stage removes its conversion and alert rule files from the pull request, so the deploy stage deletes its alert rules after you merge. Removing an instance from `grafana_instance` doesn't remove any files, so it doesn't delete anything from that instance. To clean it up, run a fresh deployment or delete the alert rules in Grafana.
