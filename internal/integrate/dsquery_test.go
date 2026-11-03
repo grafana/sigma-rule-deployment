@@ -3,6 +3,7 @@ package integrate
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -700,11 +701,12 @@ func TestHTTPDatasourceQuerySkipsAnInstanceThatStoppedResponding(t *testing.T) {
 	defer server.Close()
 
 	tests := []struct {
-		name         string
-		query        *HTTPDatasourceQuery
-		wantRequests int32
+		name            string
+		query           *HTTPDatasourceQuery
+		wantRequests    int32
+		wantUnavailable bool
 	}{
-		{name: "with health tracking", query: &HTTPDatasourceQuery{health: shared.NewInstanceHealth(shared.DefaultUnavailableAfter)}, wantRequests: shared.DefaultUnavailableAfter},
+		{name: "with health tracking", query: &HTTPDatasourceQuery{health: shared.NewInstanceHealth(shared.DefaultUnavailableAfter)}, wantRequests: shared.DefaultUnavailableAfter, wantUnavailable: true},
 		{name: "without health tracking", query: &HTTPDatasourceQuery{}, wantRequests: 20},
 	}
 	for _, tt := range tests {
@@ -715,6 +717,12 @@ func TestHTTPDatasourceQuerySkipsAnInstanceThatStoppedResponding(t *testing.T) {
 				assert.Error(t, err)
 			}
 			assert.Equal(t, tt.wantRequests, requests.Load())
+
+			// Callers can tell that the instance was skipped from the errors, however they are wrapped
+			_, err := tt.query.GetDatasource("my-ds", server.URL, "tok", 20*time.Millisecond)
+			assert.Equal(t, tt.wantUnavailable, errors.Is(err, shared.ErrInstanceUnavailable), "GetDatasource: %v", err)
+			_, err = tt.query.ExecuteQuery("{}", "my-ds", server.URL, "tok", "A", "now-1h", "now", "", 20*time.Millisecond)
+			assert.Equal(t, tt.wantUnavailable, errors.Is(err, shared.ErrInstanceUnavailable), "ExecuteQuery: %v", err)
 		})
 	}
 }

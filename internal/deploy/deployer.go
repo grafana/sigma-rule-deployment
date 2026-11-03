@@ -18,11 +18,6 @@ import (
 	"github.com/grafana/sigma-rule-deployment/shared"
 )
 
-// sanitizeForLog removes characters that could be used for log injection (e.g. newlines).
-func sanitizeForLog(s string) string {
-	return strings.NewReplacer("\n", " ", "\r", " ").Replace(s)
-}
-
 // Regex to parse the alert UID from the filename
 var regexAlertFilename = regexp.MustCompile(`alert_rule_(?:.*)_([^\.]+)\.json`)
 
@@ -266,19 +261,19 @@ func (d *Deployer) newClient(endpoint string, timeout time.Duration) (*shared.Gr
 	return shared.NewGrafanaClient(endpoint, token, "sigma-rule-deployment/deployer", timeout).WithHealth(d.health), nil
 }
 
+// logUnavailableInstances reports the instances that stopped responding during the run, and the
+// removals that were not attempted on them.
+func (d *Deployer) logUnavailableInstances() {
+	for _, baseURL := range d.health.Unavailable() {
+		log.Printf("Warning: %s stopped responding and was skipped; %d removal(s) were not attempted on it", shared.SanitizeForLog(baseURL), d.skippedRemovals[baseURL]) //nolint:gosec // G706: baseURL sanitized with shared.SanitizeForLog before logging
+	}
+}
+
 // SetClient creates the clients for the default instances. A default instance with no token
 // gets no client, so it can't be used with another's token. LoadConfig requires a token for every
 // instance a configuration uses, so this only leaves out default instances that are all overridden.
 // An alert file that matches no configuration is deployed to the default instances, and fails
 // then if one of them has no token.
-// logUnavailableInstances reports the instances that stopped responding during the run, and the
-// removals that were not attempted on them.
-func (d *Deployer) logUnavailableInstances() {
-	for _, baseURL := range d.health.Unavailable() {
-		log.Printf("Warning: %s stopped responding and was skipped; %d removal(s) were not attempted on it", sanitizeForLog(baseURL), d.skippedRemovals[baseURL]) //nolint:gosec // G706: baseURL sanitized with sanitizeForLog before logging
-	}
-}
-
 func (d *Deployer) SetClient() {
 	d.clients = make([]*shared.GrafanaClient, 0, len(d.config.endpoints))
 	d.defaultTokenErr = nil
@@ -346,7 +341,7 @@ func (d *Deployer) Deploy(ctx context.Context) ([]AlertDeployment, []AlertDeploy
 			uid, err := d.deleteAlert(ctx, removal.uid)
 			if err != nil {
 				if slices.Contains(removal.bestEffort, client) {
-					log.Printf("Warning: can't delete alert %s from %s, which is no longer in the configuration: %v", sanitizeForLog(removal.uid), sanitizeForLog(client.BaseURL()), err) //nolint:gosec // G706: uid and URL sanitized with sanitizeForLog before logging
+					log.Printf("Warning: can't delete alert %s from %s, which is no longer in the configuration: %v", shared.SanitizeForLog(removal.uid), shared.SanitizeForLog(client.BaseURL()), err) //nolint:gosec // G706: uid and URL sanitized with shared.SanitizeForLog before logging
 					continue
 				}
 				return alertsCreated, alertsUpdated, alertsDeleted, err
@@ -545,7 +540,7 @@ func (d *Deployer) LoadConfig(_ context.Context) error {
 		hasTimeout := false
 		if cfg.Deployment.Timeout != "" {
 			if parsedTimeout, err := shared.ParseDuration(cfg.Deployment.Timeout); err != nil {
-				log.Printf("Warning: Invalid timeout format for configuration %s, using default: %v\n", sanitizeForLog(cfg.Name), err) //nolint:gosec // G706: cfg.Name sanitized with sanitizeForLog before logging
+				log.Printf("Warning: Invalid timeout format for configuration %s, using default: %v\n", shared.SanitizeForLog(cfg.Name), err) //nolint:gosec // G706: cfg.Name sanitized with shared.SanitizeForLog before logging
 			} else {
 				timeout = parsedTimeout
 				hasTimeout = true
@@ -588,7 +583,7 @@ func (d *Deployer) LoadConfig(_ context.Context) error {
 			interval = config.Integration.TimeWindow
 		}
 		intervalDuration, err := shared.ParseDuration(interval)
-		log.Printf("Interval duration from %s: %d", sanitizeForLog(interval), int64(intervalDuration.Seconds())) //nolint:gosec // G706: interval sanitized with sanitizeForLog before logging
+		log.Printf("Interval duration from %s: %d", shared.SanitizeForLog(interval), int64(intervalDuration.Seconds())) //nolint:gosec // G706: interval sanitized with shared.SanitizeForLog before logging
 		if err != nil || int64(intervalDuration.Seconds()) <= 0 {
 			return fmt.Errorf("error parsing time window %s: %v", interval, err)
 		}
@@ -603,7 +598,7 @@ func (d *Deployer) LoadConfig(_ context.Context) error {
 		group := ruleGroup{folderUID: folderUID, name: groupName}
 		if _, ok := d.config.groupsIntervals[group]; !ok {
 			d.config.groupsIntervals[group] = int64(intervalDuration.Seconds())
-			log.Printf("Setting interval for rule group %s in folder %s to %d", sanitizeForLog(groupName), sanitizeForLog(folderUID), d.config.groupsIntervals[group]) //nolint:gosec // G706: group name and folder sanitized with sanitizeForLog before logging
+			log.Printf("Setting interval for rule group %s in folder %s to %d", shared.SanitizeForLog(groupName), shared.SanitizeForLog(folderUID), d.config.groupsIntervals[group]) //nolint:gosec // G706: group name and folder sanitized with shared.SanitizeForLog before logging
 		} else if d.config.groupsIntervals[group] != int64(intervalDuration.Seconds()) {
 			return fmt.Errorf("time window for rule group %s in folder %s is different between conversion configs", groupName, folderUID)
 		}
@@ -657,7 +652,7 @@ func (d *Deployer) loadPreviousConfig(path string) {
 			// rather than use another instance's
 			client, err := d.newClient(ep, timeout)
 			if err != nil {
-				log.Printf("Warning: removed alerts are not deleted from %s: %v", sanitizeForLog(ep), err) //nolint:gosec // G706: ep sanitized with sanitizeForLog before logging
+				log.Printf("Warning: removed alerts are not deleted from %s: %v", shared.SanitizeForLog(ep), err) //nolint:gosec // G706: ep sanitized with shared.SanitizeForLog before logging
 				continue
 			}
 			clients = append(clients, client)
@@ -965,7 +960,7 @@ func (d *Deployer) deleteAlert(ctx context.Context, uid string) (string, error) 
 func (d *Deployer) getAlertTitle(ctx context.Context, uid string) string {
 	alert, err := d.getAlert(ctx, uid)
 	if err != nil || strings.TrimSpace(alert.Title) == "" {
-		log.Printf("Can't retrieve title for alert %s. Using UID instead.", sanitizeForLog(uid))
+		log.Printf("Can't retrieve title for alert %s. Using UID instead.", shared.SanitizeForLog(uid))
 		return uid
 	}
 	return alert.Title

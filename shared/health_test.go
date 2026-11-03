@@ -89,6 +89,18 @@ func TestInstanceHealthDefaultsAndNil(t *testing.T) {
 	assert.Empty(t, none.Unavailable())
 }
 
+func TestInstanceHealthZeroValueIsReadyToUse(t *testing.T) {
+	var h InstanceHealth
+	assert.NoError(t, h.Check("https://a.example/"))
+	assert.Empty(t, h.Unavailable())
+	for range DefaultUnavailableAfter - 1 {
+		assert.False(t, h.Record("https://a.example/", errors.New("down"), 0))
+	}
+	assert.True(t, h.Record("https://a.example/", errors.New("down"), 0))
+	assert.ErrorIs(t, h.Check("https://a.example/"), ErrInstanceUnavailable)
+	assert.Equal(t, []string{"https://a.example/"}, h.Unavailable())
+}
+
 func TestInstanceHealthIsSafeForConcurrentUse(t *testing.T) {
 	h := NewInstanceHealth(50)
 	var wg sync.WaitGroup

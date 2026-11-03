@@ -21,7 +21,8 @@ var ErrInstanceUnavailable = errors.New("instance is unavailable")
 // unreachable instance is skipped after a few failed requests rather than timing out once for every
 // request that would have gone to it. Instances are identified by their base URL, so every client
 // for an instance shares its health. An instance that is marked unavailable stays so for the
-// rest of the run. It is safe for concurrent use.
+// rest of the run. It is safe for concurrent use, and the zero value is ready to use, with
+// DefaultUnavailableAfter as its threshold.
 type InstanceHealth struct {
 	mu        sync.Mutex
 	threshold int
@@ -32,14 +33,19 @@ type InstanceHealth struct {
 // NewInstanceHealth creates a tracker that marks an instance unavailable after threshold
 // consecutive failed requests. A threshold below one means DefaultUnavailableAfter.
 func NewInstanceHealth(threshold int) *InstanceHealth {
-	if threshold < 1 {
-		threshold = DefaultUnavailableAfter
-	}
 	return &InstanceHealth{
 		threshold: threshold,
 		failures:  map[string]int{},
 		down:      map[string]error{},
 	}
+}
+
+// limit is the number of consecutive failed requests that mark an instance unavailable.
+func (h *InstanceHealth) limit() int {
+	if h.threshold < 1 {
+		return DefaultUnavailableAfter
+	}
+	return h.threshold
 }
 
 // Check returns an error wrapping ErrInstanceUnavailable if the instance has been marked
@@ -51,7 +57,7 @@ func (h *InstanceHealth) Check(baseURL string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if last, ok := h.down[baseURL]; ok {
-		return fmt.Errorf("%s was marked unavailable after %d consecutive failed requests (last: %v): %w", baseURL, h.threshold, last, ErrInstanceUnavailable)
+		return fmt.Errorf("%s was marked unavailable after %d consecutive failed requests (last: %v): %w", baseURL, h.limit(), last, ErrInstanceUnavailable)
 	}
 	return nil
 }
@@ -80,8 +86,14 @@ func (h *InstanceHealth) Record(baseURL string, err error, statusCode int) (mark
 	if _, ok := h.down[baseURL]; ok {
 		return false
 	}
+	if h.failures == nil {
+		h.failures = map[string]int{}
+	}
+	if h.down == nil {
+		h.down = map[string]error{}
+	}
 	h.failures[baseURL]++
-	if h.failures[baseURL] < h.threshold {
+	if h.failures[baseURL] < h.limit() {
 		return false
 	}
 	delete(h.failures, baseURL)

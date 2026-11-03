@@ -143,7 +143,7 @@ func (c *GrafanaClient) Do(ctx context.Context, method, path string, body io.Rea
 // is the one that marks the instance unavailable.
 func (c *GrafanaClient) recordOutcome(err error, statusCode int) {
 	if c.health.Record(c.baseURL, err, statusCode) {
-		log.Printf("Warning: %s did not respond to %d consecutive requests, so it is skipped for the rest of the run", c.baseURL, c.health.threshold)
+		log.Printf("Warning: %s did not respond to %d consecutive requests, so it is skipped for the rest of the run", SanitizeForLog(c.baseURL), c.health.limit()) //nolint:gosec // G706: baseURL sanitized with SanitizeForLog before logging
 	}
 }
 

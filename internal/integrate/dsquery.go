@@ -116,7 +116,7 @@ func (h *HTTPDatasourceQuery) ExecuteQuery(
 ) ([]byte, error) {
 	datasource, err := h.GetDatasource(dsName, baseURL, apiKey, timeout)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get datasource: %v", err)
+		return nil, fmt.Errorf("failed to get datasource: %w", err)
 	}
 
 	var queryObj json.RawMessage
@@ -224,7 +224,7 @@ func (h *HTTPDatasourceQuery) ExecuteQuery(
 
 	resp, err := client.PostRaw(context.Background(), queryPath, jsonBody)
 	if err != nil {
-		return nil, fmt.Errorf("failed to execute request: %v", err)
+		return nil, fmt.Errorf("failed to execute request: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -272,7 +272,7 @@ func (h *HTTPDatasourceQuery) getDatasourceByUID(
 
 	resp, err := client.Get(context.Background(), path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to execute request: %v", err)
+		return nil, fmt.Errorf("failed to execute request: %w", err)
 	}
 	defer resp.Body.Close()
 
