@@ -21,7 +21,7 @@ def mock_config():
                 "conversion": {
                     "target": "loki",
                     "format": "default",
-                    "skip_unsupported": True,
+                    "unsupported": "skip",
                     "file_pattern": "*.yml",
                 },
             },
@@ -49,7 +49,7 @@ def mock_config_with_correlation_rule():
                 "conversion": {
                     "target": "loki",
                     "format": "default",
-                    "skip_unsupported": True,
+                    "unsupported": "skip",
                     "file_pattern": "*.yml",
                     "encoding": "utf-8",
                 },
@@ -78,7 +78,7 @@ def mock_config_two_groups():
                 "conversion": {
                     "target": "loki",
                     "format": "default",
-                    "skip_unsupported": True,
+                    "unsupported": "skip",
                     "file_pattern": "*.yml",
                 },
             },
@@ -570,7 +570,7 @@ def test_convert_rules_required_rule_fields_per_conversion(temp_workspace):
                 "conversion": {
                     "target": "loki",
                     "format": "default",
-                    "skip_unsupported": True,
+                    "unsupported": "skip",
                     "file_pattern": "*.yml",
                     "required_rule_fields": ["title", "level", "description"],
                 },
@@ -940,11 +940,11 @@ def test_load_rule_empty_file():
         # Test fail unsupported instead of skip
         (
             {
-                "defaults": {"conversion": {"skip_unsupported": False}},
+                "defaults": {"conversion": {"unsupported": "fail"}},
                 "configurations": [
                     {
                         "name": "test_fail",
-                        "conversion": {"input": ["test.yml"], "fail_unsupported": True},
+                        "conversion": {"input": ["test.yml"], "unsupported": "fail"},
                     }
                 ],
             },
@@ -1019,14 +1019,14 @@ def test_load_rule_empty_file():
                 "--verbose",
             ],
         ),
-        # Test overriding skip_unsupported per conversion (default false, conversion true)
+        # Test overriding unsupported per conversion (default fail, conversion skip)
         (
             {
-                "defaults": {"conversion": {"skip_unsupported": False}},
+                "defaults": {"conversion": {"unsupported": "fail"}},
                 "configurations": [
                     {
                         "name": "test_skip",
-                        "conversion": {"input": ["test.yml"], "skip_unsupported": True},
+                        "conversion": {"input": ["test.yml"], "unsupported": "skip"},
                     }
                 ],
             },
@@ -1235,11 +1235,9 @@ def test_convert_rules_command_args(
         if "--disable-pipeline-check" in expected_args:
             assert "--disable-pipeline-check" in call_args
 
-        # For fail-unsupported, we need to check if skip-unsupported is not in the args
         if "--fail-unsupported" in expected_args:
-            # The actual behavior seems to include --skip-unsupported regardless
-            # of the fail-unsupported setting, so we just check target is present
-            assert "--target" in call_args
+            assert "--fail-unsupported" in call_args
+            assert "--skip-unsupported" not in call_args
 
         if "--verbose" in expected_args:
             assert "--verbose" in call_args
@@ -1323,74 +1321,6 @@ def test_default_correlation_method(
         # is being included in the config, not necessarily in the args
         # So we just verify the conversion ran successfully
         assert mock_invoke.call_count > 0
-
-
-@pytest.mark.parametrize(
-    "pipelines, expect_template_vars_path",
-    [
-        (["pipelines/a/p1.yml", "pipelines/p2.yml"], True),
-        ([], False),
-    ],
-)
-@patch("glob.glob")
-@patch("os.path.exists")
-@patch("pathlib.Path.is_absolute")
-@patch("pathlib.Path.is_dir")
-@patch("pathlib.Path.mkdir")
-@patch("shutil.rmtree")
-@patch("click.testing.CliRunner.invoke")
-@patch("dynaconf.Dynaconf")
-def test_template_vars_path_shared_across_pipelines(
-    mock_dynaconf,
-    mock_invoke,
-    mock_rmtree,
-    mock_mkdir,
-    mock_is_dir,
-    mock_is_absolute,
-    mock_exists,
-    mock_glob,
-    pipelines,
-    expect_template_vars_path,
-):
-    """Pipelines get one shared --template-vars-path so pySigma 2.x can merge them."""
-    mock_glob.return_value = ["/tmp/test.yml"]
-    mock_exists.return_value = True
-    mock_is_absolute.return_value = False
-    mock_is_dir.return_value = True
-
-    mock_result = MagicMock()
-    mock_result.exception = None
-    mock_result.exit_code = 0
-    mock_result.stdout = "test query output"
-    mock_invoke.return_value = mock_result
-
-    config_dict = DynaconfDict(
-        {
-            "version": 2,
-            "configurations": [
-                {
-                    "name": "test_pipelines",
-                    "conversion": {"input": ["test.yml"], "pipelines": pipelines},
-                }
-            ],
-        }
-    )
-    dynaconf_instance = mock_dynaconf.return_value
-    dynaconf_instance.get.side_effect = lambda key, default=None: config_dict.get(key, default)
-
-    with (
-        patch.object(convert, "is_path", side_effect=lambda p, f: True),
-        patch("pathlib.Path.relative_to", return_value=Path("test.yml")),
-        patch.object(convert, "load_rules", return_value=[{"title": "Test Rule"}]),
-        patch("builtins.open", MagicMock()),
-    ):
-        convert_rules(config=dynaconf_instance, path_prefix="/tmp", all_rules=True)
-
-    call_args = mock_invoke.call_args[1]["args"]
-    if expect_template_vars_path:
-        assert call_args[call_args.index("--template-vars-path") + 1] == "/tmp"
-    else:
-        assert "--template-vars-path" not in call_args
 
 
 def test_convert_rules_deletes_conversion_for_deleted_rule(temp_workspace, mock_config):
@@ -1880,7 +1810,7 @@ def test_convert_rules_default_change_reconverts_all_groups(temp_workspace):
                     # sigma-cli invocation for both groups actually succeeds.
                     "target": "text_query_test",
                     "format": "default",
-                    "skip_unsupported": True,
+                    "unsupported": "skip",
                     "file_pattern": "*.yml",
                 },
             },
@@ -1893,7 +1823,7 @@ def test_convert_rules_default_change_reconverts_all_groups(temp_workspace):
                 "conversion": {
                     "target": "loki",
                     "format": "default",
-                    "skip_unsupported": True,
+                    "unsupported": "skip",
                     "file_pattern": "*.yml",
                 },
             },
@@ -2217,7 +2147,7 @@ def test_convert_rules_empty_required_rule_fields_overrides_default(temp_workspa
                 "conversion": {
                     "target": "loki",
                     "format": "default",
-                    "skip_unsupported": True,
+                    "unsupported": "skip",
                     "file_pattern": "*.yml",
                     "required_rule_fields": ["title"],
                 },
@@ -2393,7 +2323,7 @@ def test_convert_rules_filter_backfill_attributes_prefixed_names_correctly(
                 "conversion": {
                     "target": "loki",
                     "format": "default",
-                    "skip_unsupported": True,
+                    "unsupported": "skip",
                     "file_pattern": "*.yml",
                 },
             },

@@ -63,7 +63,8 @@ def test_minimal_config_is_valid() -> None:
         with_conversion(data_source_type="elasticsearch"),  # belongs under integration
         with_changes(defaults={"conversion": {"bogus": 1}}),
         with_changes(defaults={"conversion": {"input": "rules/*"}}),  # input is per configuration
-        with_changes(defaults={"conversion": {"skip_unsupported": "true"}}),  # must be a boolean
+        with_changes(defaults={"conversion": {"unsupported": "ignore"}}),  # must be skip or fail
+        with_changes(defaults={"conversion": {"skip_unsupported": True}}),  # replaced by unsupported
         with_changes(defaults={"integration": {"data_source_type": 1}}),
     ],
 )
@@ -75,8 +76,7 @@ def test_every_conversion_setting_is_accepted() -> None:
     config = with_conversion(
         target="loki",
         format="default",
-        skip_unsupported=True,
-        fail_unsupported=False,
+        unsupported="skip",
         file_pattern="*.yml",
         encoding="utf-8",
         pipeline_check=False,

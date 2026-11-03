@@ -581,10 +581,10 @@ func TestLoadConfig(t *testing.T) {
 				},
 				Defaults: model.ConfigBlock{
 					Conversion: model.ConversionConfig{
-						Target:          "loki",
-						Format:          "default",
-						SkipUnsupported: new(true),
-						FilePattern:     "*.yml",
+						Target:      "loki",
+						Format:      "default",
+						Unsupported: new("skip"),
+						FilePattern: "*.yml",
 					},
 					Integration: model.IntegrationConfig{
 						DataSource:  "grafanacloud-logs",
@@ -625,10 +625,10 @@ func TestLoadConfig(t *testing.T) {
 				},
 				Defaults: model.ConfigBlock{
 					Conversion: model.ConversionConfig{
-						Target:          "loki",
-						Format:          "default",
-						SkipUnsupported: new(true),
-						FilePattern:     "*.yml",
+						Target:      "loki",
+						Format:      "default",
+						Unsupported: new("skip"),
+						FilePattern: "*.yml",
 					},
 					Integration: model.IntegrationConfig{
 						DataSource:  "grafanacloud-logs",
@@ -669,10 +669,10 @@ func TestLoadConfig(t *testing.T) {
 				},
 				Defaults: model.ConfigBlock{
 					Conversion: model.ConversionConfig{
-						Target:          "esql",
-						Format:          "default",
-						SkipUnsupported: new(true),
-						FilePattern:     "*.yml",
+						Target:      "esql",
+						Format:      "default",
+						Unsupported: new("skip"),
+						FilePattern: "*.yml",
 					},
 					Integration: model.IntegrationConfig{
 						DataSource:     "grafanacloud-es-logs",
@@ -712,10 +712,10 @@ func TestLoadConfig(t *testing.T) {
 				},
 				Defaults: model.ConfigBlock{
 					Conversion: model.ConversionConfig{
-						Target:          "esql",
-						Format:          "default",
-						SkipUnsupported: new(true),
-						FilePattern:     "*.yml",
+						Target:      "esql",
+						Format:      "default",
+						Unsupported: new("skip"),
+						FilePattern: "*.yml",
 					},
 					Integration: model.IntegrationConfig{
 						DataSource:     "grafanacloud-es-logs",
@@ -755,10 +755,10 @@ func TestLoadConfig(t *testing.T) {
 				},
 				Defaults: model.ConfigBlock{
 					Conversion: model.ConversionConfig{
-						Target:          "loki",
-						Format:          "default",
-						SkipUnsupported: new(true),
-						FilePattern:     "*.yml",
+						Target:      "loki",
+						Format:      "default",
+						Unsupported: new("skip"),
+						FilePattern: "*.yml",
 					},
 					Integration: model.IntegrationConfig{
 						DataSource:  "grafanacloud-logs",
@@ -799,10 +799,10 @@ func TestLoadConfig(t *testing.T) {
 				},
 				Defaults: model.ConfigBlock{
 					Conversion: model.ConversionConfig{
-						Target:          "loki",
-						Format:          "default",
-						SkipUnsupported: new(true),
-						FilePattern:     "*.yml",
+						Target:      "loki",
+						Format:      "default",
+						Unsupported: new("skip"),
+						FilePattern: "*.yml",
 					},
 					Integration: model.IntegrationConfig{
 						DataSource:  "grafanacloud-logs",
@@ -843,10 +843,10 @@ func TestLoadConfig(t *testing.T) {
 				},
 				Defaults: model.ConfigBlock{
 					Conversion: model.ConversionConfig{
-						Target:          "loki",
-						Format:          "default",
-						SkipUnsupported: new(true),
-						FilePattern:     "*.yml",
+						Target:      "loki",
+						Format:      "default",
+						Unsupported: new("skip"),
+						FilePattern: "*.yml",
 					},
 					Integration: model.IntegrationConfig{
 						DataSource:  "grafanacloud-logs",
