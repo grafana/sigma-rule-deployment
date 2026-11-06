@@ -1,4 +1,4 @@
-FROM golang:1.27-alpine@sha256:d200d2dd76b03a99b52651fd1325aff7dcd35422c35c01bac56571b0507f3deb AS builder
+FROM golang:1.27-alpine@sha256:fa3d596898d9f126af7c01d14ee7597bab3f39cccf392ef36b69fe77cd681f18 AS builder
 
 WORKDIR /src
 
@@ -14,7 +14,7 @@ COPY shared/ ./shared/
 # Build the unified sigma-deployer binary
 RUN go build -ldflags="-s -w" -o /build/sigma-deployer ./cmd/sigma-deployer
 
-FROM python:3.14-alpine@sha256:eb2c62658b8d51bff0acc408504b76521d02030de56a8a3c1e830083e89b89d2 AS pybuilder
+FROM python:3.14-alpine@sha256:a18b20ad69e74df6cf6d2e1b1a260d7a1ecf5380fd83b310f83ba88c461cf894 AS pybuilder
 
 # google-re2 (a pysigma 2.x dependency) has no musl wheels, so build the venv here where the compiler is available
 RUN apk add --no-cache g++~=15.2 re2-dev~=2025.11 abseil-cpp-dev~=20250814 py3-pybind11-dev~=3.0 && \
@@ -24,7 +24,7 @@ WORKDIR /app/actions/convert
 COPY ./actions/convert/pyproject.toml ./actions/convert/uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
-FROM python:3.14-alpine@sha256:eb2c62658b8d51bff0acc408504b76521d02030de56a8a3c1e830083e89b89d2
+FROM python:3.14-alpine@sha256:a18b20ad69e74df6cf6d2e1b1a260d7a1ecf5380fd83b310f83ba88c461cf894
 
 WORKDIR /app
 
