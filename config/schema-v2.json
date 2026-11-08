@@ -317,7 +317,7 @@
                 },
                 "time_window": {
                     "$ref": "#/$defs/timeWindow",
-                    "description": "Time window for alert evaluation",
+                    "description": "Query lookback window and rule group evaluation interval; defaults to 5m when unset",
                     "examples": [
                         "5m",
                         "1h",

@@ -99,6 +99,7 @@ jobs:
 - The integration config file must specify data source connections and alert rule templates.
 - The config file must include `folders.conversion_path` and `folders.deployment_path` settings.
 - Data source configurations should include connection details and authentication.
+- When `time_window` is unset in both the configuration and defaults, alert queries look back `5m`, matching the default rule group evaluation interval.
 - Alert rule templates define the structure and default values for generated rules.
 - Labels and annotations can be templated from Sigma rule metadata. Refer to [Alert rule labels and annotations](../../docs/configure/labels-and-annotations.md).
 
