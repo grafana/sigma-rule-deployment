@@ -39,9 +39,10 @@ jobs:
           RUN_URL: ${{ github.event.workflow_run.html_url }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
-          # workflow_run.pull_requests is empty for forks, so resolve the PR from the commit.
-          PR_NUMBER=$(gh api "repos/${REPO}/commits/${HEAD_SHA}/pulls" \
-            --jq '[.[] | select(.state == "open" and .base.repo.full_name == "'"${REPO}"'")] | first.number // empty')
+          # workflow_run.pull_requests is empty for forks, and the base repo's commit
+          # lookup doesn't see fork commits, so search this repo's open PRs for the commit.
+          PR_NUMBER=$(gh pr list --repo "$REPO" --search "$HEAD_SHA" --state open \
+            --json number --jq '.[0].number // empty')
           if ! [[ "$PR_NUMBER" =~ ^[0-9]+$ ]]; then
             echo "No open pull request found for ${HEAD_SHA}, nothing to comment on"
             exit 0
