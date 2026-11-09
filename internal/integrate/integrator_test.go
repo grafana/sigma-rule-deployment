@@ -51,6 +51,21 @@ func TestConvertToAlert(t *testing.T) {
 			wantError:     false,
 		},
 		{
+			name:    "unset time window matches default evaluation interval",
+			queries: []string{"{job=`.+`} | json | test=`true`"},
+			titles:  "Default Time Window",
+			rule:    &model.ProvisionedAlertRule{UID: "default-window"},
+			convConfig: model.NamedConfigBlock{
+				Name: "conv",
+				ConfigBlock: model.ConfigBlock{
+					Conversion:  model.ConversionConfig{Target: "loki"},
+					Integration: model.IntegrationConfig{DataSource: "my_data_source", RuleGroup: "Default"},
+				},
+			},
+			wantQueryText: "sum(count_over_time({job=`.+`} | json | test=`true`[$__auto]))",
+			wantDuration:  model.Duration(5 * time.Minute),
+		},
+		{
 			name:    "valid new loki query",
 			queries: []string{"{job=`.+`} | json | test=`true`"},
 			titles:  "Alert Rule 1",
