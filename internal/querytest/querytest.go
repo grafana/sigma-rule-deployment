@@ -256,16 +256,18 @@ func (qt *QueryTester) TestQueries(queries map[string]string, cfg model.NamedCon
 				timeout,
 			)
 			if err != nil {
-				return []model.QueryTestResult{
-					{
-						Datasource: datasource,
-						Link:       exploreLink,
-						Stats: model.Stats{
-							Fields: make(map[string]string),
-							Errors: []string{err.Error()},
-						},
+				queryResults = append(queryResults, model.QueryTestResult{
+					Datasource: datasource,
+					Link:       exploreLink,
+					Stats: model.Stats{
+						Fields: make(map[string]string),
+						Errors: []string{err.Error()},
 					},
-				}, fmt.Errorf("error testing query %s: %v", query, err)
+				})
+				if !shared.GetConfigBool(cfg.Integration.ContinueOnError, defaults.Integration.ContinueOnError) {
+					return queryResults, fmt.Errorf("error testing query %s: %v", query, err)
+				}
+				continue
 			}
 			// Parse the response to extract statistics
 			result := model.QueryTestResult{
