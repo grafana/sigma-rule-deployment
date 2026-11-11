@@ -71,7 +71,7 @@ configurations:
 	unset := cfg.Configurations[1].Integration
 	assert.Nil(t, unset.TestQueries)
 	assert.Nil(t, unset.ShowLogLines)
-	assert.Nil(t, unset.ContinueOnError)
+	assert.Nil(t, unset.ContinueOnQueryTestingErrors)
 }
 
 func TestLoadConfigFromFile_Unsupported(t *testing.T) {

@@ -70,11 +70,11 @@ func main() {
 				integrator.TestFiles(),
 				timeoutDuration,
 			)
+			// Run already reports the errors that continue_on_query_testing_errors lets through
+			// and returns nil for them, so any error it returns must fail the integration
 			if err := queryTester.Run(); err != nil {
-				if !shared.GetConfigBool(nil, config.Defaults.Integration.ContinueOnError) {
-					fmt.Printf("Error running query tests: %v\n", err)
-					os.Exit(1)
-				}
+				fmt.Printf("Error running query tests: %v\n", err)
+				os.Exit(1)
 			}
 		}
 	case "deploy":

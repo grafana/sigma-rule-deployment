@@ -119,13 +119,13 @@ func TestRun(t *testing.T) {
 						Target: "loki",
 					},
 					Integration: model.IntegrationConfig{
-						DataSource:      "test-datasource",
-						FolderID:        "test-folder",
-						OrgID:           1,
-						TestQueries:     new(true),
-						From:            "now-1h",
-						To:              "now",
-						ContinueOnError: &tt.continueOnErrors,
+						DataSource:                   "test-datasource",
+						FolderID:                     "test-folder",
+						OrgID:                        1,
+						TestQueries:                  new(true),
+						From:                         "now-1h",
+						To:                           "now",
+						ContinueOnQueryTestingErrors: &tt.continueOnErrors,
 					},
 					Deployment: model.DeploymentConfig{
 						GrafanaInstance: model.GrafanaInstances{"https://test.grafana.com"},
@@ -502,7 +502,7 @@ func (t *testDatasourceQuery) ExecuteQuery(query, dsName, _ string, _ string, _ 
 
 // TestRunMultipleConfigurations validates per-configuration query testing settings:
 // - one config with TestQueries enabled per-cfg and default time range
-// - one config with TestQueries enabled, continue_on_error, and a custom from time that gets a query error
+// - one config with TestQueries enabled, continue_on_query_testing_errors, and a custom from time that gets a query error
 // - one config with TestQueries disabled per-cfg — its file is passed but testing must be skipped
 // - one config with TestQueries enabled and ShowLogLines per-cfg
 // - one config with TestQueries enabled and ShowSampleValues per-cfg
@@ -567,12 +567,12 @@ func TestRunMultipleConfigurations(t *testing.T) {
 				Name: "conv_continue",
 				ConfigBlock: model.ConfigBlock{
 					Integration: model.IntegrationConfig{
-						DataSource:      "continue-ds",
-						RuleGroup:       "Continue Alerts",
-						TimeWindow:      "10m",
-						From:            "now-6h",
-						TestQueries:     new(true),
-						ContinueOnError: new(true),
+						DataSource:                   "continue-ds",
+						RuleGroup:                    "Continue Alerts",
+						TimeWindow:                   "10m",
+						From:                         "now-6h",
+						TestQueries:                  new(true),
+						ContinueOnQueryTestingErrors: new(true),
 					},
 				},
 			},
@@ -639,7 +639,7 @@ func TestRunMultipleConfigurations(t *testing.T) {
 	// Pass all files including conv_no_test — Run() must skip it based on TestQueries: new(false)
 	queryTester := NewQueryTester(config, []string{enabledFile, continueFile, noTestFile, showLinesFile, showValuesFile}, 5*time.Second)
 	err = queryTester.Run()
-	// Should succeed because conv_continue has ContinueOnError: new(true)
+	// Should succeed because conv_continue has ContinueOnQueryTestingErrors: new(true)
 	assert.NoError(t, err)
 
 	defaultTimeout := 5 * time.Second
@@ -958,13 +958,13 @@ func TestRunPerConfigurationBooleanOverridesOfTrueDefaults(t *testing.T) {
 			Defaults: model.ConfigBlock{
 				Conversion: model.ConversionConfig{Target: "loki"},
 				Integration: model.IntegrationConfig{
-					DataSource:       "default-ds",
-					From:             "now-1h",
-					To:               "now",
-					TestQueries:      new(true),
-					ContinueOnError:  new(true),
-					ShowLogLines:     new(true),
-					ShowSampleValues: new(true),
+					DataSource:                   "default-ds",
+					From:                         "now-1h",
+					To:                           "now",
+					TestQueries:                  new(true),
+					ContinueOnQueryTestingErrors: new(true),
+					ShowLogLines:                 new(true),
+					ShowSampleValues:             new(true),
 				},
 				Deployment: model.DeploymentConfig{GrafanaInstance: model.GrafanaInstances{"https://test.grafana.com"}},
 			},
@@ -1008,16 +1008,16 @@ func TestRunPerConfigurationBooleanOverridesOfTrueDefaults(t *testing.T) {
 		assert.Equal(t, []string{"conv_inherit-ds"}, queried, "only the configuration inheriting test_queries is tested")
 	})
 
-	t.Run("continue_on_error false makes a failing configuration fatal when the default is true", func(t *testing.T) {
+	t.Run("continue_on_query_testing_errors false makes a failing configuration fatal when the default is true", func(t *testing.T) {
 		mock, _ := setup(t)
 		mock.AddMockError("{job=`strict`} | json", fmt.Errorf("simulated query error"))
 		mock.AddMockError("{job=`inherit`} | json", fmt.Errorf("simulated query error"))
 
-		strict := NewQueryTester(newConfig(named("conv_strict", model.IntegrationConfig{ContinueOnError: new(false)})), []string{strictFile}, 5*time.Second)
+		strict := NewQueryTester(newConfig(named("conv_strict", model.IntegrationConfig{ContinueOnQueryTestingErrors: new(false)})), []string{strictFile}, 5*time.Second)
 		assert.ErrorContains(t, strict.Run(), "simulated query error")
 
 		inherit := NewQueryTester(newConfig(named("conv_inherit", model.IntegrationConfig{})), []string{inheritFile}, 5*time.Second)
-		assert.NoError(t, inherit.Run(), "a configuration that does not set continue_on_error inherits the default true")
+		assert.NoError(t, inherit.Run(), "a configuration that does not set continue_on_query_testing_errors inherits the default true")
 	})
 
 	t.Run("show_log_lines and show_sample_values false override true defaults", func(t *testing.T) {
@@ -1204,7 +1204,7 @@ func TestRunFailsOnMissingTokenEvenWhenContinuingOnErrors(t *testing.T) {
 	t.Setenv("INTEGRATOR_GRAFANA_SA_TOKEN", `{"https://a.example": "glsa_a"}`)
 	config := model.Configuration{
 		Defaults: model.ConfigBlock{
-			Integration: model.IntegrationConfig{TestQueries: new(true), ContinueOnError: new(true)},
+			Integration: model.IntegrationConfig{TestQueries: new(true), ContinueOnQueryTestingErrors: new(true)},
 			Deployment:  model.DeploymentConfig{GrafanaInstance: model.GrafanaInstances{"https://b.example"}},
 		},
 		Configurations: []model.NamedConfigBlock{{Name: "conv"}},
@@ -1213,7 +1213,7 @@ func TestRunFailsOnMissingTokenEvenWhenContinuingOnErrors(t *testing.T) {
 	assert.ErrorContains(t, err, `configuration "conv": there is no Grafana token for instance https://b.example`)
 }
 
-func TestRunMultipleInstancesContinueOnError(t *testing.T) {
+func TestRunMultipleInstancesContinueOnQueryTestingErrors(t *testing.T) {
 	for _, tt := range []struct {
 		name            string
 		defaultContinue bool
@@ -1258,10 +1258,10 @@ func TestRunMultipleInstancesContinueOnError(t *testing.T) {
 			t.Setenv("TEST_QUERY_RESULTS_FILE", output)
 			config := model.Configuration{
 				Defaults: model.ConfigBlock{
-					Integration: model.IntegrationConfig{TestQueries: new(true), DataSource: "logs", ContinueOnError: &tt.defaultContinue},
+					Integration: model.IntegrationConfig{TestQueries: new(true), DataSource: "logs", ContinueOnQueryTestingErrors: &tt.defaultContinue},
 					Deployment:  model.DeploymentConfig{GrafanaInstance: instances},
 				},
-				Configurations: []model.NamedConfigBlock{{Name: "test", ConfigBlock: model.ConfigBlock{Integration: model.IntegrationConfig{ContinueOnError: tt.override}}}},
+				Configurations: []model.NamedConfigBlock{{Name: "test", ConfigBlock: model.ConfigBlock{Integration: model.IntegrationConfig{ContinueOnQueryTestingErrors: tt.override}}}},
 			}
 			qt := NewQueryTester(config, []string{input}, time.Second)
 			err := qt.Run()
