@@ -156,12 +156,6 @@ func (i *Integrator) LoadConfig() error {
 	i.prettyPrint = strings.ToLower(os.Getenv("PRETTY_PRINT")) == TRUE
 	i.allRules = strings.ToLower(os.Getenv("ALL_RULES")) == TRUE
 
-	// The action input is the workflow-level default, and so takes precedence over
-	// defaults.integration.continue_on_error; a configuration's own setting still overrides it
-	if v := os.Getenv("CONTINUE_ON_QUERY_TESTING_ERRORS"); v != "" {
-		i.config.Defaults.Integration.ContinueOnError = new(strings.ToLower(v) == TRUE)
-	}
-
 	// CONFIGURATION_FILTER restricts the run to the named configurations (space-separated),
 	// e.g. for a comment-driven run targeting a single configuration. Unknown names are
 	// rejected so a typo fails loudly instead of silently integrating nothing.
@@ -231,6 +225,10 @@ func (i *Integrator) LoadConfig() error {
 	}
 	if i.config.Defaults.Integration.To == "" {
 		i.config.Defaults.Integration.To = "now"
+	}
+	// Query testing errors are reported rather than failing the integration, unless turned off
+	if i.config.Defaults.Integration.ContinueOnQueryTestingErrors == nil {
+		i.config.Defaults.Integration.ContinueOnQueryTestingErrors = new(true)
 	}
 
 	changedFiles := strings.Split(os.Getenv("CHANGED_FILES"), " ")

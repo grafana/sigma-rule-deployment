@@ -66,7 +66,7 @@ func (qt *QueryTester) Run() error {
 		conversionContent, err := shared.ReadLocalFile(inputFile)
 		if err != nil {
 			fmt.Printf("Error reading file %s: %v\n", inputFile, err)
-			if !shared.GetConfigBool(nil, qt.config.Defaults.Integration.ContinueOnError) {
+			if !shared.GetConfigBool(nil, qt.config.Defaults.Integration.ContinueOnQueryTestingErrors) {
 				return err
 			}
 			continue
@@ -76,7 +76,7 @@ func (qt *QueryTester) Run() error {
 		err = json.Unmarshal([]byte(conversionContent), &conversionObject)
 		if err != nil {
 			fmt.Printf("Error unmarshalling conversion output for file %s: %v\n", inputFile, err)
-			if !shared.GetConfigBool(nil, qt.config.Defaults.Integration.ContinueOnError) {
+			if !shared.GetConfigBool(nil, qt.config.Defaults.Integration.ContinueOnQueryTestingErrors) {
 				return fmt.Errorf("error unmarshalling conversion output: %v", err)
 			}
 			continue
@@ -100,8 +100,8 @@ func (qt *QueryTester) Run() error {
 			continue
 		}
 
-		// Per-configuration ContinueOnError overrides the default
-		continueOnError := shared.GetConfigBool(cfg.Integration.ContinueOnError, qt.config.Defaults.Integration.ContinueOnError)
+		// Per-configuration ContinueOnQueryTestingErrors overrides the default
+		continueOnQueryTestingErrors := shared.GetConfigBool(cfg.Integration.ContinueOnQueryTestingErrors, qt.config.Defaults.Integration.ContinueOnQueryTestingErrors)
 
 		queries := conversionObject.Queries
 		if len(queries) == 0 {
@@ -123,7 +123,7 @@ func (qt *QueryTester) Run() error {
 		if err != nil {
 			fmt.Printf("Error testing queries for file %s: %v\n", inputFile, err)
 			// Return error if continue on query testing errors is not enabled
-			if !continueOnError {
+			if !continueOnQueryTestingErrors {
 				return err
 			}
 		}

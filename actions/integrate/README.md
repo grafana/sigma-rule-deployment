@@ -19,7 +19,6 @@ Most repositories run this Action through the reusable convert and integrate wor
 | `all_rules`                        | Whether to integrate all rules                                                                       | No       | `false`               |
 | `changed_files_from_base`          | Whether to use the changed files from the base branch                                                | No       | `false`               |
 | `actions_username`                 | The username of the actions user                                                                     | No       | `github-actions[bot]` |
-| `continue_on_query_testing_errors` | Continue integration process even when query testing fails, but print errors and continue the action. This sets the default for `continue_on_error`, so it takes precedence over `defaults.integration.continue_on_error`, but a configuration's own `continue_on_error` still overrides it | No       | `true`                |
 | `configurations`                   | Space-separated configuration names to restrict the integration to. Empty integrates all configurations | No | `""` |
 | `skip_query_testing`               | Skip all query testing, overriding the `test_queries` settings in the configuration file | No | `false` |
 | `query_time_window`                | Duration, for example `30m`, `6h`, or `1d12h`, that overrides the default query testing time range. Per-configuration `from` and `to` settings still take precedence | No | `""` |
@@ -124,7 +123,7 @@ jobs:
 - Use this action in pull request workflows to validate alert rule generation.
 - Include query testing in your integration workflow for early error detection.
 - Consider using dedicated Grafana Service Accounts for testing with minimal required permissions.
-- Use `continue_on_query_testing_errors: true` to allow the integration to complete even if some queries fail testing.
+- Query testing errors are reported without failing the integration. To make them fail it, set `continue_on_query_testing_errors: false` in the configuration file, in `defaults.integration` or in a configuration.
 
 ## Notes
 

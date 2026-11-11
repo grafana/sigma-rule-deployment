@@ -602,12 +602,13 @@ func TestLoadConfig(t *testing.T) {
 						FilePattern: "*.yml",
 					},
 					Integration: model.IntegrationConfig{
-						DataSource:  "grafanacloud-logs",
-						FolderID:    "XXXX",
-						OrgID:       1,
-						TestQueries: new(true),
-						From:        "now-1h",
-						To:          "now",
+						DataSource:                   "grafanacloud-logs",
+						FolderID:                     "XXXX",
+						OrgID:                        1,
+						TestQueries:                  new(true),
+						From:                         "now-1h",
+						To:                           "now",
+						ContinueOnQueryTestingErrors: new(true),
 					},
 				},
 				Configurations: []model.NamedConfigBlock{
@@ -646,12 +647,13 @@ func TestLoadConfig(t *testing.T) {
 						FilePattern: "*.yml",
 					},
 					Integration: model.IntegrationConfig{
-						DataSource:  "grafanacloud-logs",
-						FolderID:    "XXXX",
-						OrgID:       1,
-						TestQueries: new(false),
-						From:        "now-1h",
-						To:          "now",
+						DataSource:                   "grafanacloud-logs",
+						FolderID:                     "XXXX",
+						OrgID:                        1,
+						TestQueries:                  new(false),
+						From:                         "now-1h",
+						To:                           "now",
+						ContinueOnQueryTestingErrors: new(true),
 					},
 				},
 				Configurations: []model.NamedConfigBlock{
@@ -690,13 +692,14 @@ func TestLoadConfig(t *testing.T) {
 						FilePattern: "*.yml",
 					},
 					Integration: model.IntegrationConfig{
-						DataSource:     "grafanacloud-es-logs",
-						DataSourceType: "elasticsearch",
-						FolderID:       "XXXX",
-						OrgID:          1,
-						TestQueries:    new(true),
-						From:           "now-1h",
-						To:             "now",
+						DataSource:                   "grafanacloud-es-logs",
+						DataSourceType:               "elasticsearch",
+						FolderID:                     "XXXX",
+						OrgID:                        1,
+						TestQueries:                  new(true),
+						From:                         "now-1h",
+						To:                           "now",
+						ContinueOnQueryTestingErrors: new(true),
 					},
 				},
 				Configurations: []model.NamedConfigBlock{
@@ -733,13 +736,14 @@ func TestLoadConfig(t *testing.T) {
 						FilePattern: "*.yml",
 					},
 					Integration: model.IntegrationConfig{
-						DataSource:     "grafanacloud-es-logs",
-						DataSourceType: "elasticsearch",
-						FolderID:       "XXXX",
-						OrgID:          1,
-						TestQueries:    new(true),
-						From:           "now-1h",
-						To:             "now",
+						DataSource:                   "grafanacloud-es-logs",
+						DataSourceType:               "elasticsearch",
+						FolderID:                     "XXXX",
+						OrgID:                        1,
+						TestQueries:                  new(true),
+						From:                         "now-1h",
+						To:                           "now",
+						ContinueOnQueryTestingErrors: new(true),
 					},
 				},
 				Configurations: []model.NamedConfigBlock{
@@ -776,12 +780,13 @@ func TestLoadConfig(t *testing.T) {
 						FilePattern: "*.yml",
 					},
 					Integration: model.IntegrationConfig{
-						DataSource:  "grafanacloud-logs",
-						FolderID:    "XXXX",
-						OrgID:       1,
-						TestQueries: new(true),
-						From:        "now-1h",
-						To:          "now",
+						DataSource:                   "grafanacloud-logs",
+						FolderID:                     "XXXX",
+						OrgID:                        1,
+						TestQueries:                  new(true),
+						From:                         "now-1h",
+						To:                           "now",
+						ContinueOnQueryTestingErrors: new(true),
 					},
 				},
 				Configurations: []model.NamedConfigBlock{
@@ -820,12 +825,13 @@ func TestLoadConfig(t *testing.T) {
 						FilePattern: "*.yml",
 					},
 					Integration: model.IntegrationConfig{
-						DataSource:  "grafanacloud-logs",
-						FolderID:    "XXXX",
-						OrgID:       1,
-						TestQueries: new(false),
-						From:        "now-1h",
-						To:          "now",
+						DataSource:                   "grafanacloud-logs",
+						FolderID:                     "XXXX",
+						OrgID:                        1,
+						TestQueries:                  new(false),
+						From:                         "now-1h",
+						To:                           "now",
+						ContinueOnQueryTestingErrors: new(true),
 					},
 				},
 				Configurations: []model.NamedConfigBlock{
@@ -864,12 +870,13 @@ func TestLoadConfig(t *testing.T) {
 						FilePattern: "*.yml",
 					},
 					Integration: model.IntegrationConfig{
-						DataSource:  "grafanacloud-logs",
-						FolderID:    "XXXX",
-						OrgID:       1,
-						TestQueries: new(false),
-						From:        "now-1h",
-						To:          "now",
+						DataSource:                   "grafanacloud-logs",
+						FolderID:                     "XXXX",
+						OrgID:                        1,
+						TestQueries:                  new(false),
+						From:                         "now-1h",
+						To:                           "now",
+						ContinueOnQueryTestingErrors: new(true),
 					},
 				},
 				Configurations: []model.NamedConfigBlock{
@@ -2636,23 +2643,21 @@ func TestAnyTestQueriesEnabled(t *testing.T) {
 	assert.True(t, AnyTestQueriesEnabled(withDefaults(new(true))), "no configurations, enabled by default")
 }
 
-func TestLoadConfigContinueOnErrorEnvVar(t *testing.T) {
-	// env var, YAML defaults value -> expected defaults.integration.continue_on_error
+func TestLoadConfigContinueOnQueryTestingErrors(t *testing.T) {
+	// YAML defaults value -> expected defaults.integration.continue_on_query_testing_errors. The removed
+	// CONTINUE_ON_QUERY_TESTING_ERRORS variable is set in every case and must be ignored.
 	cases := []struct {
 		name     string
-		env      *string
 		yamlLine string
 		want     *bool
 	}{
-		{name: "env true sets the default", env: new("true"), want: new(true)},
-		{name: "env false sets the default", env: new("false"), want: new(false)},
-		{name: "env overrides the YAML default", env: new("false"), yamlLine: "    continue_on_error: true\n", want: new(false)},
-		{name: "unset env keeps the YAML default", yamlLine: "    continue_on_error: true\n", want: new(true)},
-		{name: "unset env and unset YAML leaves it unset", want: nil},
+		{name: "YAML true is kept", yamlLine: "    continue_on_query_testing_errors: true\n", want: new(true)},
+		{name: "YAML false is kept", yamlLine: "    continue_on_query_testing_errors: false\n", want: new(false)},
+		{name: "unset YAML defaults to true", want: new(true)},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			configFile, err := os.CreateTemp(".", "test_continue_on_error_*.yml")
+			configFile, err := os.CreateTemp(".", "test_continue_on_query_testing_errors_*.yml")
 			require.NoError(t, err)
 			t.Cleanup(func() { os.Remove(configFile.Name()) })
 			deployDir, err := os.MkdirTemp(".", "test-continue-on-error-*")
@@ -2670,15 +2675,11 @@ func TestLoadConfigContinueOnErrorEnvVar(t *testing.T) {
 			t.Setenv("MANUAL_FILES", "")
 			t.Setenv("ALL_RULES", "false")
 			t.Setenv("TEST_FILES", "")
-			if tc.env != nil {
-				t.Setenv("CONTINUE_ON_QUERY_TESTING_ERRORS", *tc.env)
-			} else {
-				t.Setenv("CONTINUE_ON_QUERY_TESTING_ERRORS", "")
-			}
+			t.Setenv("CONTINUE_ON_QUERY_TESTING_ERRORS", "true")
 
 			i := NewIntegrator()
 			require.NoError(t, i.LoadConfig())
-			assert.Equal(t, tc.want, i.config.Defaults.Integration.ContinueOnError)
+			assert.Equal(t, tc.want, i.config.Defaults.Integration.ContinueOnQueryTestingErrors)
 		})
 	}
 }

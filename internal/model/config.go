@@ -89,12 +89,12 @@ type IntegrationConfig struct {
 	// Query testing settings
 	// The boolean settings are pointers so that a configuration can explicitly set false to
 	// override a true default; nil means "not set", and falls back to the default (then false)
-	TestQueries      *bool  `yaml:"test_queries,omitempty"`
-	From             string `yaml:"from"`
-	To               string `yaml:"to"`
-	ShowLogLines     *bool  `yaml:"show_log_lines,omitempty"`
-	ShowSampleValues *bool  `yaml:"show_sample_values,omitempty"`
-	ContinueOnError  *bool  `yaml:"continue_on_error,omitempty"`
+	TestQueries                  *bool  `yaml:"test_queries,omitempty"`
+	From                         string `yaml:"from"`
+	To                           string `yaml:"to"`
+	ShowLogLines                 *bool  `yaml:"show_log_lines,omitempty"`
+	ShowSampleValues             *bool  `yaml:"show_sample_values,omitempty"`
+	ContinueOnQueryTestingErrors *bool  `yaml:"continue_on_query_testing_errors,omitempty"`
 	// Templating settings
 	// A configuration's template_labels and template_annotations replace the defaults' entirely
 	// when set (they are not merged key by key); set an empty map to remove the defaults
