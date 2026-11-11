@@ -31,7 +31,7 @@ func NewQueryTester(config model.Configuration, testFiles []string, timeout time
 
 // validateTokens checks the Grafana tokens are usable before any query is tested: they parse, and
 // when they are per instance, every instance of a configuration that tests queries has one.
-// It is a configuration error, so it isn't affected by continue_on_query_testing_errors.
+// It is a configuration error, so it isn't affected by continue_on_error.
 func (qt *QueryTester) validateTokens() error {
 	tokens, err := shared.ParseGrafanaTokens(os.Getenv("INTEGRATOR_GRAFANA_SA_TOKEN"))
 	if err != nil {
@@ -66,7 +66,7 @@ func (qt *QueryTester) Run() error {
 		conversionContent, err := shared.ReadLocalFile(inputFile)
 		if err != nil {
 			fmt.Printf("Error reading file %s: %v\n", inputFile, err)
-			if !shared.GetConfigBool(nil, qt.config.Defaults.Integration.ContinueOnError) {
+			if !shared.GetConfigBoolOr(nil, qt.config.Defaults.Integration.ContinueOnError, true) {
 				return err
 			}
 			continue
@@ -76,7 +76,7 @@ func (qt *QueryTester) Run() error {
 		err = json.Unmarshal([]byte(conversionContent), &conversionObject)
 		if err != nil {
 			fmt.Printf("Error unmarshalling conversion output for file %s: %v\n", inputFile, err)
-			if !shared.GetConfigBool(nil, qt.config.Defaults.Integration.ContinueOnError) {
+			if !shared.GetConfigBoolOr(nil, qt.config.Defaults.Integration.ContinueOnError, true) {
 				return fmt.Errorf("error unmarshalling conversion output: %v", err)
 			}
 			continue
@@ -101,7 +101,7 @@ func (qt *QueryTester) Run() error {
 		}
 
 		// Per-configuration ContinueOnError overrides the default
-		continueOnError := shared.GetConfigBool(cfg.Integration.ContinueOnError, qt.config.Defaults.Integration.ContinueOnError)
+		continueOnError := shared.GetConfigBoolOr(cfg.Integration.ContinueOnError, qt.config.Defaults.Integration.ContinueOnError, true)
 
 		queries := conversionObject.Queries
 		if len(queries) == 0 {

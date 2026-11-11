@@ -29,7 +29,7 @@ defaults:
     test_queries: true # Whether to test the queries against the datasource
     # show_log_lines: false # Whether to include log line content in the query test results
     # show_sample_values: false # Whether to include sample label values in the query test results
-    # continue_on_error: false # Whether to carry on when query testing fails (the integrate action's continue_on_query_testing_errors input takes precedence)
+    # continue_on_error: true # Whether to report query testing errors instead of failing the integration
     from: "now-1h"
     to: "now"
     template_labels:

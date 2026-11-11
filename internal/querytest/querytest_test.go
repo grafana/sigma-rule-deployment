@@ -735,7 +735,7 @@ func (t *trackingDatasourceQuery) ExecuteQuery(query, dsName, baseURL, apiKey, r
 	return t.testDatasourceQueryWithErrors.ExecuteQuery(query, dsName, baseURL, apiKey, refID, from, to, customModel, timeout)
 }
 
-// testDatasourceQueryWithErrors supports error injection for testing continue_on_query_testing_errors
+// testDatasourceQueryWithErrors supports error injection for testing continue_on_error
 type testDatasourceQueryWithErrors struct {
 	*testDatasourceQuery
 	mockErrors map[string]error
@@ -1018,6 +1018,15 @@ func TestRunPerConfigurationBooleanOverridesOfTrueDefaults(t *testing.T) {
 		assert.NoError(t, inherit.Run(), "a configuration that does not set continue_on_error inherits the default true")
 	})
 
+	t.Run("continue_on_error defaults to true when neither the defaults nor the configuration set it", func(t *testing.T) {
+		mock, _ := setup(t)
+		mock.AddMockError("{job=`inherit`} | json", fmt.Errorf("simulated query error"))
+
+		config := newConfig(named("conv_inherit", model.IntegrationConfig{}))
+		config.Defaults.Integration.ContinueOnError = nil
+		assert.NoError(t, NewQueryTester(config, []string{inheritFile}, 5*time.Second).Run())
+	})
+
 	t.Run("show_log_lines and show_sample_values false override true defaults", func(t *testing.T) {
 		_, resultsFile := setup(t)
 		config := newConfig(
@@ -1197,7 +1206,7 @@ func TestValidateTokens(t *testing.T) {
 }
 
 // TestRunFailsOnMissingTokenEvenWhenContinuingOnErrors verifies a missing token is reported before
-// any file is processed, and isn't downgraded by continue_on_query_testing_errors.
+// any file is processed, and isn't downgraded by continue_on_error.
 func TestRunFailsOnMissingTokenEvenWhenContinuingOnErrors(t *testing.T) {
 	t.Setenv("INTEGRATOR_GRAFANA_SA_TOKEN", `{"https://a.example": "glsa_a"}`)
 	config := model.Configuration{

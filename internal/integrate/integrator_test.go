@@ -2636,19 +2636,17 @@ func TestAnyTestQueriesEnabled(t *testing.T) {
 	assert.True(t, AnyTestQueriesEnabled(withDefaults(new(true))), "no configurations, enabled by default")
 }
 
-func TestLoadConfigContinueOnErrorEnvVar(t *testing.T) {
-	// env var, YAML defaults value -> expected defaults.integration.continue_on_error
+func TestLoadConfigContinueOnError(t *testing.T) {
+	// YAML defaults value -> expected defaults.integration.continue_on_error. The removed
+	// CONTINUE_ON_QUERY_TESTING_ERRORS variable is set in every case and must be ignored.
 	cases := []struct {
 		name     string
-		env      *string
 		yamlLine string
 		want     *bool
 	}{
-		{name: "env true sets the default", env: new("true"), want: new(true)},
-		{name: "env false sets the default", env: new("false"), want: new(false)},
-		{name: "env overrides the YAML default", env: new("false"), yamlLine: "    continue_on_error: true\n", want: new(false)},
-		{name: "unset env keeps the YAML default", yamlLine: "    continue_on_error: true\n", want: new(true)},
-		{name: "unset env and unset YAML leaves it unset", want: nil},
+		{name: "YAML true is kept", yamlLine: "    continue_on_error: true\n", want: new(true)},
+		{name: "YAML false is kept", yamlLine: "    continue_on_error: false\n", want: new(false)},
+		{name: "unset YAML leaves it unset", want: nil},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -2670,11 +2668,7 @@ func TestLoadConfigContinueOnErrorEnvVar(t *testing.T) {
 			t.Setenv("MANUAL_FILES", "")
 			t.Setenv("ALL_RULES", "false")
 			t.Setenv("TEST_FILES", "")
-			if tc.env != nil {
-				t.Setenv("CONTINUE_ON_QUERY_TESTING_ERRORS", *tc.env)
-			} else {
-				t.Setenv("CONTINUE_ON_QUERY_TESTING_ERRORS", "")
-			}
+			t.Setenv("CONTINUE_ON_QUERY_TESTING_ERRORS", "true")
 
 			i := NewIntegrator()
 			require.NoError(t, i.LoadConfig())

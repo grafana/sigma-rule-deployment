@@ -42,11 +42,6 @@ on:
         required: false
         type: boolean
         default: false
-      continue_on_query_testing_errors:
-        description: "Continue integration process even when query testing fails, but print errors and continue the action"
-        required: false
-        type: boolean
-        default: true
       vault_path:
         description: "A path to the Grafana service account token described in secrets.grafana_sa_token, but stored in Grafana's internal Vault"
         required: false
@@ -151,7 +146,6 @@ jobs:
           configurations: ${{ steps.parse.outputs.configurations }}
           skip_query_testing: ${{ steps.parse.outputs.no_test == 'true' }}
           query_time_window: ${{ steps.parse.outputs.query_time_window }}
-          continue_on_query_testing_errors: ${{ inputs.continue_on_query_testing_errors }}
 
       - name: Commit queries and alert rules
         if: github.event_name != 'issue_comment' || steps.parse.outputs.triggered == 'true'

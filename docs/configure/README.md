@@ -82,7 +82,7 @@ configurations:
         Team: identity
 ```
 
-The `continue_on_query_testing_errors` input of the integrate Action sets the default for `continue_on_error`, so it takes precedence over `defaults.integration.continue_on_error`. The input defaults to `true`. A configuration's own `continue_on_error` still overrides it.
+Query testing errors are reported without failing the integration, because `continue_on_error` defaults to `true`. Set `continue_on_error: false` in `defaults.integration` to make them fail it, or in a configuration to override the default for that configuration only.
 
 ## Validate the file
 

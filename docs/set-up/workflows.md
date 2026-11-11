@@ -184,7 +184,6 @@ The reusable workflow accepts the following inputs:
 | `all_rules`                        | boolean | Convert and integrate every rule on every pull request run, not only the rules that changed. Comment commands ignore it and pick their own target. | `false`               |
 | `actions_username`                 | string  | User name of the automation that commits the generated files. The Actions use it to tell automated commits from human edits.                | `github-actions[bot]` |
 | `changed_files_from_base`          | boolean | Intended to detect changed files against the pull request base branch. Currently broken: setting it to `true` stops conversion from finding changes and makes integration fail, so leave it `false`. | `false`               |
-| `continue_on_query_testing_errors` | boolean | Finish integration when query testing fails, and report the errors. This input is passed to the integrate Action to control whether integration continues when query testing fails. | `true`                |
 | `vault_path`                       | string  | For use within Grafana Labs: read the token from the Grafana Labs internal Vault instead of `grafana_sa_token`.                                    | `""`                  |
 
 It accepts the following secret:
