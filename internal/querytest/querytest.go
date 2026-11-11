@@ -118,7 +118,7 @@ func (qt *QueryTester) Run() error {
 
 		// Test all queries against the datasource
 		queryResults, err := qt.TestQueries(
-			queryMap, cfg, qt.config.Defaults,
+			queryMap, cfg, qt.config.Defaults, continueOnError,
 		)
 		if err != nil {
 			fmt.Printf("Error testing queries for file %s: %v\n", inputFile, err)
@@ -186,7 +186,7 @@ func (qt *QueryTester) Run() error {
 }
 
 // TestQueries tests a map of queries against the datasource
-func (qt *QueryTester) TestQueries(queries map[string]string, cfg model.NamedConfigBlock, defaults model.ConfigBlock) ([]model.QueryTestResult, error) {
+func (qt *QueryTester) TestQueries(queries map[string]string, cfg model.NamedConfigBlock, defaults model.ConfigBlock, continueOnError bool) ([]model.QueryTestResult, error) {
 	queryResults := make([]model.QueryTestResult, 0, len(queries))
 	datasource := shared.GetConfigValue(cfg.Integration.DataSource, defaults.Integration.DataSource, "")
 	// Determine datasource type using the same logic as createAlertQuery
@@ -264,7 +264,7 @@ func (qt *QueryTester) TestQueries(queries map[string]string, cfg model.NamedCon
 						Errors: []string{err.Error()},
 					},
 				})
-				if !shared.GetConfigBool(cfg.Integration.ContinueOnError, defaults.Integration.ContinueOnError) {
+				if !continueOnError {
 					return queryResults, fmt.Errorf("error testing query %s: %v", query, err)
 				}
 				continue

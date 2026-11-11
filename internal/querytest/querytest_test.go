@@ -254,7 +254,7 @@ func TestTestQueriesPreservesExploreLinkOnError(t *testing.T) {
 	results, err := queryTester.TestQueries(
 		map[string]string{"A0": `{job="test"}`},
 		model.NamedConfigBlock{Name: "test_conv"},
-		config.Defaults,
+		config.Defaults, false,
 	)
 
 	assert.Error(t, err)
@@ -354,7 +354,7 @@ func TestTestQueriesReportsCorrectCountEvenOnChangingDataframeStructure(t *testi
 	results, err := queryTester.TestQueries(
 		map[string]string{"A0": `{job="test"}`},
 		model.NamedConfigBlock{Name: "test_conv"},
-		config.Defaults,
+		config.Defaults, false,
 	)
 
 	assert.NoError(t, err)
@@ -365,7 +365,7 @@ func TestTestQueriesReportsCorrectCountEvenOnChangingDataframeStructure(t *testi
 	results, err = queryTester.TestQueries(
 		map[string]string{"A0": `{job="test"} | json`},
 		model.NamedConfigBlock{Name: "test_conv"},
-		config.Defaults,
+		config.Defaults, false,
 	)
 
 	assert.NoError(t, err)
@@ -434,7 +434,7 @@ func TestTestQueriesThrowsErrorWhenShowLogLinesIsTrueAndNoLogLines(t *testing.T)
 	results, err := queryTester.TestQueries(
 		map[string]string{"A0": `{job="test"}`},
 		model.NamedConfigBlock{Name: "test_conv"},
-		config.Defaults,
+		config.Defaults, false,
 	)
 
 	assert.ErrorContains(t, err, "Line")
@@ -923,7 +923,7 @@ func TestTestQueriesFailsWhenNoGrafanaInstanceResolves(t *testing.T) {
 	results, err := queryTester.TestQueries(
 		map[string]string{"A0": `{job="test"}`},
 		model.NamedConfigBlock{Name: "test_conv"},
-		defaults,
+		defaults, false,
 	)
 
 	assert.ErrorContains(t, err, `configuration "test_conv" has no Grafana instance`)
@@ -1126,7 +1126,7 @@ func TestTestQueriesUsesTheTokenOfEachInstance(t *testing.T) {
 			}
 			defaults := model.ConfigBlock{Deployment: model.DeploymentConfig{GrafanaInstance: tt.defaultURL}}
 			qt := NewQueryTester(model.Configuration{}, nil, 5*time.Second)
-			_, err := qt.TestQueries(map[string]string{"A": "{job=`test`} | json"}, cfg, defaults)
+			_, err := qt.TestQueries(map[string]string{"A": "{job=`test`} | json"}, cfg, defaults, false)
 
 			if tt.wantErr != "" {
 				assert.ErrorContains(t, err, tt.wantErr)
