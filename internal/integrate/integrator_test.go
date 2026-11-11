@@ -2636,21 +2636,21 @@ func TestAnyTestQueriesEnabled(t *testing.T) {
 	assert.True(t, AnyTestQueriesEnabled(withDefaults(new(true))), "no configurations, enabled by default")
 }
 
-func TestLoadConfigContinueOnError(t *testing.T) {
-	// YAML defaults value -> expected defaults.integration.continue_on_error. The removed
+func TestLoadConfigContinueOnQueryTestingErrors(t *testing.T) {
+	// YAML defaults value -> expected defaults.integration.continue_on_query_testing_errors. The removed
 	// CONTINUE_ON_QUERY_TESTING_ERRORS variable is set in every case and must be ignored.
 	cases := []struct {
 		name     string
 		yamlLine string
 		want     *bool
 	}{
-		{name: "YAML true is kept", yamlLine: "    continue_on_error: true\n", want: new(true)},
-		{name: "YAML false is kept", yamlLine: "    continue_on_error: false\n", want: new(false)},
+		{name: "YAML true is kept", yamlLine: "    continue_on_query_testing_errors: true\n", want: new(true)},
+		{name: "YAML false is kept", yamlLine: "    continue_on_query_testing_errors: false\n", want: new(false)},
 		{name: "unset YAML leaves it unset", want: nil},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			configFile, err := os.CreateTemp(".", "test_continue_on_error_*.yml")
+			configFile, err := os.CreateTemp(".", "test_continue_on_query_testing_errors_*.yml")
 			require.NoError(t, err)
 			t.Cleanup(func() { os.Remove(configFile.Name()) })
 			deployDir, err := os.MkdirTemp(".", "test-continue-on-error-*")
@@ -2672,7 +2672,7 @@ func TestLoadConfigContinueOnError(t *testing.T) {
 
 			i := NewIntegrator()
 			require.NoError(t, i.LoadConfig())
-			assert.Equal(t, tc.want, i.config.Defaults.Integration.ContinueOnError)
+			assert.Equal(t, tc.want, i.config.Defaults.Integration.ContinueOnQueryTestingErrors)
 		})
 	}
 }

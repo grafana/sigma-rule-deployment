@@ -71,7 +71,7 @@ func main() {
 				timeoutDuration,
 			)
 			if err := queryTester.Run(); err != nil {
-				if !shared.GetConfigBoolOr(nil, config.Defaults.Integration.ContinueOnError, true) {
+				if !shared.GetConfigBoolOr(nil, config.Defaults.Integration.ContinueOnQueryTestingErrors, true) {
 					fmt.Printf("Error running query tests: %v\n", err)
 					os.Exit(1)
 				}

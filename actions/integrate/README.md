@@ -123,7 +123,7 @@ jobs:
 - Use this action in pull request workflows to validate alert rule generation.
 - Include query testing in your integration workflow for early error detection.
 - Consider using dedicated Grafana Service Accounts for testing with minimal required permissions.
-- Query testing errors are reported without failing the integration. To make them fail it, set `continue_on_error: false` in the configuration file, in `defaults.integration` or in a configuration.
+- Query testing errors are reported without failing the integration. To make them fail it, set `continue_on_query_testing_errors: false` in the configuration file, in `defaults.integration` or in a configuration.
 
 ## Notes
 

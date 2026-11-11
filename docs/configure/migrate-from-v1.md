@@ -37,7 +37,7 @@ The [migration script](../../scripts/migrate-config-v1-to-v2/) converts a v1 fil
 
 1. Copy any comments from the old file. The script doesn't keep YAML comments.
 1. Replace the old file in your rule repository and update any workflows that pointed to it.
-1. Remove the `continue_on_query_testing_errors` input from your workflows. The integrate Action and the convert and integrate workflow no longer accept it. Query testing errors still don't fail the integration by default. If you passed `false`, set `continue_on_error: false` in `defaults.integration` instead.
+1. Remove the `continue_on_query_testing_errors` input from your workflows. The integrate Action and the convert and integrate workflow no longer accept it. Query testing errors still don't fail the integration by default. If you passed `false`, set `continue_on_query_testing_errors: false` in `defaults.integration` instead.
 
 If the input is already a v2 file, the script exits with an error and doesn't write anything.
 

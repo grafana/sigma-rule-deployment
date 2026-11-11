@@ -31,7 +31,7 @@ func NewQueryTester(config model.Configuration, testFiles []string, timeout time
 
 // validateTokens checks the Grafana tokens are usable before any query is tested: they parse, and
 // when they are per instance, every instance of a configuration that tests queries has one.
-// It is a configuration error, so it isn't affected by continue_on_error.
+// It is a configuration error, so it isn't affected by continue_on_query_testing_errors.
 func (qt *QueryTester) validateTokens() error {
 	tokens, err := shared.ParseGrafanaTokens(os.Getenv("INTEGRATOR_GRAFANA_SA_TOKEN"))
 	if err != nil {
@@ -66,7 +66,7 @@ func (qt *QueryTester) Run() error {
 		conversionContent, err := shared.ReadLocalFile(inputFile)
 		if err != nil {
 			fmt.Printf("Error reading file %s: %v\n", inputFile, err)
-			if !shared.GetConfigBoolOr(nil, qt.config.Defaults.Integration.ContinueOnError, true) {
+			if !shared.GetConfigBoolOr(nil, qt.config.Defaults.Integration.ContinueOnQueryTestingErrors, true) {
 				return err
 			}
 			continue
@@ -76,7 +76,7 @@ func (qt *QueryTester) Run() error {
 		err = json.Unmarshal([]byte(conversionContent), &conversionObject)
 		if err != nil {
 			fmt.Printf("Error unmarshalling conversion output for file %s: %v\n", inputFile, err)
-			if !shared.GetConfigBoolOr(nil, qt.config.Defaults.Integration.ContinueOnError, true) {
+			if !shared.GetConfigBoolOr(nil, qt.config.Defaults.Integration.ContinueOnQueryTestingErrors, true) {
 				return fmt.Errorf("error unmarshalling conversion output: %v", err)
 			}
 			continue
@@ -100,8 +100,8 @@ func (qt *QueryTester) Run() error {
 			continue
 		}
 
-		// Per-configuration ContinueOnError overrides the default
-		continueOnError := shared.GetConfigBoolOr(cfg.Integration.ContinueOnError, qt.config.Defaults.Integration.ContinueOnError, true)
+		// Per-configuration ContinueOnQueryTestingErrors overrides the default
+		continueOnQueryTestingErrors := shared.GetConfigBoolOr(cfg.Integration.ContinueOnQueryTestingErrors, qt.config.Defaults.Integration.ContinueOnQueryTestingErrors, true)
 
 		queries := conversionObject.Queries
 		if len(queries) == 0 {
@@ -123,7 +123,7 @@ func (qt *QueryTester) Run() error {
 		if err != nil {
 			fmt.Printf("Error testing queries for file %s: %v\n", inputFile, err)
 			// Return error if continue on query testing errors is not enabled
-			if !continueOnError {
+			if !continueOnQueryTestingErrors {
 				return err
 			}
 		}
