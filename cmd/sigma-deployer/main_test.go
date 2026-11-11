@@ -59,7 +59,7 @@ func TestIntegrateExitCodeFollowsPerConfigurationContinueOnQueryTestingErrors(t 
 			writeFile(t, filepath.Join(dir, "config.yml"), config)
 			writeFile(t, filepath.Join(dir, "conversions", "conv_rule.json"), `{"conversion_name": "conv", "queries": ["{job=\"test\"}"]}`)
 
-			cmd := exec.Command(os.Args[0], "-test.run=^TestIntegrateExitCodeFollowsPerConfigurationContinueOnQueryTestingErrors$")
+			cmd := exec.Command(os.Args[0], "-test.run=^TestIntegrateExitCodeFollowsPerConfigurationContinueOnQueryTestingErrors$") //nolint:gosec // G204: re-runs this test binary
 			cmd.Dir = dir
 			cmd.Env = append(os.Environ(),
 				"SIGMA_DEPLOYER_RUN_MAIN=1",
