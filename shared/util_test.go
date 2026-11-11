@@ -54,25 +54,6 @@ func TestGetConfigBool(t *testing.T) {
 	}
 }
 
-func TestGetConfigBoolOr(t *testing.T) {
-	tests := []struct {
-		name       string
-		config     *bool
-		defaultVal *bool
-		want       bool
-	}{
-		{"both unset", nil, nil, true},
-		{"default only, false", nil, new(false), false},
-		{"config false over unset default", new(false), nil, false},
-		{"config true over false default", new(true), new(false), true},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, GetConfigBoolOr(tt.config, tt.defaultVal, true))
-		})
-	}
-}
-
 func TestParseDuration(t *testing.T) {
 	const day = 24 * time.Hour
 	valid := map[string]time.Duration{

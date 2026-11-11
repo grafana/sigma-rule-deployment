@@ -226,6 +226,10 @@ func (i *Integrator) LoadConfig() error {
 	if i.config.Defaults.Integration.To == "" {
 		i.config.Defaults.Integration.To = "now"
 	}
+	// Query testing errors are reported rather than failing the integration, unless turned off
+	if i.config.Defaults.Integration.ContinueOnQueryTestingErrors == nil {
+		i.config.Defaults.Integration.ContinueOnQueryTestingErrors = new(true)
+	}
 
 	changedFiles := strings.Split(os.Getenv("CHANGED_FILES"), " ")
 	deletedFiles := strings.Split(os.Getenv("DELETED_FILES"), " ")
