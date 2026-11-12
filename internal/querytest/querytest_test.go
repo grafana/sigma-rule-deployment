@@ -1250,7 +1250,7 @@ func TestRunMultipleInstancesContinueOnQueryTestingErrors(t *testing.T) {
 			t.Chdir(dir)
 			input := "conversion.json"
 			output := filepath.Join(dir, "results.json")
-			if !assert.NoError(t, os.WriteFile(input, []byte(`{"conversion_name":"test","queries":["first", "second"]}`), 0600)) {
+			if !assert.NoError(t, os.WriteFile(input, []byte(`{"conversion_name":"test","queries":["first", "second"]}`), 0o600)) {
 				return
 			}
 			t.Setenv("INTEGRATOR_GRAFANA_SA_TOKEN", "local-fixture")
