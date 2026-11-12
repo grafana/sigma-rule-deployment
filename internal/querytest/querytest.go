@@ -118,7 +118,7 @@ func (qt *QueryTester) Run() error {
 
 		// Test all queries against the datasource
 		queryResults, err := qt.TestQueries(
-			queryMap, cfg, qt.config.Defaults,
+			queryMap, cfg, qt.config.Defaults, continueOnQueryTestingErrors,
 		)
 		if err != nil {
 			fmt.Printf("Error testing queries for file %s: %v\n", inputFile, err)
@@ -186,7 +186,7 @@ func (qt *QueryTester) Run() error {
 }
 
 // TestQueries tests a map of queries against the datasource
-func (qt *QueryTester) TestQueries(queries map[string]string, cfg model.NamedConfigBlock, defaults model.ConfigBlock) ([]model.QueryTestResult, error) {
+func (qt *QueryTester) TestQueries(queries map[string]string, cfg model.NamedConfigBlock, defaults model.ConfigBlock, continueOnQueryTestingErrors bool) ([]model.QueryTestResult, error) {
 	queryResults := make([]model.QueryTestResult, 0, len(queries))
 	datasource := shared.GetConfigValue(cfg.Integration.DataSource, defaults.Integration.DataSource, "")
 	// Determine datasource type using the same logic as createAlertQuery
@@ -256,16 +256,18 @@ func (qt *QueryTester) TestQueries(queries map[string]string, cfg model.NamedCon
 				timeout,
 			)
 			if err != nil {
-				return []model.QueryTestResult{
-					{
-						Datasource: datasource,
-						Link:       exploreLink,
-						Stats: model.Stats{
-							Fields: make(map[string]string),
-							Errors: []string{err.Error()},
-						},
+				queryResults = append(queryResults, model.QueryTestResult{
+					Datasource: datasource,
+					Link:       exploreLink,
+					Stats: model.Stats{
+						Fields: make(map[string]string),
+						Errors: []string{err.Error()},
 					},
-				}, fmt.Errorf("error testing query %s: %v", query, err)
+				})
+				if !continueOnQueryTestingErrors {
+					return queryResults, fmt.Errorf("error testing query %s: %v", query, err)
+				}
+				continue
 			}
 			// Parse the response to extract statistics
 			result := model.QueryTestResult{

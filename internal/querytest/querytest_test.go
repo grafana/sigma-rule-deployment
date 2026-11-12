@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -252,7 +254,7 @@ func TestTestQueriesPreservesExploreLinkOnError(t *testing.T) {
 	results, err := queryTester.TestQueries(
 		map[string]string{"A0": `{job="test"}`},
 		model.NamedConfigBlock{Name: "test_conv"},
-		config.Defaults,
+		config.Defaults, false,
 	)
 
 	assert.Error(t, err)
@@ -352,7 +354,7 @@ func TestTestQueriesReportsCorrectCountEvenOnChangingDataframeStructure(t *testi
 	results, err := queryTester.TestQueries(
 		map[string]string{"A0": `{job="test"}`},
 		model.NamedConfigBlock{Name: "test_conv"},
-		config.Defaults,
+		config.Defaults, false,
 	)
 
 	assert.NoError(t, err)
@@ -363,7 +365,7 @@ func TestTestQueriesReportsCorrectCountEvenOnChangingDataframeStructure(t *testi
 	results, err = queryTester.TestQueries(
 		map[string]string{"A0": `{job="test"} | json`},
 		model.NamedConfigBlock{Name: "test_conv"},
-		config.Defaults,
+		config.Defaults, false,
 	)
 
 	assert.NoError(t, err)
@@ -432,7 +434,7 @@ func TestTestQueriesThrowsErrorWhenShowLogLinesIsTrueAndNoLogLines(t *testing.T)
 	results, err := queryTester.TestQueries(
 		map[string]string{"A0": `{job="test"}`},
 		model.NamedConfigBlock{Name: "test_conv"},
-		config.Defaults,
+		config.Defaults, false,
 	)
 
 	assert.ErrorContains(t, err, "Line")
@@ -921,7 +923,7 @@ func TestTestQueriesFailsWhenNoGrafanaInstanceResolves(t *testing.T) {
 	results, err := queryTester.TestQueries(
 		map[string]string{"A0": `{job="test"}`},
 		model.NamedConfigBlock{Name: "test_conv"},
-		defaults,
+		defaults, false,
 	)
 
 	assert.ErrorContains(t, err, `configuration "test_conv" has no Grafana instance`)
@@ -1124,7 +1126,7 @@ func TestTestQueriesUsesTheTokenOfEachInstance(t *testing.T) {
 			}
 			defaults := model.ConfigBlock{Deployment: model.DeploymentConfig{GrafanaInstance: tt.defaultURL}}
 			qt := NewQueryTester(model.Configuration{}, nil, 5*time.Second)
-			_, err := qt.TestQueries(map[string]string{"A": "{job=`test`} | json"}, cfg, defaults)
+			_, err := qt.TestQueries(map[string]string{"A": "{job=`test`} | json"}, cfg, defaults, false)
 
 			if tt.wantErr != "" {
 				assert.ErrorContains(t, err, tt.wantErr)
@@ -1209,4 +1211,91 @@ func TestRunFailsOnMissingTokenEvenWhenContinuingOnErrors(t *testing.T) {
 	}
 	err := NewQueryTester(config, []string{"does-not-exist.json"}, time.Second).Run()
 	assert.ErrorContains(t, err, `configuration "conv": there is no Grafana token for instance https://b.example`)
+}
+
+func TestRunMultipleInstancesContinueOnQueryTestingErrors(t *testing.T) {
+	for _, tt := range []struct {
+		name            string
+		defaultContinue bool
+		override        *bool
+		wantContinue    bool
+	}{
+		{"inherit continue", true, nil, true},
+		{"override continue", false, new(true), true},
+		{"override strict", true, new(false), false},
+		{"inherit strict", false, nil, false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			counts := make([]int, 3)
+			instances := make(model.GrafanaInstances, 3)
+			for i := range instances {
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					counts[i]++
+					w.Header().Set("Content-Type", "application/json")
+					if i == 1 {
+						w.WriteHeader(http.StatusServiceUnavailable)
+						fmt.Fprint(w, `{"message":"temporarily down"}`)
+						return
+					}
+					if r.Method == http.MethodGet {
+						fmt.Fprint(w, `{"uid":"logs","type":"loki"}`)
+						return
+					}
+					fmt.Fprint(w, `{"results":{}}`)
+				}))
+				t.Cleanup(server.Close)
+				instances[i] = server.URL
+			}
+			dir := t.TempDir()
+			t.Chdir(dir)
+			input := "conversion.json"
+			output := filepath.Join(dir, "results.json")
+			if !assert.NoError(t, os.WriteFile(input, []byte(`{"conversion_name":"test","queries":["first", "second"]}`), 0o600)) {
+				return
+			}
+			t.Setenv("INTEGRATOR_GRAFANA_SA_TOKEN", "local-fixture")
+			t.Setenv("GITHUB_OUTPUT", filepath.Join(dir, "github-output"))
+			t.Setenv("TEST_QUERY_RESULTS_FILE", output)
+			config := model.Configuration{
+				Defaults: model.ConfigBlock{
+					Integration: model.IntegrationConfig{TestQueries: new(true), DataSource: "logs", ContinueOnQueryTestingErrors: &tt.defaultContinue},
+					Deployment:  model.DeploymentConfig{GrafanaInstance: instances},
+				},
+				Configurations: []model.NamedConfigBlock{{Name: "test", ConfigBlock: model.ConfigBlock{Integration: model.IntegrationConfig{ContinueOnQueryTestingErrors: tt.override}}}},
+			}
+			qt := NewQueryTester(config, []string{input}, time.Second)
+			err := qt.Run()
+			if !tt.wantContinue {
+				assert.ErrorContains(t, err, "error testing query first")
+				assert.Positive(t, counts[0])
+				assert.Positive(t, counts[1])
+				assert.Zero(t, counts[2])
+				return
+			}
+			if !assert.NoError(t, err) {
+				return
+			}
+			data, err := os.ReadFile(output)
+			if !assert.NoError(t, err) {
+				return
+			}
+			var report map[string][]model.QueryTestResult
+			if !assert.NoError(t, json.Unmarshal(data, &report)) {
+				return
+			}
+			results := report[input]
+			if !assert.Len(t, results, 6) {
+				return
+			}
+			for i, result := range results {
+				assert.Contains(t, result.Link, instances[i%3])
+				if i%3 == 1 {
+					assert.NotEmpty(t, result.Stats.Errors)
+				} else {
+					assert.Empty(t, result.Stats.Errors)
+				}
+			}
+			assert.Positive(t, counts[2])
+		})
+	}
 }
