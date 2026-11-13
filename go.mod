@@ -10,7 +10,9 @@ require (
 	github.com/stretchr/testify v1.12.1
 )
 
-require go.yaml.in/yaml/v3 v3.0.6
+require go.yaml.in/yaml/v4 v4.0.0
+
+require go.yaml.in/yaml/v3 v3.0.5 // indirect
 
 require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
