@@ -753,6 +753,10 @@ func TestUpdateAlertGroupInterval(t *testing.T) {
 		expectPutRequest   bool
 		responseBody       string
 		expectedRequestURL string
+		// expectedEscapedURL is the on-the-wire path. Empty skips the check.
+		// r.URL.Path is decoded, so it cannot show that "/" in a name stayed
+		// inside the rule-groups segment.
+		expectedEscapedURL string
 	}{
 		{
 			name:               "successful interval update",
@@ -819,6 +823,20 @@ func TestUpdateAlertGroupInterval(t *testing.T) {
 			responseBody:       `{"folderUID":"folder-with_special.chars","interval":600,"rules":[],"title":"group-with_special.chars"}`,
 			expectedRequestURL: "/api/v1/provisioning/folder/folder-with_special.chars/rule-groups/group-with_special.chars",
 		},
+		{
+			name:               "rule group name with reserved URL characters",
+			folderUID:          "folder123",
+			group:              "a b?c#d%/e",
+			interval:           600,
+			currentInterval:    300,
+			getStatusCode:      http.StatusOK,
+			putStatusCode:      http.StatusOK,
+			expectError:        false,
+			expectPutRequest:   true,
+			responseBody:       `{"folderUID":"folder123","interval":300,"rules":[],"title":"a b?c#d%/e"}`,
+			expectedRequestURL: "/api/v1/provisioning/folder/folder123/rule-groups/a b?c#d%/e",
+			expectedEscapedURL: "/api/v1/provisioning/folder/folder123/rule-groups/a%20b%3Fc%23d%25%2Fe",
+		},
 	}
 
 	for _, tc := range testCases {
@@ -829,6 +847,10 @@ func TestUpdateAlertGroupInterval(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				// Check the URL is what we expect
 				assert.Equal(t, tc.expectedRequestURL, r.URL.Path)
+				if tc.expectedEscapedURL != "" {
+					assert.Equal(t, tc.expectedEscapedURL, r.URL.EscapedPath())
+					assert.Empty(t, r.URL.RawQuery)
+				}
 
 				// Validate authorization header
 				assert.Equal(t, authToken, r.Header.Get("Authorization"))

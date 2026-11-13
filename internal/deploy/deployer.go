@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -893,7 +894,10 @@ func (d *Deployer) updateAlert(ctx context.Context, content string, createIfNotF
 
 func (d *Deployer) updateAlertGroupInterval(ctx context.Context, folderUID string, group string, interval int64) error {
 	log.Printf("Checking alert group interval for %s/%s to %d", folderUID, group, interval)
-	path := fmt.Sprintf("api/v1/provisioning/folder/%s/rule-groups/%s", folderUID, group)
+	// Both values are one path segment. A raw "?", "#", "%" or "/" in a rule
+	// group name is parsed as part of the URL, so the request fails or hits
+	// a different group.
+	path := fmt.Sprintf("api/v1/provisioning/folder/%s/rule-groups/%s", url.PathEscape(folderUID), url.PathEscape(group))
 
 	// Get the current alert group content
 	res, err := d.client.Get(ctx, path)
