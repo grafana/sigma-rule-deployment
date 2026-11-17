@@ -1349,3 +1349,57 @@ func TestTestQueriesKeepsResultsOnFrameProcessingError(t *testing.T) {
 		})
 	}
 }
+
+func TestTestQueriesKeepsResultsOnUnmarshalError(t *testing.T) {
+	responseBody := `{"results":42}`
+	for _, continueOnErrors := range []bool{true, false} {
+		t.Run(fmt.Sprintf("continue=%v", continueOnErrors), func(t *testing.T) {
+			instances := make(model.GrafanaInstances, 3)
+			for i := range instances {
+				body := `{"results":{}}`
+				if i == 1 {
+					body = responseBody // malformed query response
+				}
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("Content-Type", "application/json")
+					if r.Method == http.MethodGet {
+						fmt.Fprint(w, `{"uid":"logs","type":"loki"}`)
+						return
+					}
+					fmt.Fprint(w, body)
+				}))
+				t.Cleanup(server.Close)
+				instances[i] = server.URL
+			}
+			t.Setenv("INTEGRATOR_GRAFANA_SA_TOKEN", "local-fixture")
+			config := model.Configuration{
+				Defaults: model.ConfigBlock{
+					Integration: model.IntegrationConfig{DataSource: "logs", OrgID: 1, From: "now-1h", To: "now", ShowLogLines: new(true)},
+					Deployment:  model.DeploymentConfig{GrafanaInstance: instances},
+				},
+			}
+			qt := NewQueryTester(config, nil, time.Second)
+			results, err := qt.TestQueries(
+				map[string]string{"A0": "first"},
+				model.NamedConfigBlock{Name: "test"},
+				config.Defaults, continueOnErrors,
+			)
+			if continueOnErrors {
+				assert.NoError(t, err)
+				if assert.Len(t, results, 3) {
+					assert.Empty(t, results[0].Stats.Errors)
+					assert.NotEmpty(t, results[1].Stats.Errors)
+					assert.NotEmpty(t, results[1].Link)
+					assert.Equal(t, "logs", results[1].Datasource)
+					assert.Empty(t, results[2].Stats.Errors)
+				}
+				return
+			}
+			assert.ErrorContains(t, err, "error unmarshalling query response")
+			if assert.Len(t, results, 2) {
+				assert.Empty(t, results[0].Stats.Errors)
+				assert.NotEmpty(t, results[1].Stats.Errors)
+			}
+		})
+	}
+}

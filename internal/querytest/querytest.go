@@ -282,7 +282,12 @@ func (qt *QueryTester) TestQueries(queries map[string]string, cfg model.NamedCon
 			// Parse the response to extract statistics
 			var responseData model.QueryResponse
 			if err := json.Unmarshal(resp, &responseData); err != nil {
-				return nil, fmt.Errorf("error unmarshalling query response: %v", err)
+				result.Stats.Errors = append(result.Stats.Errors, fmt.Sprintf("error unmarshalling query response: %v", err))
+				queryResults = append(queryResults, result)
+				if !continueOnQueryTestingErrors {
+					return queryResults, fmt.Errorf("error unmarshalling query response: %v", err)
+				}
+				continue
 			}
 
 			// Process errors
