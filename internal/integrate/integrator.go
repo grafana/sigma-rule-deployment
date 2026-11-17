@@ -979,7 +979,8 @@ func getRuleUID(conversionName string, conversionID uuid.UUID) string {
 
 var lokiMetricQueryPrefixes = []string{"sum", "count", "avg", "min", "max"}
 
-func isLokiMetricQuery(query string) bool {
+// IsLokiMetricQuery reports whether a LogQL query is already a metric query, rather than a log query
+func IsLokiMetricQuery(query string) bool {
 	trimmed := strings.TrimSpace(query)
 	for _, prefix := range lokiMetricQueryPrefixes {
 		if strings.HasPrefix(trimmed, prefix) {
@@ -987,6 +988,18 @@ func isLokiMetricQuery(query string) bool {
 		}
 	}
 	return false
+}
+
+// PadLokiMetricQuery makes a LogQL metric query return a series even when nothing matches it.
+//
+// Without data, Loki returns no frames at all, and the query statistics (execution time and bytes
+// processed) are only reported in a frame's metadata, so they would be lost. Padding the query with
+// a constant zero series keeps the statistics, without running the query a second time. The padded
+// series only has zero values, which the count_over_time queries generated from Sigma rules never
+// produce themselves (Loki omits steps without matches), so results can still be counted by
+// ignoring zero values. Queries that unwrap a field could legitimately return zero.
+func PadLokiMetricQuery(query string) string {
+	return "(" + query + ") or vector(0)"
 }
 
 // Grafana data source plugin type IDs that have a built-in query model.
@@ -1083,7 +1096,7 @@ func createAlertQuery(query string, refID string, datasource string, timerange m
 	customModel := shared.GetConfigValue(cfg.Integration.QueryModel, defaults.Integration.QueryModel, "")
 
 	if datasourceType == shared.Loki {
-		if !isLokiMetricQuery(query) {
+		if !IsLokiMetricQuery(query) {
 			query = fmt.Sprintf("sum(count_over_time(%s[$__auto]))", query)
 		}
 	}
