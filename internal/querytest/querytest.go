@@ -282,7 +282,12 @@ func (qt *QueryTester) TestQueries(queries map[string]string, cfg model.NamedCon
 			// Parse the response to extract statistics
 			var responseData model.QueryResponse
 			if err := json.Unmarshal(resp, &responseData); err != nil {
-				return nil, fmt.Errorf("error unmarshalling query response: %v", err)
+				result.Stats.Errors = append(result.Stats.Errors, fmt.Sprintf("error unmarshalling query response: %v", err))
+				queryResults = append(queryResults, result)
+				if !continueOnQueryTestingErrors {
+					return queryResults, fmt.Errorf("error unmarshalling query response: %v", err)
+				}
+				continue
 			}
 
 			// Process errors
@@ -293,6 +298,7 @@ func (qt *QueryTester) TestQueries(queries map[string]string, cfg model.NamedCon
 			}
 
 			// Process data frames from all results
+			var frameErr error
 			for _, resultFrame := range responseData.Results {
 				for _, frame := range resultFrame.Frames {
 					if err := ProcessFrame(
@@ -301,9 +307,22 @@ func (qt *QueryTester) TestQueries(queries map[string]string, cfg model.NamedCon
 						showSampleValues,
 						showLogLines,
 					); err != nil {
-						return nil, fmt.Errorf("error processing frame: %v", err)
+						frameErr = err
+						break
 					}
 				}
+				if frameErr != nil {
+					break
+				}
+			}
+
+			if frameErr != nil {
+				result.Stats.Errors = append(result.Stats.Errors, fmt.Sprintf("error processing frame: %v", frameErr))
+				queryResults = append(queryResults, result)
+				if !continueOnQueryTestingErrors {
+					return queryResults, fmt.Errorf("error processing frame: %v", frameErr)
+				}
+				continue
 			}
 
 			queryResults = append(queryResults, result)
