@@ -35,7 +35,7 @@ func TestIsLokiMetricQuery(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, tt.want, isLokiMetricQuery(tt.query))
+			assert.Equal(t, tt.want, IsLokiMetricQuery(tt.query))
 		})
 	}
 }
@@ -116,11 +116,20 @@ func TestCreateAlertQuery_LokiWrapping(t *testing.T) {
 			if tt.wantWrap {
 				assert.True(t, strings.HasPrefix(expr, "sum(count_over_time("))
 				assert.Contains(t, expr, "[$__auto]")
-				assert.False(t, isLokiMetricQuery(tt.input))
+				assert.False(t, IsLokiMetricQuery(tt.input))
 			} else {
-				assert.True(t, isLokiMetricQuery(tt.input))
+				assert.True(t, IsLokiMetricQuery(tt.input))
 				assert.NotContains(t, expr, "[$__auto]")
 			}
 		})
 	}
+}
+
+func TestPadLokiMetricQuery(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t,
+		"(sum by (a) (count_over_time({job=`x`}[5m])) > 1) or vector(0)",
+		PadLokiMetricQuery("sum by (a) (count_over_time({job=`x`}[5m])) > 1"),
+	)
 }
