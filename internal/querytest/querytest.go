@@ -244,8 +244,17 @@ func (qt *QueryTester) TestQueries(queries map[string]string, cfg model.NamedCon
 				return nil, fmt.Errorf("error generating explore link: %v", err)
 			}
 
+			// A Loki metric query returns no frames when it matches nothing, and the execution time and
+			// bytes processed are only reported in a frame's metadata. Padding the query we test (but not
+			// the one in the Explore link) keeps them, without running the query a second time.
+			testQuery := query
+			paddedQuery := customModel == "" && datasourceType == shared.Loki && integrate.IsLokiMetricQuery(query)
+			if paddedQuery {
+				testQuery = integrate.PadLokiMetricQuery(query)
+			}
+
 			resp, err := integrate.TestQuery(
-				query,
+				testQuery,
 				datasource,
 				grafanaInstance,
 				instanceTokens[grafanaInstance],
@@ -282,7 +291,12 @@ func (qt *QueryTester) TestQueries(queries map[string]string, cfg model.NamedCon
 			// Parse the response to extract statistics
 			var responseData model.QueryResponse
 			if err := json.Unmarshal(resp, &responseData); err != nil {
-				return nil, fmt.Errorf("error unmarshalling query response: %v", err)
+				result.Stats.Errors = append(result.Stats.Errors, fmt.Sprintf("error unmarshalling query response: %v", err))
+				queryResults = append(queryResults, result)
+				if !continueOnQueryTestingErrors {
+					return queryResults, fmt.Errorf("error unmarshalling query response: %v", err)
+				}
+				continue
 			}
 
 			// Process errors
@@ -293,6 +307,7 @@ func (qt *QueryTester) TestQueries(queries map[string]string, cfg model.NamedCon
 			}
 
 			// Process data frames from all results
+			var frameErr error
 			for _, resultFrame := range responseData.Results {
 				for _, frame := range resultFrame.Frames {
 					if err := ProcessFrame(
@@ -300,10 +315,24 @@ func (qt *QueryTester) TestQueries(queries map[string]string, cfg model.NamedCon
 						&result,
 						showSampleValues,
 						showLogLines,
+						paddedQuery,
 					); err != nil {
-						return nil, fmt.Errorf("error processing frame: %v", err)
+						frameErr = err
+						break
 					}
 				}
+				if frameErr != nil {
+					break
+				}
+			}
+
+			if frameErr != nil {
+				result.Stats.Errors = append(result.Stats.Errors, fmt.Sprintf("error processing frame: %v", frameErr))
+				queryResults = append(queryResults, result)
+				if !continueOnQueryTestingErrors {
+					return queryResults, fmt.Errorf("error processing frame: %v", frameErr)
+				}
+				continue
 			}
 
 			queryResults = append(queryResults, result)
@@ -318,8 +347,10 @@ var (
 	executionTimeStatKey  = "Summary: exec time"
 )
 
-// ProcessFrame processes a single frame from the query response and updates the result stats
-func ProcessFrame(frame model.Frame, result *model.QueryTestResult, showSampleValues, showLogLines bool) error {
+// ProcessFrame processes a single frame from the query response and updates the result stats.
+// When ignoreZeroValues is set, rows whose "Value" is zero are not counted: they are the padding
+// added to a metric query so that its statistics are reported, not results.
+func ProcessFrame(frame model.Frame, result *model.QueryTestResult, showSampleValues, showLogLines, ignoreZeroValues bool) error {
 	// Get metrics from frame metadata (Stats are nested within Schema.Meta)
 	for _, stat := range frame.Schema.Meta.Stats {
 		switch {
@@ -367,7 +398,13 @@ func ProcessFrame(frame model.Frame, result *model.QueryTestResult, showSampleVa
 			numRows = len(values)
 		}
 	}
-	result.Stats.Count += numRows
+	countedRows := numRows
+	if ignoreZeroValues {
+		if valueIndex, ok := fieldIndices["Value"]; ok && valueIndex < len(frame.Data.Values) {
+			countedRows = countNonZero(frame.Data.Values[valueIndex])
+		}
+	}
+	result.Stats.Count += countedRows
 
 	// Process each row of values
 	for rowIndex := 0; rowIndex < numRows; rowIndex++ {
@@ -400,4 +437,16 @@ func ProcessFrame(frame model.Frame, result *model.QueryTestResult, showSampleVa
 		}
 	}
 	return nil
+}
+
+// countNonZero counts the values that aren't a numeric zero
+func countNonZero(values []any) int {
+	count := 0
+	for _, value := range values {
+		if number, ok := value.(float64); ok && number == 0 {
+			continue
+		}
+		count++
+	}
+	return count
 }
