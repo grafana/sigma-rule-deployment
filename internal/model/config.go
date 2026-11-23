@@ -3,7 +3,7 @@ package model
 import (
 	"fmt"
 
-	"go.yaml.in/yaml/v3"
+	"go.yaml.in/yaml/v4"
 )
 
 // GrafanaInstances holds one or more Grafana instance URLs.
