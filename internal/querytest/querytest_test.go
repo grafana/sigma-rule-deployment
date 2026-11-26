@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -1400,6 +1401,32 @@ func TestTestQueriesKeepsResultsOnUnmarshalError(t *testing.T) {
 				assert.Empty(t, results[0].Stats.Errors)
 				assert.NotEmpty(t, results[1].Stats.Errors)
 			}
+		})
+	}
+}
+
+func TestToIECBytes(t *testing.T) {
+	tests := []struct {
+		name      string
+		value     float64
+		unit      string
+		wantValue float64
+		wantUnit  string
+	}{
+		{"zero", 0, "decbytes", 0, "B"},
+		{"below one KiB", 1023, "decbytes", 1023, "B"},
+		{"exactly one KiB", 1024, "decbytes", 1, "KiB"},
+		{"rounded KiB", 1234, "decbytes", 1.21, "KiB"},
+		{"MiB", 342526137, "decbytes", 326.66, "MiB"},
+		{"GiB", 5 * 1024 * 1024 * 1024, "decbytes", 5, "GiB"},
+		{"capped at EiB", math.Pow(1024, 7) * 2048, "decbytes", 2048 * 1024, "EiB"},
+		{"other unit untouched", 1234, "s", 1234, "s"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := toIECBytes(tt.value, tt.unit)
+			assert.InDelta(t, tt.wantValue, got.Value, 0.0001)
+			assert.Equal(t, tt.wantUnit, got.Unit)
 		})
 	}
 }

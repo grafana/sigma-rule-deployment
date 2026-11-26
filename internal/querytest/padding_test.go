@@ -172,8 +172,8 @@ func TestTestQueriesReportsBytesProcessedOfAnEmptyMetricQuery(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	assert.Equal(t, 0, results[0].Stats.Count)
-	assert.InDelta(t, 1234, results[0].Stats.BytesProcessed.Value, 0)
-	assert.Equal(t, "decbytes", results[0].Stats.BytesProcessed.Unit)
+	assert.InDelta(t, 1.21, results[0].Stats.BytesProcessed.Value, 0)
+	assert.Equal(t, "KiB", results[0].Stats.BytesProcessed.Unit)
 }
 
 func TestProcessFrameIgnoreZeroValues(t *testing.T) {
