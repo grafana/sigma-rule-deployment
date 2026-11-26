@@ -262,7 +262,7 @@ dev = [
 requires-dist = [
     { name = "dynaconf", specifier = ">=3.2.12" },
     { name = "orjson", specifier = ">=3.11.0" },
-    { name = "pysigma-backend-loki", specifier = ">=0.16.0" },
+    { name = "pysigma-backend-loki", specifier = ">=0.17.0" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "sigma-cli", specifier = ">=2.0.0" },
 ]
@@ -855,14 +855,14 @@ wheels = [
 
 [[package]]
 name = "pysigma-backend-loki"
-version = "0.16.0"
+version = "0.17.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pysigma" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/55/2d/c7e17329fac2d580da65689ebd0a66d026fef589081e01c1014e8b5720a8/pysigma_backend_loki-0.16.0.tar.gz", hash = "sha256:ad6390e8fc28077614ab60fdcebb9c5fa5f555b8b7ada91e8b943e47c941485b", size = 27882, upload-time = "2026-10-28T14:17:49.309Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a4/80/755024d768788a0be4f3e389c5c4243d7f0e9a662a2908208861deb0e6dd/pysigma_backend_loki-0.17.0.tar.gz", hash = "sha256:fb32ace3b9dbd235e9fb5074e076fd7966f06ede0ccf55aa9cb2aba726603838", size = 29279, upload-time = "2026-11-26T11:59:12.869Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a5/c9/7bb1890144c61a9e969ea8ef0f71c5f84ec9169d7d0ebdbf50f308ad5004/pysigma_backend_loki-0.16.0-py3-none-any.whl", hash = "sha256:7688445f09e3550bba83e4e9116529093f0d7326c4da150a82f0856f768926e0", size = 27935, upload-time = "2026-10-28T14:17:47.931Z" },
+    { url = "https://files.pythonhosted.org/packages/78/f9/5ec4258c613e055a8b83f4af0f5de6f6c616ef1d52ab809d891a27ca83e8/pysigma_backend_loki-0.17.0-py3-none-any.whl", hash = "sha256:8856fde83b71fefbfa58ebfd93320e587835333af294e873f183804ad848a9f6", size = 29293, upload-time = "2026-11-26T11:59:11.798Z" },
 ]
 
 [[package]]
