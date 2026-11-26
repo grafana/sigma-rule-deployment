@@ -198,8 +198,8 @@ test('buildTestResultsTable - displays execution time and bytes processed when p
             unit: 's'
           },
           bytesProcessed: {
-            value: 1234567,
-            unit: 'decbytes'
+            value: 1.23,
+            unit: 'MB'
           }
         }
       }
@@ -210,7 +210,7 @@ test('buildTestResultsTable - displays execution time and bytes processed when p
 
   assert(result.includes('file1.json'));
   assert(result.includes('2.534394 s'));
-  assert(result.includes('1,234,567 decbytes'));
+  assert(result.includes('1.23 MB'));
   assert(result.includes('42'));
 });
 
@@ -231,7 +231,7 @@ test('buildTestResultsTable - displays zero values when present, shows dash when
           },
           bytesProcessed: {
             value: 0,
-            unit: 'decbytes'
+            unit: 'B'
           }
         }
       }
@@ -241,7 +241,7 @@ test('buildTestResultsTable - displays zero values when present, shows dash when
   const resultZero = commentModule.buildTestResultsTable(testResultsZero);
   assert(resultZero.includes('file1.json'));
   assert(resultZero.includes('0 s'), 'Should display zero execution time with unit');
-  assert(resultZero.includes('0 decbytes'), 'Should display zero bytes processed with unit');
+  assert(resultZero.includes('0 B'), 'Should display zero bytes processed with unit');
 
   // Test with missing fields - should show dash
   const testResultsMissing = {

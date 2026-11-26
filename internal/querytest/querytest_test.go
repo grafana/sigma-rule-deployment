@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -1400,6 +1401,33 @@ func TestTestQueriesKeepsResultsOnUnmarshalError(t *testing.T) {
 				assert.Empty(t, results[0].Stats.Errors)
 				assert.NotEmpty(t, results[1].Stats.Errors)
 			}
+		})
+	}
+}
+
+func TestToSIBytes(t *testing.T) {
+	tests := []struct {
+		name      string
+		value     float64
+		unit      string
+		wantValue float64
+		wantUnit  string
+	}{
+		{"zero", 0, "decbytes", 0, "B"},
+		{"below one kB", 999, "decbytes", 999, "B"},
+		{"exactly one kB", 1000, "decbytes", 1, "kB"},
+		{"1024 is not a boundary", 1024, "decbytes", 1.02, "kB"},
+		{"rounded kB", 1234, "decbytes", 1.23, "kB"},
+		{"MB", 342526137, "decbytes", 342.53, "MB"},
+		{"GB", 5 * 1000 * 1000 * 1000, "decbytes", 5, "GB"},
+		{"capped at EB", math.Pow(1000, 6) * 2000, "decbytes", 2000, "EB"},
+		{"other unit untouched", 1234, "s", 1234, "s"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := toSIBytes(tt.value, tt.unit)
+			assert.InDelta(t, tt.wantValue, got.Value, 0.0001)
+			assert.Equal(t, tt.wantUnit, got.Unit)
 		})
 	}
 }
