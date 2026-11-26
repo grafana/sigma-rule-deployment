@@ -267,7 +267,7 @@ test('splitCommentIntoChunks - every chunk is numbered with its part and the tot
 
 test('splitCommentIntoChunks - no false positive table header separators are detected', () => {
 
-  const dangerousLine = '| Looking for credentials | [See in Explore](https://example.grafana.example/explore?something=---BEGIN RSA PRIVATE KEY---) | 0 | 5.230158 s | 326.66 MiB | 0 |'; // Has the triple dash which might trip up table header separator detection
+  const dangerousLine = '| Looking for credentials | [See in Explore](https://example.grafana.example/explore?something=---BEGIN RSA PRIVATE KEY---) | 0 | 5.230158 s | 342.53 MB | 0 |'; // Has the triple dash which might trip up table header separator detection
 
   const comment = buildCommentWithInjectedLine(
     dangerousLine,

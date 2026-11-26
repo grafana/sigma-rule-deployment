@@ -1405,7 +1405,7 @@ func TestTestQueriesKeepsResultsOnUnmarshalError(t *testing.T) {
 	}
 }
 
-func TestToIECBytes(t *testing.T) {
+func TestToSIBytes(t *testing.T) {
 	tests := []struct {
 		name      string
 		value     float64
@@ -1414,17 +1414,18 @@ func TestToIECBytes(t *testing.T) {
 		wantUnit  string
 	}{
 		{"zero", 0, "decbytes", 0, "B"},
-		{"below one KiB", 1023, "decbytes", 1023, "B"},
-		{"exactly one KiB", 1024, "decbytes", 1, "KiB"},
-		{"rounded KiB", 1234, "decbytes", 1.21, "KiB"},
-		{"MiB", 342526137, "decbytes", 326.66, "MiB"},
-		{"GiB", 5 * 1024 * 1024 * 1024, "decbytes", 5, "GiB"},
-		{"capped at EiB", math.Pow(1024, 7) * 2048, "decbytes", 2048 * 1024, "EiB"},
+		{"below one kB", 999, "decbytes", 999, "B"},
+		{"exactly one kB", 1000, "decbytes", 1, "kB"},
+		{"1024 is not a boundary", 1024, "decbytes", 1.02, "kB"},
+		{"rounded kB", 1234, "decbytes", 1.23, "kB"},
+		{"MB", 342526137, "decbytes", 342.53, "MB"},
+		{"GB", 5 * 1000 * 1000 * 1000, "decbytes", 5, "GB"},
+		{"capped at EB", math.Pow(1000, 6) * 2000, "decbytes", 2000, "EB"},
 		{"other unit untouched", 1234, "s", 1234, "s"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := toIECBytes(tt.value, tt.unit)
+			got := toSIBytes(tt.value, tt.unit)
 			assert.InDelta(t, tt.wantValue, got.Value, 0.0001)
 			assert.Equal(t, tt.wantUnit, got.Unit)
 		})

@@ -348,25 +348,25 @@ var (
 	executionTimeStatKey  = "Summary: exec time"
 )
 
-// iecByteUnits are the IEC binary prefixes, in steps of 1024
-var iecByteUnits = []string{"B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"}
+// siByteUnits are the SI (decimal) prefixes, in steps of 1000, as Grafana displays them
+var siByteUnits = []string{"B", "kB", "MB", "GB", "TB", "PB", "EB"}
 
-// toIECBytes converts a byte count reported in Grafana's "decbytes" unit (which Grafana displays
-// with decimal SI prefixes) into the largest IEC binary unit (KiB, MiB, ...) in which the value is
-// at least 1, rounded to two decimal places. Other units are returned unchanged.
-func toIECBytes(value float64, unit string) model.MetricValue {
+// toSIBytes scales a byte count reported in Grafana's "decbytes" unit (bytes(SI)) to the largest
+// SI unit (kB, MB, ...) in which the value is at least 1, rounded to two decimal places, matching
+// how Grafana itself displays the value. Other units are returned unchanged.
+func toSIBytes(value float64, unit string) model.MetricValue {
 	if unit != "decbytes" {
 		return model.MetricValue{Value: value, Unit: unit}
 	}
 	idx := 0
-	for math.Abs(value) >= 1024 && idx < len(iecByteUnits)-1 {
-		value /= 1024
+	for math.Abs(value) >= 1000 && idx < len(siByteUnits)-1 {
+		value /= 1000
 		idx++
 	}
 	if idx > 0 {
 		value = math.Round(value*100) / 100
 	}
-	return model.MetricValue{Value: value, Unit: iecByteUnits[idx]}
+	return model.MetricValue{Value: value, Unit: siByteUnits[idx]}
 }
 
 // ProcessFrame processes a single frame from the query response and updates the result stats.
@@ -377,7 +377,7 @@ func ProcessFrame(frame model.Frame, result *model.QueryTestResult, showSampleVa
 	for _, stat := range frame.Schema.Meta.Stats {
 		switch {
 		case strings.Contains(stat.DisplayName, bytesProcessedStatKey):
-			result.Stats.BytesProcessed = toIECBytes(stat.Value, stat.Unit)
+			result.Stats.BytesProcessed = toSIBytes(stat.Value, stat.Unit)
 		case strings.Contains(stat.DisplayName, executionTimeStatKey):
 			result.Stats.ExecutionTime = model.MetricValue{
 				Value: stat.Value,

@@ -198,8 +198,8 @@ test('buildTestResultsTable - displays execution time and bytes processed when p
             unit: 's'
           },
           bytesProcessed: {
-            value: 1.18,
-            unit: 'MiB'
+            value: 1.23,
+            unit: 'MB'
           }
         }
       }
@@ -210,7 +210,7 @@ test('buildTestResultsTable - displays execution time and bytes processed when p
 
   assert(result.includes('file1.json'));
   assert(result.includes('2.534394 s'));
-  assert(result.includes('1.18 MiB'));
+  assert(result.includes('1.23 MB'));
   assert(result.includes('42'));
 });
 
