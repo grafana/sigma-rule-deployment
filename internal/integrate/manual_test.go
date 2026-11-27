@@ -366,3 +366,30 @@ func TestIsManual(t *testing.T) {
 		})
 	}
 }
+
+// TestDoCleanupKeepsFilesOfRulesSharingAPrefix checks that deleting a conversion
+// file does not delete the deployment files of a rule whose name only starts with
+// the deleted rule's name.
+func TestDoCleanupKeepsFilesOfRulesSharingAPrefix(t *testing.T) {
+	convPath, deployPath := manualTestDirs(t, "cleanup_prefix")
+	deleted := filepath.Join(deployPath, "alert_rule_test_conv_test_123abc.json")
+	kept := filepath.Join(deployPath, "alert_rule_test_conv_test_extra_456def.json")
+	for path, source := range map[string]string{deleted: "test_conv_test.json", kept: "test_conv_test_extra.json"} {
+		rule := &model.ProvisionedAlertRule{Annotations: map[string]string{"ConversionFile": filepath.Join(convPath, source)}}
+		assert.NoError(t, writeRuleToFile(rule, path, false))
+		// Both conversion files exist for the orphan cleanup, until one is deleted.
+		if path == kept {
+			assert.NoError(t, os.WriteFile(filepath.Join(convPath, source), []byte(`{"conversion_name":"test_conv"}`), 0o600))
+		}
+	}
+
+	config := model.Configuration{
+		Folders:        model.FoldersConfig{ConversionPath: convPath, DeploymentPath: deployPath},
+		Configurations: []model.NamedConfigBlock{{Name: "test_conv"}},
+	}
+	i := &Integrator{config: config, removedFiles: []string{filepath.Join(convPath, "test_conv_test.json")}}
+	assert.NoError(t, i.DoCleanup())
+
+	assert.NoFileExists(t, deleted)
+	assert.FileExists(t, kept)
+}
