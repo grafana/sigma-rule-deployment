@@ -422,6 +422,22 @@ func (i *Integrator) isDeploymentFileOrphaned(file string) (bool, error) {
 	return false, nil
 }
 
+// belongsToOtherConversion reports whether a deployment file records a conversion
+// file with a different name than the given one. The cleanup glob also matches
+// rules whose name only starts with the deleted rule's name.
+func belongsToOtherConversion(deploymentFile, conversionFile string) bool {
+	content, err := shared.ReadLocalFile(deploymentFile)
+	if err != nil {
+		return false
+	}
+	var rule model.ProvisionedAlertRule
+	if err := json.Unmarshal([]byte(content), &rule); err != nil {
+		return false
+	}
+	source := rule.Annotations["ConversionFile"]
+	return source != "" && filepath.Base(source) != filepath.Base(conversionFile)
+}
+
 // manualValueSet reports whether a decoded JSON value marks a file as manual.
 // It accepts both the boolean `true` used by conversion files and the string
 // "true" used by deployment annotations, so the converter (Python) and the
@@ -636,7 +652,7 @@ func (i *Integrator) DoCleanup() error {
 		}
 		for _, file := range deploymentFiles {
 			fullPath := i.config.Folders.DeploymentPath + string(filepath.Separator) + file
-			if keepAsManual(fullPath, "deployment") {
+			if keepAsManual(fullPath, "deployment") || belongsToOtherConversion(fullPath, deletedFile) {
 				continue
 			}
 			err = os.Remove(fullPath)
