@@ -1344,6 +1344,37 @@ def test_convert_rules_deletes_conversion_for_deleted_rule(temp_workspace, mock_
     assert not conversion_file.exists()
 
 
+@pytest.mark.parametrize("input_value", ["rules/*.yml", ["rules/*.yml"]])
+def test_convert_rules_deletes_conversion_for_last_deleted_rule(temp_workspace, mock_config, input_value):
+    """Deleting the only rule matching a configuration removes its conversion file."""
+    mock_config.get("configurations")[0]["conversion"]["input"] = input_value
+    conversion_dir = temp_workspace / "conversions"
+    conversion_dir.mkdir()
+    conversion_file = conversion_dir / "test_conversion_test.json"
+    conversion_file.write_text("{}")
+    (temp_workspace / "rules" / "test.yml").unlink()
+
+    convert_rules(
+        config=mock_config,
+        path_prefix=temp_workspace,
+        deleted_files="rules/test.yml",
+    )
+
+    assert not conversion_file.exists()
+
+
+def test_convert_rules_no_matching_files_raises(temp_workspace, mock_config):
+    """An unrelated deletion does not hide a configuration that matches no files."""
+    (temp_workspace / "rules" / "test.yml").unlink()
+
+    with pytest.raises(ValueError, match="No files matched"):
+        convert_rules(
+            config=mock_config,
+            path_prefix=temp_workspace,
+            deleted_files="other/test.yml",
+        )
+
+
 def test_filter_rule_fields():
     """Test that the filter_rule_fields function filters the rule fields correctly."""
     rule_dicts = [

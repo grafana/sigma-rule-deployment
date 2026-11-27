@@ -315,6 +315,7 @@ def convert_rules(
 
         # Expand glob patterns to include all matching files only
         input_files = []
+        deleted_inputs = []
         conversion_input = conversion.get("input", None)
         match conversion_input:
             case list():
@@ -326,6 +327,7 @@ def convert_rules(
                         if fnmatch.fnmatch(
                             str(deleted_file), str(path_prefix / pattern)
                         ):
+                            deleted_inputs.append(str(deleted_file))
                             output_filename = f"{name}_{deleted_file.stem}.json"
                             output_path = (
                                 path_prefix / conversions_output_dir / output_filename
@@ -340,6 +342,7 @@ def convert_rules(
                     if fnmatch.fnmatch(
                         str(deleted_file), str(path_prefix / conversion_input)
                     ):
+                        deleted_inputs.append(str(deleted_file))
                         output_filename = f"{name}_{deleted_file.stem}.json"
                         output_path = (
                             path_prefix / conversions_output_dir / output_filename
@@ -353,8 +356,12 @@ def convert_rules(
         file_pattern = conversion.get("file_pattern") or default_file_pattern
         filtered_files = [f for f in input_files if fnmatch.fnmatch(f, file_pattern)]
 
-        # Skip conversion if no files match the pattern
+        # Skip conversion if no files match the pattern. If that is because this
+        # change deleted them, carry on so their outputs are removed below.
         if not filtered_files:
+            if any(fnmatch.fnmatch(f, file_pattern) for f in deleted_inputs):
+                print(f"All input files of {name} were deleted, nothing to convert")
+                continue
             raise ValueError(
                 f"No files matched the patterns after applying file_pattern: {file_pattern}"
             )
