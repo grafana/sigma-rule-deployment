@@ -836,7 +836,8 @@ func (d *Deployer) tryToUpdateConflictingAlert(ctx context.Context, alert model.
 	if !d.checkAlertsMatch(existingAlert, alert) {
 		// The alert already exists, but with different parameters
 		log.Printf("Alert %s (%s) is conflicting with another alert having the same UID", alert.UID, alert.Title)
-		return AlertDeployment{}, fmt.Errorf("error creating alert: %v", err)
+		return AlertDeployment{}, fmt.Errorf("error creating alert: UID %s is already used by an alert in folder %q (org %d), not folder %q (org %d)",
+			alert.UID, existingAlert.FolderUID, existingAlert.OrgID, alert.FolderUID, alert.OrgID)
 	}
 	// The alert already exists, but with the same parameters
 	// In this case, we can proceed to update it
