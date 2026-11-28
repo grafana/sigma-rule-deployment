@@ -301,11 +301,11 @@ func TestCreateAlert(t *testing.T) {
 
 	// Simulate a conflict (same alert UID but different folder)
 	_, _, err = d.createAlert(ctx, `{"uid":"xyz123","title":"Test alert", "folderUID": "efgh789", "orgID": 23}`, true)
-	assert.NotNil(t, err)
+	assert.EqualError(t, err, `error creating alert: UID xyz123 is already used by an alert in folder "efgh456" (org 23), not folder "efgh789" (org 23)`)
 
 	// Simulate a conflict (same alert UID but different org)
 	_, _, err = d.createAlert(ctx, `{"uid":"xyz123","title":"Test alert", "folderUID": "efgh456", "orgID": 45}`, true)
-	assert.NotNil(t, err)
+	assert.EqualError(t, err, `error creating alert: UID xyz123 is already used by an alert in folder "efgh456" (org 23), not folder "efgh456" (org 45)`)
 }
 
 func mockServerCreation(t *testing.T, existingAlerts []string) *httptest.Server {
